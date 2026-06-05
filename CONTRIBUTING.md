@@ -28,6 +28,16 @@ Use the documented local extension points for machine-specific or team-specific 
 - Optional interactive shell overlays: `~/.zsh/work.zsh`, `~/.bash/work.bash`
 - Optional scoped npm registry config: `~/.npmrc`
 
+## Shared vs. Internal Changes
+
+Maintainers should decide whether a change belongs in the **public core** or the **internal overlay** before opening a branch.
+
+- Shared bootstrap, template, manifest, and public-safe documentation changes land in the public repo first.
+- Internal hosts, internal identity rules, internal workflow files, and internal operational docs stay in the internal repo.
+- If the line is blurry, upstream the reusable mechanism first and keep only the internal values or policy internal.
+
+Use [`docs/04-maintenance.md`](docs/04-maintenance.md) as the day-to-day handbook for this split, especially the section on syncing public changes into the internal repo.
+
 ## Development Workflow
 
 1. Create a feature branch from `main`.
