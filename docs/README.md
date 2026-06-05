@@ -11,6 +11,7 @@ The repository is a single-maintainer, best-effort shared baseline. The docs sho
 | Setting up a machine for the first time | [`README.md`](../README.md) `->` Quick Start | [`01-onboarding.md`](01-onboarding.md) for prompts, hook order, success signals, and troubleshooting |
 | Trying to understand the full docs map | This page | The linked page for your task |
 | Customizing your machine without changing the shared baseline | [`local-overlay-examples/README.md`](local-overlay-examples/README.md) | [`04-maintenance.md`](04-maintenance.md#validating-a-mirror-override) if you are testing a new mirror override |
+| Maintaining the public/internal split | [`04-maintenance.md`](04-maintenance.md) | [`design/01-public-github-core-and-internal-gitlab-overlay.en.md`](design/01-public-github-core-and-internal-gitlab-overlay.en.md) for the rationale behind the workflow |
 | Reviewing or maintaining the repo | [`04-maintenance.md`](04-maintenance.md) | [`CONTRIBUTING.md`](../CONTRIBUTING.md) and [`CHANGELOG.md`](../CHANGELOG.md) |
 | Investigating design rationale | [`design/README.md`](design/README.md) | The matching design doc |
 
@@ -20,7 +21,7 @@ The repository is a single-maintainer, best-effort shared baseline. The docs sho
 - [`01-onboarding.md`](01-onboarding.md): deeper first-run context, including prompts, hook order, success signals, and troubleshooting.
 - [`local-overlay-examples/README.md`](local-overlay-examples/README.md): copyable templates for machine-local overlays that do not belong in the shared baseline.
 - [`03-macos-preflight.md`](03-macos-preflight.md): the manual checklist for merge requests that touch macOS-only behavior.
-- [`04-maintenance.md`](04-maintenance.md): day-to-day maintainer workflow, lightweight CI expectations, dependency bumps, removals, and release hygiene.
+- [`04-maintenance.md`](04-maintenance.md): day-to-day maintainer workflow, the public/internal sync handbook, lightweight CI expectations, dependency bumps, removals, and release hygiene.
 - [`design/README.md`](design/README.md): long-form rationale and architectural decisions.
 - [`design/01-public-github-core-and-internal-gitlab-overlay.en.md`](design/01-public-github-core-and-internal-gitlab-overlay.en.md): recommended split model for a public-safe GitHub core and an internal GitLab overlay.
 - [`CHANGELOG.md`](../CHANGELOG.md): user-visible changes by milestone.

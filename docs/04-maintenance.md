@@ -18,6 +18,118 @@ The repository is maintained on a **best-effort** basis by a single maintainer. 
 
 For now this repository does not require a formal maintainer rotation. The maintainer is whoever currently owns the baseline. If ownership later splits across areas (bootstrap vs docs vs CI, or the owner becomes a group), update the repository's ownership metadata and this note together.
 
+## Managing The Public/Internal Split
+
+This repository now operates as a **public core** plus an **internal overlay**.
+
+- The public GitHub repository is the source of truth for shared bootstrap logic, shared docs, and other public-safe defaults.
+- The internal GitLab repository is the source of truth for internal-only defaults, internal workflow files, and internal operational docs.
+- When a change is in scope for both distributions, land it in the public repo first and sync it into the internal repo after review.
+
+### Decide Where To Edit First
+
+Use this rule before opening a branch:
+
+1. If the change benefits both distributions or changes shared runtime behavior, start in the public worktree.
+2. If the change depends on internal hosts, internal identity rules, or GitLab-only workflow, start in the internal worktree.
+3. If the change starts from an internal use case but the mechanism is reusable, upstream the mechanism to public and keep only the values or policy internal.
+
+Examples of **public-first** changes:
+
+- bootstrap script fixes
+- manifest updates for broadly useful tools
+- shared shell/template behavior
+- public-safe documentation clarifications
+- changes to the public quick-start or contribution flow
+
+Examples of **internal-only** changes:
+
+- built-in rewrites for internal Git hosts
+- internal CI / issue / MR workflow files
+- internal corporate-network instructions
+- guardrails tied to internal email domains or internal remotes
+
+### Recommended Local Layout
+
+The current maintainer workflow uses two local worktrees with different Git identities and push defaults:
+
+- **Public worktree**: branch `public-upstream`, tracking `public/main`
+- **Internal worktree**: branch `main`, tracking `origin/main`
+
+That split keeps public commits on a public identity and internal commits on an internal identity while reducing the chance of pushing the right code to the wrong remote.
+
+### Syncing Shared Changes From Public Into Internal
+
+After a shared change lands on GitHub `main`, sync it into the internal repo from the internal worktree:
+
+1. Fetch both remotes:
+
+   ```bash
+   git fetch --multiple public origin --prune
+   ```
+
+2. Cut a short-lived sync branch from internal `main`:
+
+   ```bash
+   git switch -c sync/public-<date> origin/main
+   ```
+
+3. Merge the latest public core:
+
+   ```bash
+   git merge --no-ff public/main
+   ```
+
+4. Resolve conflicts using the boundary rules below.
+5. Run the validation checklist below.
+6. Open a GitLab review branch / MR back into internal `main`.
+
+Do **not** edit `public-upstream` directly from the internal worktree. Treat it as the public history anchor, not as a scratch branch.
+
+### Known Internal Overlay-Owned Paths
+
+The internal repository intentionally owns a small set of paths that may differ from the public core. When a sync touches one of these, assume the internal side needs a deliberate review instead of accepting the merge blindly.
+
+- `.gitlab-ci.yml`
+- `.gitlab/**`
+- `AGENTS.md`
+- `CODEOWNERS`
+- `.chezmoi.toml.tmpl`
+- `.chezmoiscripts/run_onchange_after_60-check.sh.tmpl`
+- `dot_gitconfig.tmpl`
+- `docs/02-corp-network-integration.md`
+- `docs/local-overlay-examples/git-pre-push.example`
+- `bootstrap/scripts/run-smoke-tests.sh`
+
+If a shared improvement belongs in one of those files, extract the reusable part into the public repo first and then re-apply the internal-only part on top.
+
+### Validation After A Public->Internal Sync
+
+Use the strongest practical checks that match the change:
+
+1. Always run:
+
+   ```bash
+   bash bootstrap/scripts/run-smoke-tests.sh
+   ```
+
+2. Also run this when Linux/WSL conditionals or `.chezmoi.toml.tmpl` changed:
+
+   ```bash
+   DOTFILES_FORCE_WSL=1 bash bootstrap/scripts/run-smoke-tests.sh
+   ```
+
+3. Follow [docs/03-macos-preflight.md](03-macos-preflight.md) if the synced change touches macOS-specific surface.
+4. Re-check internal-only behavior if the sync touched any overlay-owned path listed above.
+
+### Conflict Rules
+
+When a sync conflicts, use these default rules:
+
+- **Shared behavior wins in the public repo first.** If the conflict is really about shared runtime behavior, update the public repo and sync again instead of inventing a one-off internal patch.
+- **Internal-only policy wins in the internal repo.** Keep internal hosts, internal identity rules, and GitLab-only workflow local to the internal branch.
+- **Do not hide uncertainty inside a merge conflict resolution.** If you cannot explain why a line belongs on one side, stop and classify the change again.
+
 ## Documentation Boundaries
 
 Keep the doc set opinionated and non-overlapping:
@@ -220,4 +332,5 @@ When your active `chezmoi source-path` points **outside** `~/.local/share/` (for
 - `README.md` — user-facing bootstrap instructions and repository tour.
 - `docs/01-onboarding.md` — five-minute first-run walkthrough (ordered steps from clean laptop to baseline).
 - `CONTRIBUTING.md` — contributor workflow and scope rules.
+- `docs/design/01-public-github-core-and-internal-gitlab-overlay.en.md` — the design rationale for the current public/internal repository model.
 - `CHANGELOG.md` — human-readable release history per milestone, plus the semver / tagging policy. Every MR that ships a user-visible change updates its `[Unreleased]` section.
