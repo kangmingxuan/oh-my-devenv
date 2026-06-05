@@ -13,6 +13,8 @@
 #
 # Point Git at a private hooks directory if you want a local pre-push safety
 # check. See git-pre-push.example for a copyable starter.
+# This is also the right place to keep a shared hooksPath when you maintain
+# multiple worktrees with different `user.email` values.
 # --------------------------------------------------------------------------
 # [core]
 #     hooksPath = ~/.config/git/hooks
@@ -26,6 +28,16 @@
 #
 # git -C ~/workspace/personal/<repo> config user.name "<your-real-name>"
 # git -C ~/workspace/personal/<repo> config user.email "<your.personal.email@example.com>"
+
+# If you maintain separate public/internal worktrees, do not put those
+# per-worktree identities in ~/.gitconfig.local. Keep them in the worktree
+# configs instead:
+#
+# git -C ~/workspace/oh-my-devenv-public config extensions.worktreeConfig true
+# git -C ~/workspace/oh-my-devenv-public config --worktree user.email "<your-public-email>"
+# git -C ~/workspace/oh-my-devenv-public config --worktree remote.pushDefault public
+# git -C ~/workspace/oh-my-devenv-internal config --worktree user.email "<your-work-email>"
+# git -C ~/workspace/oh-my-devenv-internal config --worktree remote.pushDefault origin
 
 # --------------------------------------------------------------------------
 # Optional: insteadOf for host-specific Git URLs.

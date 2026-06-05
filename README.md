@@ -43,18 +43,18 @@ command -v git curl chezmoi
 
 ### 2. Bootstrap this baseline
 
-Use the clone URL for the host where this baseline is published. The shared README intentionally uses placeholders here so it does not hard-code one internal or public Git host.
+Use the public GitHub URL below for the shared baseline. If you also maintain an internal mirror, use the corresponding local clone URL there instead.
 
 **SSH**
 
 ```bash
-chezmoi init --apply <ssh-clone-url>
+chezmoi init --apply git@github.com:kangmingxuan/oh-my-devenv.git
 ```
 
 **HTTPS**
 
 ```bash
-chezmoi init --apply <https-clone-url>
+chezmoi init --apply https://github.com/kangmingxuan/oh-my-devenv.git
 ```
 
 ### 3. Know what the first apply does

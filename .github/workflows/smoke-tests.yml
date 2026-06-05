@@ -1,0 +1,42 @@
+name: Smoke Tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  smoke-tests-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install smoke dependencies
+        run: |
+          sudo apt-get update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            curl git zsh ca-certificates xz-utils shellcheck
+      - name: Install chezmoi
+        run: |
+          mkdir -p "$HOME/.local/bin"
+          sh -c "$(curl -fsLS get.chezmoi.io)" -- -b "$HOME/.local/bin"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - name: Run smoke tests
+        run: bash bootstrap/scripts/run-smoke-tests.sh
+
+  smoke-tests-wsl-shaped:
+    runs-on: ubuntu-latest
+    env:
+      DOTFILES_FORCE_WSL: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install smoke dependencies
+        run: |
+          sudo apt-get update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            curl git zsh ca-certificates xz-utils shellcheck
+      - name: Install chezmoi
+        run: |
+          mkdir -p "$HOME/.local/bin"
+          sh -c "$(curl -fsLS get.chezmoi.io)" -- -b "$HOME/.local/bin"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - name: Run smoke tests (WSL-shaped)
+        run: bash bootstrap/scripts/run-smoke-tests.sh

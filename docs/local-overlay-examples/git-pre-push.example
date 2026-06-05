@@ -9,12 +9,22 @@ set -euo pipefail
 # Replace the placeholders below before you rely on this guardrail.
 # Leaving them untouched turns the hook into a no-op.
 #
+# This hook works especially well with a split public/internal worktree setup,
+# where each worktree keeps its own `user.email` and `remote.pushDefault`.
+# The hook then catches the common cross-push mistakes without changing how you
+# commit locally.
+#
 # The guardrail is intentionally thin:
 #   - block your work identity from pushing to non-matching remotes
 #   - block non-matching identities from pushing to the protected work host
 #
 # For a deliberate one-off override:
 #   ALLOW_CROSS_IDENTITY_PUSH=1 git push ...
+
+# Example local setup (keep this in a secrets file or edit the copied hook,
+# never in the repository):
+#   export WORK_EMAIL_SUFFIX='@example.com'
+#   export WORK_GIT_HOST='git.example.com'
 
 work_email_suffix="${WORK_EMAIL_SUFFIX:-@<work-email-domain>}"
 work_git_host="${WORK_GIT_HOST:-<work-git-host>}"

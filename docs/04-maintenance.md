@@ -68,6 +68,12 @@ After a shared change lands on GitHub `main`, sync it into the internal repo fro
    git fetch --multiple public origin --prune
    ```
 
+   If you want a helper for the branch creation and merge skeleton, start from:
+
+   ```bash
+   bash bootstrap/scripts/sync-public-into-internal.sh
+   ```
+
 2. Cut a short-lived sync branch from internal `main`:
 
    ```bash
@@ -333,4 +339,5 @@ When your active `chezmoi source-path` points **outside** `~/.local/share/` (for
 - `docs/01-onboarding.md` — five-minute first-run walkthrough (ordered steps from clean laptop to baseline).
 - `CONTRIBUTING.md` — contributor workflow and scope rules.
 - `docs/design/01-public-github-core-and-internal-gitlab-overlay.en.md` — the design rationale for the current public/internal repository model.
+- `docs/design/02-public-release-and-versioning.en.md` — release and versioning policy for the public repository.
 - `CHANGELOG.md` — human-readable release history per milestone, plus the semver / tagging policy. Every MR that ships a user-visible change updates its `[Unreleased]` section.

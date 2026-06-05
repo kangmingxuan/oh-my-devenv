@@ -5,3 +5,10 @@ repos:
       - id: gitleaks
         args:
           - --redact=100
+  - repo: local
+    hooks:
+      - id: public-boundary-lint
+        name: public-boundary-lint
+        entry: bash bootstrap/scripts/lint-public-boundary.sh
+        language: system
+        pass_filenames: false

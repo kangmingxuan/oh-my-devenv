@@ -2,6 +2,25 @@
 
 All notable public user-visible changes to this repository are documented here. The format follows [Keep a Changelog 1.1](https://keepachangelog.com/en/1.1.0/).
 
+## Versioning Policy
+
+This public repository versions the shared baseline with [Semantic Versioning 2.0](https://semver.org/).
+
+- Minor versions (`v0.<M>.0`) ship a coherent slice of public-facing improvements.
+- Patch versions (`v0.<M>.<N>`) ship focused fixes without broadening scope.
+- The leading `0.` signals that the public baseline is still settling after the public/internal split; load-bearing interfaces may still change between minors with a callout.
+
+## Release Discipline
+
+- Public releases are cut from the public repository's `main` branch after CI is green and the intended PRs are merged.
+- `CHANGELOG.md` is updated in the same PR that introduces a public user-visible change.
+- Internal-only changes stay out of this file and remain tracked in the internal overlay repository.
+
+## Git Tags
+
+- Public tags are annotated tags pushed from the public repository.
+- Internal mirrors may sync those tags for reference, but the public repository remains the source of truth for public release history.
+
 ## Public History
 
 This changelog is intentionally reset for the public-safe version of the repository.
@@ -14,3 +33,5 @@ This changelog is intentionally reset for the public-safe version of the reposit
 ### Changed
 
 - Prepared the first public-safe snapshot by removing internal bootstrap defaults, moving restricted-network setup to local overlays, and trimming internal-only repository metadata from the public-prep branch.
+- Added the first operational handbook for the public/internal split, including routing from `CONTRIBUTING.md` and `docs/README.md`.
+- Added GitHub collaboration files, public-boundary checks, and CI workflows so the public repository can accept issues, pull requests, and safety checks on its own.
