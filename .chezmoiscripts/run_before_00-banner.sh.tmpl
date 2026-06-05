@@ -1,0 +1,10 @@
+#!/bin/bash
+
+set -euo pipefail
+
+bootstrap_dir='{{ joinPath .chezmoi.sourceDir "bootstrap" }}'
+scripts_dir="$bootstrap_dir/scripts"
+
+source "$scripts_dir/common.sh"
+
+print_startup_banner

@@ -1,0 +1,25 @@
+{{- $bootstrapDir := joinPath .chezmoi.sourceDir "bootstrap" -}}
+#!/bin/bash
+# go-tools.txt hash: {{ include "bootstrap/manifests/ecosystem/go-tools.txt" | sha256sum }}
+# uv-tools.txt hash: {{ include "bootstrap/manifests/ecosystem/uv-tools.txt" | sha256sum }}
+
+set -euo pipefail
+
+bootstrap_dir='{{ $bootstrapDir }}'
+scripts_dir="$bootstrap_dir/scripts"
+manifests_dir="$bootstrap_dir/manifests"
+
+source "$scripts_dir/common.sh"
+install_error_trap "$0"
+source "$scripts_dir/go-env.sh"
+
+setup_go_env
+
+export PATH="$HOME/.local/bin:$HOME/.local/share/mise/shims:$GOBIN:$PATH"
+
+log_step "🔄" "Syncing ecosystem tools..."
+
+bash "$scripts_dir/install-go-tools.sh" "$manifests_dir/ecosystem/go-tools.txt"
+bash "$scripts_dir/install-uv-tools.sh" "$manifests_dir/ecosystem/uv-tools.txt"
+
+log_step "✅" "Ecosystem tools synced."

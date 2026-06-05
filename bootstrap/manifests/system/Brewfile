@@ -1,0 +1,34 @@
+# Core
+brew "git"
+brew "curl"
+brew "wget"
+
+# Build tools
+brew "pkg-config"
+
+# CLI
+brew "tmux"
+brew "jq"
+brew "yq"
+brew "ripgrep"
+brew "fzf"
+brew "direnv"
+brew "fd"
+brew "bat"
+brew "tree"
+brew "zip"
+brew "unzip"
+brew "shellcheck"
+brew "shfmt"
+brew "gnupg"
+brew "pinentry-mac"
+
+# Code hosting CLIs
+# Authenticate with `gh auth login` after install; this file must not run it.
+# Additional Git hosting CLIs can be installed separately on machines that
+# need them.
+brew "gh"
+
+# Optional local apps live in a sibling manifest `Brewfile.optional` and are
+# never installed by `chezmoi apply`. See "Customizing" in README.md for how
+# to opt in on your own machine.

@@ -1,0 +1,62 @@
+stages:
+  - test
+
+# Lightweight CI only: shared runners verify that the repo still renders
+# and shells correctly under the default Linux shape and the WSL-shaped
+# branch. We intentionally avoid registry/image/integration complexity.
+.linux-smoke-before: &linux-smoke-before
+  - >-
+    sed -i 's/^Components: main universe restricted multiverse/Components: main/'
+    /etc/apt/sources.list.d/ubuntu.sources
+  - apt-get update
+  - >-
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends
+    curl git zsh ca-certificates xz-utils
+  - SHELLCHECK_VERSION=v0.10.0
+  - >-
+    curl -fsSL
+    "https://github.com/koalaman/shellcheck/releases/download/${SHELLCHECK_VERSION}/shellcheck-${SHELLCHECK_VERSION}.linux.x86_64.tar.xz"
+    | tar -xJ -C /tmp
+  - install -m 0755 "/tmp/shellcheck-${SHELLCHECK_VERSION}/shellcheck" /usr/local/bin/shellcheck
+  - shellcheck --version | head -2
+  - mkdir -p "$CI_PROJECT_DIR/.local/bin"
+  - sh -c "$(curl -fsLS get.chezmoi.io)" -- -b "$CI_PROJECT_DIR/.local/bin"
+  - export PATH="$CI_PROJECT_DIR/.local/bin:$PATH"
+
+smoke-tests-linux:
+  stage: test
+  image: ubuntu:24.04
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "push"
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+  before_script: *linux-smoke-before
+  script:
+    - bash bootstrap/scripts/run-smoke-tests.sh
+
+# Same smoke suite, but with DOTFILES_FORCE_WSL=1 so
+# `.chezmoi.toml.tmpl` takes the WSL branch.
+smoke-tests-wsl-shaped:
+  stage: test
+  image: ubuntu:24.04
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "push"
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+  before_script: *linux-smoke-before
+  variables:
+    DOTFILES_FORCE_WSL: "1"
+  script:
+    - bash bootstrap/scripts/run-smoke-tests.sh
+
+# Placeholder for macOS coverage. Still manual until a shared macOS
+# runner exists; this repository keeps macOS validation as a human
+# preflight rather than a hard CI gate.
+smoke-tests-macos-manual:
+  stage: test
+  image: alpine:3.20
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      when: manual
+      allow_failure: true
+  script:
+    - echo "macOS shared runner is not wired to this project yet."
+    - echo "Follow docs/03-macos-preflight.md on a real Mac and paste the signoff into this MR description."

@@ -1,0 +1,11 @@
+# ~/.npmrc
+#
+# Keep the global default registry public-first so public packages continue to
+# work off-corp. Route only internal scopes through the internal registry.
+
+registry=https://registry.npmjs.org/
+@<internal-scope>:registry=https://<internal-npm-registry>/
+always-auth=false
+
+# Authenticate with `npm login --registry https://<internal-npm-registry>/`
+# when needed instead of storing credentials in this example.

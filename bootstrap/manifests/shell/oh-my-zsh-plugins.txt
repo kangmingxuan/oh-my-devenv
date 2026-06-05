@@ -1,0 +1,5 @@
+# repository path-relative-to-ZSH_CUSTOM
+zsh-users/zsh-autosuggestions plugins/zsh-autosuggestions
+zsh-users/zsh-completions plugins/zsh-completions
+# Keep zsh-syntax-highlighting last so it can wrap widgets after other plugins.
+zsh-users/zsh-syntax-highlighting plugins/zsh-syntax-highlighting

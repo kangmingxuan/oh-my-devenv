@@ -1,0 +1,192 @@
+#!/bin/bash
+{{ if eq .chezmoi.os "linux" -}}
+# apt-packages.txt hash: {{ include "bootstrap/manifests/system/apt-packages.txt" | sha256sum }}
+{{ else if eq .chezmoi.os "darwin" -}}
+# Brewfile hash: {{ include "bootstrap/manifests/system/Brewfile" | sha256sum }}
+{{ end -}}
+# go-tools.txt hash: {{ include "bootstrap/manifests/ecosystem/go-tools.txt" | sha256sum }}
+# uv-tools.txt hash: {{ include "bootstrap/manifests/ecosystem/uv-tools.txt" | sha256sum }}
+# oh-my-zsh-plugins.txt hash: {{ include "bootstrap/manifests/shell/oh-my-zsh-plugins.txt" | sha256sum }}
+# mise config hash: {{ includeTemplate "dot_config/mise/config.toml.tmpl" | sha256sum }}
+
+set -euo pipefail
+
+bootstrap_dir='{{ joinPath .chezmoi.sourceDir "bootstrap" }}'
+scripts_dir="$bootstrap_dir/scripts"
+manifests_dir="$bootstrap_dir/manifests"
+
+source "$scripts_dir/common.sh"
+install_error_trap "$0"
+source "$scripts_dir/go-env.sh"
+
+setup_go_env
+
+export PATH="$HOME/.local/bin:$HOME/.local/share/mise/shims:$GOBIN:$PATH"
+
+log_step "🔎" "Running environment checks..."
+
+errors=0
+
+check_cmd() {
+  if command -v "$1" >/dev/null 2>&1; then
+    log_check_ok "$1"
+  else
+    log_check_missing "$1"
+    errors=$((errors + 1))
+  fi
+}
+
+check_path() {
+  local path="$1"
+  local name="$2"
+
+  if [[ -e "$path" ]]; then
+    log_check_ok "$name"
+  else
+    log_check_missing "$name"
+    errors=$((errors + 1))
+  fi
+}
+
+check_manifest_cmds() {
+  local manifest="$1"
+  local command_name_parser="$2"
+  local tool_spec=""
+  local command_name=""
+
+  while IFS= read -r tool_spec; do
+    command_name="$($command_name_parser "$tool_spec")"
+
+    if [[ -z "$command_name" ]]; then
+      log_warning "Skipping invalid manifest entry in $manifest: $tool_spec"
+      errors=$((errors + 1))
+      continue
+    fi
+
+    check_cmd "$command_name"
+  done < <(manifest_entries "$manifest")
+}
+
+check_oh_my_zsh_plugins() {
+  local manifest="$1"
+  local zsh_custom_dir="$2"
+  local plugin_entry=""
+  local plugin_repo=""
+  local plugin_path=""
+
+  while IFS= read -r plugin_entry; do
+    set -- $plugin_entry
+    plugin_repo="${1:-}"
+    plugin_path="${2:-}"
+
+    if [[ -z "$plugin_repo" || -z "$plugin_path" ]]; then
+      log_warning "Skipping invalid oh-my-zsh plugin entry in $manifest: $plugin_entry"
+      errors=$((errors + 1))
+      continue
+    fi
+
+    check_path "$zsh_custom_dir/$plugin_path" "${plugin_path##*/}"
+  done < <(manifest_entries "$manifest")
+}
+
+detect_shell_rc_file() {
+  local shell_name
+
+  shell_name="$(basename "${SHELL:-}")"
+
+  case "$shell_name" in
+    zsh)
+      printf '%s\n' "$HOME/.zshrc"
+      ;;
+    bash)
+      printf '%s\n' "$HOME/.bashrc"
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+# Core tools
+check_cmd git
+check_cmd curl
+check_cmd zsh
+check_cmd mise
+
+# Runtimes
+check_cmd go
+check_cmd node
+check_cmd python
+check_cmd golangci-lint
+
+# Ecosystem tools
+check_manifest_cmds "$manifests_dir/ecosystem/go-tools.txt" go_tool_binary_name
+check_manifest_cmds "$manifests_dir/ecosystem/uv-tools.txt" uv_tool_binary_name
+
+# Editor-related CLI tools
+check_cmd shellcheck
+check_cmd shfmt
+
+# Shell assets
+check_path "$HOME/.oh-my-zsh/oh-my-zsh.sh" "oh-my-zsh"
+check_oh_my_zsh_plugins "$manifests_dir/shell/oh-my-zsh-plugins.txt" "${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}"
+
+if [[ $errors -gt 0 ]]; then
+  log_warning "$errors required tool(s) or asset(s) are missing."
+  log_info "Diagnostic hints:"
+  log_info "  1. Re-run with verbose output:  chezmoi apply --verbose --debug"
+  log_info "  2. Confirm network access to apt mirrors, Homebrew, GitHub,"
+  log_info "     mise.run / get.chezmoi.io, Go and PyPI proxies."
+  log_info "  3. If a single step repeatedly fails, try only that step:"
+  log_info "       chezmoi apply --verbose <script-under-.chezmoiscripts>"
+  log_info "  4. Your pre-bootstrap configs (if any) were backed up under"
+  log_info "       \${XDG_STATE_HOME:-\$HOME/.local/state}/chezmoi-first-run-backup/"
+  exit 1
+fi
+
+log_step "🎉" "All checks passed."
+
+# --- Welcome card ---
+log_info "Core tools in this environment:"
+print_version_line() {
+  local name="$1"
+  local output=""
+
+  if ! command -v "$name" >/dev/null 2>&1; then
+    return 0
+  fi
+
+  case "$name" in
+    chezmoi)       output="$(chezmoi --version 2>/dev/null | head -1 | awk '{print $3}' | tr -d ',')" ;;
+    git)           output="$(git --version 2>/dev/null | awk '{print $3}')" ;;
+    go)            output="$(go version 2>/dev/null | awk '{print $3}')" ;;
+    node)          output="$(node --version 2>/dev/null)" ;;
+    python)        output="$(python --version 2>/dev/null | awk '{print $2}')" ;;
+    mise)          output="$(mise --version 2>/dev/null | awk '{print $1}')" ;;
+    uv)            output="$(uv --version 2>/dev/null | awk '{print $2}')" ;;
+    golangci-lint) output="$(golangci-lint --version 2>/dev/null | awk '/has version/ {print $4; exit}')" ;;
+    *)             output="installed" ;;
+  esac
+
+  printf '    %-16s %s\n' "$name" "${output:-installed}"
+}
+
+print_version_line chezmoi
+print_version_line git
+print_version_line mise
+print_version_line go
+print_version_line node
+print_version_line python
+print_version_line uv
+print_version_line golangci-lint
+
+log_info "Next steps:"
+if rc_file="$(detect_shell_rc_file)"; then
+  log_info "  - Reload your shell so this session sees the new PATH (try: source \"$rc_file\")."
+else
+  log_info "  - Reload your shell (open a new terminal) so PATH picks up the baseline tools."
+fi
+log_info "  - New to this baseline? Skim docs/01-onboarding.md — five-minute walkthrough of what just ran."
+log_info "  - Want machine-only tweaks? Copy starters from docs/local-overlay-examples/ (nothing there is deployed by default)."
+log_info "  - Need restricted-network overrides? Keep them local and start from docs/local-overlay-examples/ before the next apply."
+log_info "  - Something looks wrong? Open an issue using the repository's bug-report workflow so the report stays structured."

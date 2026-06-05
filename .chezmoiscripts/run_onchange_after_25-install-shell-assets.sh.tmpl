@@ -1,0 +1,16 @@
+{{- $bootstrapDir := joinPath .chezmoi.sourceDir "bootstrap" -}}
+#!/bin/bash
+# oh-my-zsh-plugins.txt hash: {{ include "bootstrap/manifests/shell/oh-my-zsh-plugins.txt" | sha256sum }}
+
+set -euo pipefail
+
+bootstrap_dir='{{ $bootstrapDir }}'
+scripts_dir="$bootstrap_dir/scripts"
+manifests_dir="$bootstrap_dir/manifests"
+
+source "$scripts_dir/common.sh"
+install_error_trap "$0"
+
+log_step "🐚" "Installing shell assets..."
+bash "$scripts_dir/install-oh-my-zsh-assets.sh" "$manifests_dir/shell/oh-my-zsh-plugins.txt"
+log_step "✅" "Shell assets installation complete."

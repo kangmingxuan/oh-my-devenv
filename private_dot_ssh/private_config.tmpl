@@ -1,0 +1,29 @@
+{{- if eq .chezmoi.os "darwin" -}}
+# ============================================================================
+# OrbStack Integration - macOS only
+# ============================================================================
+Include ~/.orbstack/ssh/conf*
+
+
+{{ end -}}
+# ============================================================================
+# Local (per-machine) SSH config - NOT managed by chezmoi
+# Put local-only hosts into ~/.ssh/config.d/*.conf (loaded in lexical order)
+# ============================================================================
+Include ~/.ssh/config.d/*.conf
+
+# ============================================================================
+# Global Settings - Applied to all connections
+# ============================================================================
+Host *
+  IdentitiesOnly yes
+  ControlMaster auto           # Reuse SSH connections
+{{- if eq .chezmoi.os "darwin" }}
+  ControlPath ~/.ssh/cm-%C
+{{- else }}
+  ControlPath ~/.ssh/%r@%h:%p.sock
+{{- end }}
+  ControlPersist 30m           # Keep connections alive for 30 minutes
+  TCPKeepAlive yes             # Enable TCP keepalive
+  ServerAliveInterval 60       # Send keepalive every 60 seconds
+  SendEnv LANG LC_*            # Forward locale settings

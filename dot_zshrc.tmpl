@@ -1,0 +1,95 @@
+{{- $shellPluginManifest := include "bootstrap/manifests/shell/oh-my-zsh-plugins.txt" -}}
+{{- $ohMyZshPlugins := list "git" "z" -}}
+{{- $zshCompletionsPath := "" -}}
+{{- range $line := splitList "\n" $shellPluginManifest -}}
+{{- $line = trim $line -}}
+{{- if and $line (not (hasPrefix "#" $line)) -}}
+{{- $fields := regexSplit "[[:space:]]+" $line -1 -}}
+{{- if ge (len $fields) 2 -}}
+{{- $pluginPath := index $fields 1 -}}
+{{- $pluginName := base $pluginPath -}}
+{{- if eq $pluginName "zsh-completions" -}}
+{{- $zshCompletionsPath = $pluginPath -}}
+{{- else -}}
+{{- $ohMyZshPlugins = append $ohMyZshPlugins $pluginName -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+
+# ~/.zshrc
+# Interactive shell configuration.
+# Put aliases, functions, and plugins here.
+# Keep PATH and core environment variables in ~/.zsh/env.zsh.
+
+# Ensure env is loaded for non-login interactive shells (for example, VS Code terminals).
+[[ -f "$HOME/.zsh/env.zsh" ]] && source "$HOME/.zsh/env.zsh"
+
+# Load local secrets that are intentionally not tracked.
+[[ -f "$HOME/.zshrc.secrets" ]] && source "$HOME/.zshrc.secrets"
+
+# Load work- or team-specific interactive Zsh overlay that lives outside this
+# baseline. Keep non-secret environment variables in ~/.config/work/env.sh.
+[[ -f "$HOME/.zsh/work.zsh" ]] && source "$HOME/.zsh/work.zsh"
+
+typeset -U fpath
+zsh_user_completion_dir="${XDG_DATA_HOME:-$HOME/.local/share}/zsh/site-functions"
+
+export ZSH="$HOME/.oh-my-zsh"
+
+ZSH_THEME="robbyrussell"
+
+if [[ -s "$ZSH/oh-my-zsh.sh" ]]; then
+  plugins=(
+{{- range $plugin := $ohMyZshPlugins }}
+    {{ $plugin }}
+{{- end }}
+  )
+
+{{- if $zshCompletionsPath }}
+  # Expose zsh-completions to oh-my-zsh before it runs compinit.
+  # This path is derived from bootstrap/manifests/shell/oh-my-zsh-plugins.txt.
+  # Do not add zsh-completions to plugins=() and do not call compinit here;
+  # oh-my-zsh.sh already runs compinit during its own initialization.
+  fpath+=${ZSH_CUSTOM:-${ZSH:-~/.oh-my-zsh}/custom}/{{ $zshCompletionsPath }}/src
+{{- end }}
+
+  # User-managed completion files land here on Linux (for example, mise).
+  [[ -d "$zsh_user_completion_dir" ]] && fpath=("$zsh_user_completion_dir" $fpath)
+
+  source "$ZSH/oh-my-zsh.sh"
+fi
+
+# --- Custom Configurations ---
+# Initialize mise for interactive Zsh.
+if command -v mise >/dev/null 2>&1; then
+  eval "$(mise activate zsh)"
+fi
+
+# Initialize fzf shell integration if fzf is installed.
+if command -v fzf >/dev/null 2>&1; then
+  if fzf_shell_integration="$(fzf --zsh 2>/dev/null)" && [[ -n "$fzf_shell_integration" ]]; then
+    eval "$fzf_shell_integration"
+  else
+    for fzf_shell_dir in \
+      "${HOMEBREW_PREFIX:+$HOMEBREW_PREFIX/opt/fzf/shell}" \
+      /opt/homebrew/opt/fzf/shell \
+      /usr/local/opt/fzf/shell \
+      "$HOME/.fzf/shell" \
+      /usr/share/fzf \
+      /usr/share/doc/fzf/examples
+    do
+      [[ -n "$fzf_shell_dir" ]] || continue
+      [[ -z "$fzf_completion" && -f "$fzf_shell_dir/completion.zsh" ]] && fzf_completion="$fzf_shell_dir/completion.zsh"
+      [[ -z "$fzf_key_bindings" && -f "$fzf_shell_dir/key-bindings.zsh" ]] && fzf_key_bindings="$fzf_shell_dir/key-bindings.zsh"
+    done
+
+    [[ -n "$fzf_completion" ]] && source "$fzf_completion"
+    [[ -n "$fzf_key_bindings" ]] && source "$fzf_key_bindings"
+  fi
+  unset fzf_shell_integration fzf_shell_dir fzf_completion fzf_key_bindings
+fi
+
+# Set GPG_TTY for GPG agent to work properly in terminal.
+export GPG_TTY="$(tty)"
+unset zsh_user_completion_dir

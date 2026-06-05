@@ -1,0 +1,141 @@
+# macOS Preflight Checklist
+
+The repository CI currently covers the Linux and WSL-shaped shapes of this baseline via `smoke-tests-linux` and `smoke-tests-wsl-shaped`. There is **no shared macOS runner wired to this project yet**, and personal Macs are intentionally not mounted as self-hosted runners. This lightweight Linux smoke CI does not change the macOS automation strategy.
+
+Until a shared macOS runner exists, a review change that touches macOS-specific behaviour is validated by one contributor running the steps below on a real Mac and pasting the signoff template into the review description. The `smoke-tests-macos-manual` CI job is the pointer that reminds reviewers this checklist exists.
+
+> Scope: run this when a review change touches `Brewfile`, any `darwin`-branched chezmoi template, `bootstrap/scripts/install-brew-packages.sh`, macOS-specific PATH wiring, or anything else that only runs on macOS. Linux-only changes do not require it.
+
+## When You Need To Run This
+
+Run the full preflight when the MR diff includes any of:
+
+- `bootstrap/manifests/system/Brewfile`
+- `bootstrap/scripts/install-brew-packages.sh`
+- Any `.chezmoiscripts/*.sh.tmpl` block gated on `eq .chezmoi.os "darwin"`
+- macOS-specific PATH or `brew shellenv` wiring in `dot_zprofile.tmpl`, `dot_zshrc.tmpl`, `dot_bashrc.tmpl`, or `dot_profile`
+- mise Homebrew install path in `.chezmoiscripts/run_onchange_after_30-install-mise.sh.tmpl`
+- Anything in `README.md` or `docs/*.md` whose instructions target macOS readers
+
+If none of the above changed, paste the short "macOS: not exercised" line from the signoff template instead of running the full checklist.
+
+## Prerequisites
+
+A reasonably clean Mac is ideal but not required. The checklist tolerates an already-bootstrapped machine — on a second run, `chezmoi apply` will only re-execute scripts whose dependent manifest hashes changed.
+
+```bash
+xcode-select --install   # if not already installed
+command -v brew          # should print /opt/homebrew/bin/brew (Apple Silicon) or /usr/local/bin/brew (Intel)
+command -v chezmoi       # should print a path; if missing: brew install chezmoi
+```
+
+## 1. Check Out The Review Branch
+
+Point chezmoi at the review working tree so the preflight measures exactly what is under review, not an older `main`.
+
+```bash
+# From anywhere you have cloned the repo. `--source` makes subsequent
+# chezmoi commands treat this directory as the source of truth.
+git fetch origin
+git checkout <review-source-branch>
+git rev-parse HEAD   # record this SHA -- goes into the signoff
+```
+
+## 2. Run chezmoi init --apply
+
+This is the same command every macOS contributor runs for a fresh bootstrap. The preflight deliberately uses the interactive form so you exercise the prompt path end-to-end.
+
+```bash
+chezmoi init --apply --source="$(pwd)"
+```
+
+Answer the two `chezmoi init` prompts (Git author name, email address) with the values you actually use on this machine. If you have already run `chezmoi init` on this Mac, the cached answers are reused silently.
+
+Expected outcome: `.chezmoiscripts/run_onchange_after_60-check.sh` runs last and reports `All checks passed.` If it exits non-zero, capture the failing line, attach it to the review, and stop — the change is not ready to merge.
+
+## 3. Hand-Validate Brewfile State
+
+`60-check.sh` only checks that the binaries the baseline installs are callable. It does not catch Brewfile drift (for example, a cask you removed that is still installed). Verify Brewfile parity explicitly:
+
+```bash
+cd "$(chezmoi source-path)"
+brew bundle check --file=bootstrap/manifests/system/Brewfile --verbose
+```
+
+Expected outcome: `The Brewfile's dependencies are satisfied.` Any line starting with `->` means the manifest and the machine disagree. That is either a real MR bug or a pre-existing drift you should note in the signoff.
+
+## 4. Hand-Validate mise Runtime State
+
+`60-check.sh` checks that each runtime binary is on PATH. It does not verify that the runtime version mise actually installed matches `dot_config/mise/config.toml.tmpl`. On a Mac, mise is installed via Homebrew rather than `https://mise.run`, so this is the single place where the runtime install path diverges from Linux — worth a direct inspection:
+
+```bash
+mise current     # pinned runtimes for the current project
+mise list        # what is installed, per runtime
+mise doctor      # mise's own self-check; warnings are usually cosmetic, errors are not
+```
+
+Expected outcome: `mise current` agrees with the manifest (`go 1.25`, `node 24`, `python 3.13`, `golangci-lint v2.11.2`, `uv 0.10.9`, `usage 2.18.2`). Any mismatch goes into the signoff.
+
+## 5. Hand-Validate go / uv Tool State
+
+```bash
+gopls version
+dlv version
+ruff --version
+basedpyright --version
+pre-commit --version
+```
+
+Expected outcome: each command prints a version and exits 0. A missing command means `50-sync-ecosystem-tools.sh` did not finish cleanly on this machine — capture the log and stop.
+
+## 6. Run The Local Smoke Suite
+
+Catch macOS-only issues the Linux CI will never see (for example a Darwin-only template arm that shellcheck would not render on Linux):
+
+```bash
+bash bootstrap/scripts/run-smoke-tests.sh
+```
+
+Expected outcome: `Smoke tests passed.` This is the same script CI runs; if it fails on a Mac but passes on the Linux CI, you have found a macOS-specific regression.
+
+## 7. Paste The Signoff Into The Review
+
+Copy the template below verbatim into the review description (append to the existing validation section) and fill in each field. The wall of `[x]` entries is the point: reviewers can scan it in five seconds to know the change is macOS-safe.
+
+```markdown
+## macOS Preflight Signoff
+
+- [ ] MR SHA validated: `<git rev-parse HEAD output>`
+- [ ] Hardware / OS: `<arm64 | x86_64>` — macOS `<version>`
+- [ ] `chezmoi init --apply` completed; `60-check.sh` reported `All checks passed.`
+- [ ] `brew bundle check` reported `The Brewfile's dependencies are satisfied.`
+- [ ] `mise current` agrees with `dot_config/mise/config.toml.tmpl`
+- [ ] `gopls`, `dlv`, `ruff`, `basedpyright`, `pre-commit` all print versions
+- [ ] `bash bootstrap/scripts/run-smoke-tests.sh` passed
+- Deviations / notes: `<free-form, or "none">`
+- Preflight run by: `@<your-handle>` on `<YYYY-MM-DD>`
+```
+
+If the MR does not touch any macOS-exercised surface, paste this shorter line instead:
+
+```markdown
+## macOS Preflight Signoff
+
+- Not exercised: MR diff is macOS-neutral (no Brewfile / darwin template / mac-specific path changes).
+```
+
+## When A Shared macOS Runner Arrives
+
+Swapping the `smoke-tests-macos-manual` stub for a real run is a one-diff change:
+
+1. Replace the stub CI job with a real macOS-oriented validation command sequence.
+2. Drop the `when: manual` line so the job runs automatically on every MR.
+3. Drop `allow_failure: true` so a failing macOS run blocks the review — today that line exists only to stop the current pipeline from blocking the `integration` stage on an un-triggered manual job.
+4. Point the job at the macOS runner tag in the same diff.
+5. Update `docs/04-maintenance.md` "Review Expectations" to describe the expanded CI surface, and update this document's introduction.
+6. Keep the preflight checklist itself — it remains the right document for MRs that touch macOS surface in ways a single CI shape cannot cover (new hardware, OS upgrade, Xcode CLT jumps).
+
+## Related Documents
+
+- [`README.md`](../README.md) — user-facing bootstrap instructions.
+- [`docs/04-maintenance.md`](04-maintenance.md) — day-to-day maintenance model and CI job list.

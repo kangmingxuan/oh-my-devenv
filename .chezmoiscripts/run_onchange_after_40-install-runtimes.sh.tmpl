@@ -1,0 +1,40 @@
+#!/bin/bash
+# mise config hash: {{ includeTemplate "dot_config/mise/config.toml.tmpl" | sha256sum }}
+
+set -euo pipefail
+
+export PATH="$HOME/.local/bin:$HOME/.local/share/mise/shims:$PATH"
+
+bootstrap_dir='{{ joinPath .chezmoi.sourceDir "bootstrap" }}'
+source_dir='{{ .chezmoi.sourceDir }}'
+scripts_dir="$bootstrap_dir/scripts"
+
+source "$scripts_dir/common.sh"
+install_error_trap "$0"
+
+if ! command -v mise >/dev/null 2>&1; then
+  echo "ERROR: mise not found in PATH" >&2
+  exit 1
+fi
+
+# Shared egress IPs (OrbStack VMs, CI, corp NAT) routinely hit GitHub's
+# anonymous API rate limit during artifact attestation verification. Keep the
+# baseline install path reliable by default, but allow operators to opt back in
+# explicitly with environment overrides.
+export MISE_GITHUB_ATTESTATIONS="${MISE_GITHUB_ATTESTATIONS:-false}"
+export MISE_AQUA_GITHUB_ATTESTATIONS="${MISE_AQUA_GITHUB_ATTESTATIONS:-false}"
+export MISE_PYTHON_GITHUB_ATTESTATIONS="${MISE_PYTHON_GITHUB_ATTESTATIONS:-$MISE_GITHUB_ATTESTATIONS}"
+
+log_step "⚙️" "Syncing mise-managed runtimes and tools..."
+mise install --yes
+
+zsh_completion_dir="${XDG_DATA_HOME:-$HOME/.local/share}/zsh/site-functions"
+mkdir -p "$zsh_completion_dir"
+
+if command -v uv >/dev/null 2>&1; then
+  uv generate-shell-completion zsh >"$zsh_completion_dir/_uv"
+  log_info "Installed uv Zsh completion to $zsh_completion_dir/_uv"
+fi
+
+log_info "Current mise toolchain:"
+mise list

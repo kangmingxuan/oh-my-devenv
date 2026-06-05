@@ -1,0 +1,24 @@
+# ~/.profile
+# Executed by the command interpreter for login shells.
+# Managed by chezmoi.
+
+if [ -n "$BASH_VERSION" ]; then
+  # For Bash, delegate environment and interactive setup to specific files.
+  if [ -f "$HOME/.bash/env.bash" ]; then
+    . "$HOME/.bash/env.bash"
+  fi
+
+  if [ -f "$HOME/.bashrc" ]; then
+    . "$HOME/.bashrc"
+  fi
+else
+  # For non-Bash POSIX shells (for example, dash/sh and session init),
+  # set PATH so it includes user-private bin directories when present.
+  if [ -d "$HOME/bin" ] ; then
+    PATH="$HOME/bin:$PATH"
+  fi
+
+  if [ -d "$HOME/.local/bin" ] ; then
+    PATH="$HOME/.local/bin:$PATH"
+  fi
+fi

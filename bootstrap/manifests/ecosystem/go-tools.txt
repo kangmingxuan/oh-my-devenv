@@ -1,0 +1,4 @@
+# Go tools accept module@version syntax. Keep `@latest` unless a known
+# regression or compatibility issue justifies pinning.
+golang.org/x/tools/gopls@latest
+github.com/go-delve/delve/cmd/dlv@latest

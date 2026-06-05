@@ -1,0 +1,42 @@
+# ~/.config/work/env.sh
+#
+# Shared non-secret work environment. The baseline sources this file from
+# Bash, Zsh, and bootstrap, so it must stay shell-compatible.
+#
+# Use this file for:
+#   - Go private-module environment variables
+#   - Mirror-mode controls used by bootstrap
+#   - Other non-secret exports that both shells and bootstrap should see
+#
+# Do not put secrets, aliases, functions, or prompt customizations here.
+# Secrets belong in ~/.zshrc.secrets or ~/.bashrc.secrets. Interactive-only
+# helpers belong in ~/.zsh/work.zsh or ~/.bash/work.bash.
+
+# --------------------------------------------------------------------------
+# Example: Go private modules. Keep the real prefixes local to your machine.
+# --------------------------------------------------------------------------
+# export GOPRIVATE='<private-module-prefixes>'
+# export GONOSUMDB="${GONOSUMDB:-$GOPRIVATE}"
+# export GONOPROXY="${GONOPROXY:-$GOPRIVATE}"
+
+# --------------------------------------------------------------------------
+# Example: optional bootstrap mirror mode for restricted corporate networks.
+# Keep public-first defaults unless you actually need mirrors.
+# --------------------------------------------------------------------------
+# export DOTFILES_MIRROR_MODE=auto
+# export DOTFILES_INTERNAL_PROBE_URL='https://<internal-probe>/healthz'
+# export DOTFILES_GOPROXY='https://<internal-go-proxy>'
+# export DOTFILES_UV_INDEX_URL='https://<internal-uv-tool-mirror>/simple'
+
+# --------------------------------------------------------------------------
+# Example: if you intentionally want every Go command to prefer an internal
+# proxy while it is reachable, set GOPROXY explicitly here.
+# --------------------------------------------------------------------------
+# export GOPROXY='https://<internal-go-proxy>,direct'
+
+# --------------------------------------------------------------------------
+# Python note: keep machine-global UV_INDEX_URL unset unless you really want
+# every uv command to depend on an internal registry. Prefer project-level
+# [[tool.uv.index]] configuration for private Python packages.
+# --------------------------------------------------------------------------
+# export UV_INDEX_URL='https://<internal-python-index>/simple/'

@@ -1,0 +1,12 @@
+README.md
+CHANGELOG.md
+_skynet
+_skynet/**
+docs/**
+.gitignore
+.pre-commit-config.yaml
+bootstrap
+bootstrap/**
+.gitlab-ci.yml
+CONTRIBUTING.md
+.ci-chezmoi-data.toml

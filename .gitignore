@@ -1,0 +1,14 @@
+.idea/
+.vscode/
+
+# Editor backup files
+*.swp
+*.swo
+*~
+
+# OS metadata
+.DS_Store
+Thumbs.db
+
+# Local agent scratch space
+_skynet/

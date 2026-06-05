@@ -1,0 +1,40 @@
+{{- $gitName := promptStringOnce . "gitName" "Git author name" "" -}}
+{{- $gitEmail := promptStringOnce . "gitEmail" "Git author email address" "" -}}
+
+{{/*
+    WSL detection.
+
+    Default path: on Linux, probe /proc/version for the "microsoft" marker
+    that WSL kernels carry. Stays false on macOS and on native Linux.
+
+    Escape hatch: DOTFILES_FORCE_WSL lets the operator override the probe
+    when it misfires. "1" / "true" / "yes" forces WSL on, "0" / "false" /
+    "no" forces WSL off, anything else falls through to the probe. Use
+    cases: a tmux/ssh session that hides /proc/version, a Linux container
+    meant to behave like a WSL runtime, or a CI job that needs to
+    exercise the WSL branch without a real Microsoft kernel.
+*/}}
+{{- $isWsl := false -}}
+{{- if eq .chezmoi.os "linux" -}}
+{{-   $wslCheck := output "sh" "-c" "grep -qsi microsoft /proc/version 2>/dev/null && echo true || echo false" | trim -}}
+{{-   if eq $wslCheck "true" -}}
+{{-     $isWsl = true -}}
+{{-   end -}}
+{{- end -}}
+{{- $forceWsl := env "DOTFILES_FORCE_WSL" -}}
+{{- if or (eq $forceWsl "1") (eq $forceWsl "true") (eq $forceWsl "yes") -}}
+{{-   $isWsl = true -}}
+{{- else if or (eq $forceWsl "0") (eq $forceWsl "false") (eq $forceWsl "no") -}}
+{{-   $isWsl = false -}}
+{{- end -}}
+
+[status]
+    # Keep routine run_* hooks out of `chezmoi status` so the output
+    # reflects file drift, not the banner/bootstrap scripts that apply
+    # will execute by design.
+    exclude = ["scripts"]
+
+[data]
+    isWsl = {{ $isWsl }}
+    name = {{ $gitName | quote }}
+    email = {{ $gitEmail | quote }}

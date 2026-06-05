@@ -1,0 +1,45 @@
+# ~/.gitconfig.local
+#
+# Local Git overrides that are intentionally kept out of the shared baseline.
+# Copy this file to ~/.gitconfig.local (drop the .example suffix).
+#
+# The managed ~/.gitconfig already provides your default Git identity.
+# Use this file for private per-machine preferences and optional guardrails.
+# Anything you set here wins over the baseline
+# defaults because dot_gitconfig.tmpl includes this file via [include].
+
+# --------------------------------------------------------------------------
+# Optional: user-owned Git guardrails.
+#
+# Point Git at a private hooks directory if you want a local pre-push safety
+# check. See git-pre-push.example for a copyable starter.
+# --------------------------------------------------------------------------
+# [core]
+#     hooksPath = ~/.config/git/hooks
+
+# --------------------------------------------------------------------------
+# Optional: note for repos that truly need a non-default identity.
+#
+# Keep the machine-wide default identity in the managed ~/.gitconfig. For the
+# occasional repo that needs a different identity, prefer repo-local config in
+# that repository instead of another shared overlay file:
+#
+# git -C ~/workspace/personal/<repo> config user.name "<your-real-name>"
+# git -C ~/workspace/personal/<repo> config user.email "<your.personal.email@example.com>"
+
+# --------------------------------------------------------------------------
+# Optional: insteadOf for host-specific Git URLs.
+#
+# Use this section for host-specific rewrites that should stay local to your
+# machine or team.
+# --------------------------------------------------------------------------
+# [url "git@<preferred-git-host>:"]
+#     insteadOf = https://<preferred-git-host>/
+
+# --------------------------------------------------------------------------
+# Optional: pull / push preferences that vary by person.
+# --------------------------------------------------------------------------
+# [pull]
+#     rebase = true
+# [push]
+#     default = current

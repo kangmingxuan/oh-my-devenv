@@ -1,0 +1,23 @@
+{{- $bootstrapDir := joinPath .chezmoi.sourceDir "bootstrap" -}}
+#!/bin/bash
+
+set -euo pipefail
+
+bootstrap_dir='{{ $bootstrapDir }}'
+scripts_dir="$bootstrap_dir/scripts"
+manifests_dir="$bootstrap_dir/manifests"
+
+source "$scripts_dir/common.sh"
+install_error_trap "$0"
+
+{{ if eq .chezmoi.os "darwin" -}}
+# Brewfile hash: {{ include "bootstrap/manifests/system/Brewfile" | sha256sum }}
+log_step "🍺" "Installing system packages via Homebrew..."
+bash "$scripts_dir/install-brew-packages.sh" "$manifests_dir/system/Brewfile"
+{{- else if eq .chezmoi.os "linux" -}}
+# apt-packages.txt hash: {{ include "bootstrap/manifests/system/apt-packages.txt" | sha256sum }}
+log_step "📦" "Installing system packages via apt..."
+bash "$scripts_dir/install-apt-packages.sh" "$manifests_dir/system/apt-packages.txt"
+{{- end }}
+
+log_step "✅" "System packages installation complete."

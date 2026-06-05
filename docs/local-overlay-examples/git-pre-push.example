@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Copy this file to ~/.config/git/hooks/pre-push and make it executable:
+#   install -d ~/.config/git/hooks
+#   cp docs/local-overlay-examples/git-pre-push.example ~/.config/git/hooks/pre-push
+#   chmod 755 ~/.config/git/hooks/pre-push
+#
+# Replace the placeholders below before you rely on this guardrail.
+# Leaving them untouched turns the hook into a no-op.
+#
+# The guardrail is intentionally thin:
+#   - block your work identity from pushing to non-matching remotes
+#   - block non-matching identities from pushing to the protected work host
+#
+# For a deliberate one-off override:
+#   ALLOW_CROSS_IDENTITY_PUSH=1 git push ...
+
+work_email_suffix="${WORK_EMAIL_SUFFIX:-@<work-email-domain>}"
+work_git_host="${WORK_GIT_HOST:-<work-git-host>}"
+
+if [[ "${ALLOW_CROSS_IDENTITY_PUSH:-0}" == "1" ]]; then
+  exit 0
+fi
+
+if [[ "$work_email_suffix" == *'<'* || "$work_git_host" == *'<'* ]]; then
+  exit 0
+fi
+
+remote_name="${1:-origin}"
+remote_url="${2:-}"
+if [[ -z "$remote_url" ]]; then
+  remote_url="$(git remote get-url "$remote_name" 2>/dev/null || true)"
+fi
+
+email="$(git config user.email 2>/dev/null || true)"
+
+if [[ -z "$remote_url" || -z "$email" ]]; then
+  exit 0
+fi
+
+if [[ "$email" == *"$work_email_suffix" ]] && [[ "$remote_url" != *"$work_git_host"* ]]; then
+  echo "Refusing to push work identity to a non-matching Git remote: $email -> $remote_url" >&2
+  echo "Set ALLOW_CROSS_IDENTITY_PUSH=1 for a deliberate one-off override." >&2
+  exit 1
+fi
+
+if [[ "$remote_url" == *"$work_git_host"* ]] && [[ "$email" != *"$work_email_suffix" ]]; then
+  echo "Refusing to push a non-matching identity to the protected Git host: $email -> $remote_url" >&2
+  echo "Set ALLOW_CROSS_IDENTITY_PUSH=1 for a deliberate one-off override." >&2
+  exit 1
+fi

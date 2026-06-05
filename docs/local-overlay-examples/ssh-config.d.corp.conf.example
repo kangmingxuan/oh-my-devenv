@@ -1,0 +1,43 @@
+# ~/.ssh/config.d/<pick-a-name>.conf
+#
+# One drop-in fragment loaded into your SSH configuration via an Include
+# directive in ~/.ssh/config. The baseline never edits ~/.ssh/config itself
+# because it is owned by sshd / system tooling; all local additions live in
+# this drop-in directory.
+#
+# Prerequisite (one-time):
+#     1. Make sure ~/.ssh/config contains `Include ~/.ssh/config.d/*.conf`
+#        as its first non-comment line. If ~/.ssh/config does not exist,
+#        create it with just that one Include line.
+#     2. `chmod 600 ~/.ssh/config ~/.ssh/config.d/*.conf` — SSH refuses to
+#        parse loose-permission configs.
+
+# --------------------------------------------------------------------------
+# Example: a corp host reached via an SSH bastion.
+# --------------------------------------------------------------------------
+Host <corp-alias>
+    HostName <corp-target-host>
+    User <your-corp-login>
+    Port 22
+    IdentityFile ~/.ssh/<your-corp-key>
+    IdentitiesOnly yes
+    ProxyJump <bastion-alias>
+
+# --------------------------------------------------------------------------
+# Example: the bastion itself.
+# --------------------------------------------------------------------------
+Host <bastion-alias>
+    HostName <bastion-host>
+    User <your-corp-login>
+    Port 22
+    IdentityFile ~/.ssh/<your-corp-key>
+    IdentitiesOnly yes
+
+# --------------------------------------------------------------------------
+# Example: forward an agent only for specific trusted hosts. Avoid enabling
+# agent forwarding globally; it exposes your local agent to every host you
+# connect to, including ones that can impersonate others afterwards.
+# --------------------------------------------------------------------------
+# Host <trusted-alias>
+#     HostName <trusted-host>
+#     ForwardAgent yes

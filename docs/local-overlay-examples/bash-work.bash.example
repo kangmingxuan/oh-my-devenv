@@ -1,0 +1,36 @@
+# ~/.bash/work.bash
+#
+# Work-only (or team-only) shell customizations for interactive Bash sessions.
+# The baseline sources this file if present, so it runs after ~/.bashrc.
+#
+# Typical contents:
+#   - Aliases for internal CLIs.
+#   - Functions that wrap internal workflows without encoding secrets.
+#   - Prompt tweaks that only make sense in work directories.
+#
+# Keep this file free of secrets. Use ~/.bashrc.secrets for tokens and
+# ~/.config/work/env.sh for non-secret environment variables that Bash, Zsh,
+# and bootstrap should all share.
+
+# --------------------------------------------------------------------------
+# Example: short aliases for common internal commands.
+# --------------------------------------------------------------------------
+# alias <short-alias>='<long-internal-command> --with common flags'
+
+# --------------------------------------------------------------------------
+# Example: helper function.
+# --------------------------------------------------------------------------
+# corp_ticket() {
+#   local ticket="${1:?usage: corp_ticket <TICKET-ID>}"
+#   open "https://<ticket-system>/browse/${ticket}"
+# }
+
+# --------------------------------------------------------------------------
+# Example: prompt prefix for work checkouts only.
+# --------------------------------------------------------------------------
+# __work_prompt() {
+#   case "$PWD" in
+#     "$HOME"/workspace/corp/*) printf '[work] ' ;;
+#   esac
+# }
+# PS1='$(__work_prompt)'"$PS1"

@@ -1,0 +1,93 @@
+#!/bin/bash
+# Run once on first chezmoi apply to ensure minimal prerequisites.
+
+set -euo pipefail
+
+bootstrap_dir='{{ joinPath .chezmoi.sourceDir "bootstrap" }}'
+scripts_dir="$bootstrap_dir/scripts"
+
+source "$scripts_dir/common.sh"
+install_error_trap "$0"
+
+log_step "🚀" "Bootstrap: ensuring prerequisites..."
+
+backup_existing_managed_configs() {
+  local backup_dir=""
+  local backup_path=""
+  local backup_timestamp=""
+  local existing_path=""
+  local relative_path=""
+  local backed_up=0
+
+  for relative_path in \
+    ".bash/env.bash" \
+    ".bashrc" \
+    ".config/mise/config.toml" \
+    ".gitconfig" \
+    ".profile" \
+    ".ssh/config" \
+    ".zprofile" \
+    ".zsh/env.zsh" \
+    ".zshenv" \
+    ".zshrc"
+  do
+    existing_path="$HOME/$relative_path"
+
+    if [[ ! -e "$existing_path" ]]; then
+      continue
+    fi
+
+    if [[ -z "$backup_dir" ]]; then
+      backup_timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
+      backup_dir="${XDG_STATE_HOME:-$HOME/.local/state}/chezmoi-first-run-backup/$backup_timestamp"
+      mkdir -p "$backup_dir"
+      log_warning "Found pre-existing managed config files. Backing them up before chezmoi overwrites them..."
+    fi
+
+    backup_path="$backup_dir/$relative_path"
+    mkdir -p "$(dirname "$backup_path")"
+    if ! cp -Lp "$existing_path" "$backup_path"; then
+      printf 'ERROR: failed to back up %s to %s (check permissions and available disk space)\n' "$existing_path" "$backup_path" >&2
+      exit 1
+    fi
+    log_info "Backed up $existing_path -> $backup_path"
+    backed_up=1
+  done
+
+  if [[ $backed_up -eq 1 ]]; then
+    log_warning "First-run backup completed. Review $backup_dir after chezmoi finishes if you need to merge any old settings."
+  else
+    log_info "No pre-existing managed config files detected."
+  fi
+}
+
+backup_existing_managed_configs
+
+{{ if eq .chezmoi.os "linux" -}}
+if ! command -v curl >/dev/null 2>&1 || ! command -v git >/dev/null 2>&1; then
+  log_step "📦" "Installing essential prerequisites via apt..."
+  require_sudo "install essential prerequisites via apt"
+  sudo env DEBIAN_FRONTEND=noninteractive apt-get update -qq
+  sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends git curl
+fi
+{{- else if eq .chezmoi.os "darwin" -}}
+# Ensure Homebrew is installed.
+if ! command -v brew >/dev/null 2>&1 \
+  && [[ ! -x /opt/homebrew/bin/brew ]] \
+  && [[ ! -x /usr/local/bin/brew ]]; then
+  log_step "🍺" "Installing Homebrew..."
+  /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+fi
+
+if ! command -v brew >/dev/null 2>&1 \
+  && [[ ! -x /opt/homebrew/bin/brew ]] \
+  && [[ ! -x /usr/local/bin/brew ]]; then
+  echo "ERROR: Homebrew installation finished but brew was not found" >&2
+  exit 1
+fi
+{{- end }}
+
+# Ensure ~/.local/bin exists for tools installed outside the system package manager.
+mkdir -p "$HOME/.local/bin"
+
+log_step "✅" "Bootstrap prerequisites ready."

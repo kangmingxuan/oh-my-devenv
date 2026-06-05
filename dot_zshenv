@@ -1,0 +1,4 @@
+# ~/.zshenv
+# Loaded for all Zsh invocations (login, interactive, and scripts); keep minimal.
+# Put only low-level defaults here (for example, PATH de-duplication).
+typeset -U path PATH
