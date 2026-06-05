@@ -65,7 +65,7 @@ After a shared change lands on GitHub `main`, sync it into the internal repo fro
 1. Fetch both remotes:
 
    ```bash
-   git fetch public origin --prune
+   git fetch --multiple public origin --prune
    ```
 
 2. Cut a short-lived sync branch from internal `main`:
