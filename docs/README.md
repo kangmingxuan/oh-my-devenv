@@ -24,6 +24,7 @@ The repository is a single-maintainer, best-effort shared baseline. The docs sho
 - [`04-maintenance.md`](04-maintenance.md): day-to-day maintainer workflow, the public/internal sync handbook, lightweight CI expectations, dependency bumps, removals, and release hygiene.
 - [`design/README.md`](design/README.md): long-form rationale and architectural decisions.
 - [`design/01-public-github-core-and-internal-gitlab-overlay.en.md`](design/01-public-github-core-and-internal-gitlab-overlay.en.md): recommended split model for a public-safe GitHub core and an internal GitLab overlay.
+- [`design/02-public-release-and-versioning.en.md`](design/02-public-release-and-versioning.en.md): release, changelog, and tag policy for the public repository.
 - [`CHANGELOG.md`](../CHANGELOG.md): user-visible changes by milestone.
 - [`CONTRIBUTING.md`](../CONTRIBUTING.md): contributor workflow, scope rules, and secret hygiene.
 

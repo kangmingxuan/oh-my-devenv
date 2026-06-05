@@ -5,6 +5,8 @@ _skynet/**
 docs/**
 .gitignore
 .pre-commit-config.yaml
+.github
+.github/**
 bootstrap
 bootstrap/**
 .gitlab-ci.yml

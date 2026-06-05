@@ -13,6 +13,7 @@ Need the broader docs map first? Start at [`docs/README.md`](../README.md).
 | [`00-cross-platform-bootstrap.en.md`](00-cross-platform-bootstrap.en.md) | You need the authoritative rationale for the layered bootstrap model (system / runtime / ecosystem), the choice of chezmoi over alternatives, and how the three platforms (macOS / Ubuntu / WSL) share one source of truth. English. |
 | [`00-cross-platform-bootstrap.zh.md`](00-cross-platform-bootstrap.zh.md) | Same document in Chinese. The two files are kept in sync by hand; if they diverge, treat the English version as the source of truth unless the commit message says otherwise. |
 | [`01-public-github-core-and-internal-gitlab-overlay.en.md`](01-public-github-core-and-internal-gitlab-overlay.en.md) | You need the recommended maintenance model for keeping a public-safe GitHub version and an internal GitLab version without turning them into two drifting products. English. |
+| [`02-public-release-and-versioning.en.md`](02-public-release-and-versioning.en.md) | You need the public repository's release, changelog, and tagging policy after the history split. English. |
 
 ## When to add a design doc here
 

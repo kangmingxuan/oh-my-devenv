@@ -1,0 +1,17 @@
+# Public review ownership
+#
+# The public repository keeps a small set of boundary-sensitive files that
+# define what is safe to expose in the shared baseline. Keep those files under
+# explicit maintainer review.
+
+* @kangmingxuan
+
+README.md @kangmingxuan
+CONTRIBUTING.md @kangmingxuan
+CHANGELOG.md @kangmingxuan
+docs/** @kangmingxuan
+bootstrap/scripts/run-smoke-tests.sh @kangmingxuan
+bootstrap/scripts/lint-public-boundary.sh @kangmingxuan
+dot_gitconfig.tmpl @kangmingxuan
+.chezmoi.toml.tmpl @kangmingxuan
+.github/** @kangmingxuan

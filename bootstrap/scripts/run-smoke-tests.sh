@@ -247,6 +247,9 @@ managed_listing="$(chezmoi managed --source="$repo_root")"
 if grep -Fq 'local-overlay-examples' <<<"$managed_listing"; then
   fail_test "chezmoi managed lists something under docs/local-overlay-examples/ (examples must stay undeployed)"
 fi
+if grep -Fq "$HOME/.github" <<<"$managed_listing"; then
+  fail_test "chezmoi managed lists something under .github/ (repo-only collaboration files must stay undeployed)"
+fi
 undeployed_path="$HOME/CHANGELOG.md"
 if grep -Fxq "$undeployed_path" <<<"$managed_listing"; then
   fail_test "chezmoi managed lists ${undeployed_path#"$HOME"/} (repo-only files must stay undeployed)"
@@ -453,7 +456,9 @@ shellcheck "$repo_root/bootstrap/scripts/common.sh" \
   "$repo_root/bootstrap/scripts/install-go-tools.sh" \
   "$repo_root/bootstrap/scripts/install-oh-my-zsh-assets.sh" \
   "$repo_root/bootstrap/scripts/install-uv-tools.sh" \
+  "$repo_root/bootstrap/scripts/lint-public-boundary.sh" \
   "$repo_root/bootstrap/scripts/mirrors.sh" \
+  "$repo_root/bootstrap/scripts/sync-public-into-internal.sh" \
   "$repo_root/bootstrap/scripts/uninstall.sh" \
   "$repo_root/bootstrap/scripts/run-smoke-tests.sh"
 
