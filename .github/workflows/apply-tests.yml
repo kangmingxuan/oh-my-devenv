@@ -22,9 +22,20 @@ jobs:
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
       - name: Bootstrap the baseline end to end
         run: |
-          chezmoi init --apply --source="$PWD" \
-            --promptString gitName="CI Runner" \
-            --promptString gitEmail="ci@example.com" \
+          tmp_data_file="$RUNNER_TEMP/chezmoi-data.toml"
+          tmp_config_file="$RUNNER_TEMP/chezmoi.toml"
+
+          cat >"$tmp_data_file" <<'EOF'
+          gitName = "CI Runner"
+          gitEmail = "ci@example.com"
+          EOF
+
+          chezmoi execute-template --init \
+            --source="$PWD" \
+            --override-data-file "$tmp_data_file" \
+            --file "$PWD/.chezmoi.toml.tmpl" >"$tmp_config_file"
+
+          chezmoi apply --source="$PWD" --config "$tmp_config_file" \
             2>&1 | tee "$HOME/apply.log"
       - name: Assert the environment check passed
         run: grep -Fq "All checks passed." "$HOME/apply.log"
