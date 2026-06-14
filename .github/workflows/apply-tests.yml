@@ -1,0 +1,30 @@
+name: Apply Tests
+
+on:
+  push:
+  pull_request:
+
+# A heavier, integration-level check than Smoke Tests. The smoke suite only
+# renders templates and syntax-checks them; it never runs the installers. This
+# workflow performs a real `chezmoi init --apply` end to end on a throwaway
+# runner and asserts the final environment check passes, so a semantic break in
+# an installer (a bad package name, a broken `go install` line, a regressed
+# idempotency probe) is caught instead of slipping through render-only CI.
+jobs:
+  apply-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install chezmoi
+        run: |
+          mkdir -p "$HOME/.local/bin"
+          sh -c "$(curl -fsLS get.chezmoi.io)" -- -b "$HOME/.local/bin"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - name: Bootstrap the baseline end to end
+        run: |
+          chezmoi init --apply --source="$PWD" \
+            --promptString gitName="CI Runner" \
+            --promptString gitEmail="ci@example.com" \
+            2>&1 | tee "$HOME/apply.log"
+      - name: Assert the environment check passed
+        run: grep -Fq "All checks passed." "$HOME/apply.log"

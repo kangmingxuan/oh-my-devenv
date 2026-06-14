@@ -1,0 +1,20 @@
+# Public-boundary denylist — forbidden text patterns (ERE), one per line.
+#
+# bootstrap/scripts/lint-public-boundary.sh scans the entire working tree for
+# every pattern listed here and fails if any match is found. Lines starting
+# with `#` and blank lines are ignored. This file itself is excluded from the
+# scan, so its own pattern definitions never self-match.
+#
+# PUBLIC CORE: ships only generic placeholders that must never survive into a
+# real rendered doc or template. It deliberately names no internal host,
+# email domain, or identity string.
+#
+# INTERNAL OVERLAY: this file is overlay-owned (see docs/04-maintenance.md).
+# The internal copy EXTENDS the list below with organization-specific
+# hostnames, email domains, and identity patterns. Keeping those values out of
+# the public file is the whole point: the public repository never names
+# internal infrastructure, and the lint still scans for them inside the
+# internal distribution.
+
+<ssh-clone-url>
+<https-clone-url>

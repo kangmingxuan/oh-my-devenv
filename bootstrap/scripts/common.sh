@@ -174,11 +174,30 @@ require_sudo() {
   fi
 }
 
+# Shared "what to try next" hints, printed to stderr. Used by both the
+# bootstrap error trap and the final environment check so the guidance lives
+# in one place instead of drifting across two copies.
+print_diagnostic_hints() {
+  local backup_root="${XDG_STATE_HOME:-$HOME/.local/state}/chezmoi-first-run-backup"
+
+  printf 'What to try next:\n' >&2
+  printf '  1. Re-run with verbose output:\n' >&2
+  printf '       chezmoi apply --verbose --debug\n' >&2
+  printf '  2. If network calls failed, check connectivity to apt mirrors,\n' >&2
+  printf '     Homebrew, get.chezmoi.io / mise.run, github.com, and your\n' >&2
+  printf '     Go / PyPI proxies.\n' >&2
+  printf '  3. If a single step repeatedly fails, run only that step:\n' >&2
+  printf '       chezmoi apply --verbose <script-under-.chezmoiscripts>\n' >&2
+  printf '  4. Your pre-bootstrap configs (if any) were backed up under:\n' >&2
+  printf '       %s/\n' "$backup_root" >&2
+  printf '  5. If this looks like a baseline bug, file an issue with the\n' >&2
+  printf '     failing script / line / exit code.\n' >&2
+}
+
 _bootstrap_error_handler() {
   local exit_code="$1"
   local line_no="$2"
   local script="${3:-${BASH_SOURCE[1]:-unknown}}"
-  local backup_root="${XDG_STATE_HOME:-$HOME/.local/state}/chezmoi-first-run-backup"
 
   printf '\n' >&2
   printf '================================================================\n' >&2
@@ -187,16 +206,7 @@ _bootstrap_error_handler() {
   printf '  line   : %s\n' "$line_no" >&2
   printf '  exit   : %s\n' "$exit_code" >&2
   printf '\n' >&2
-  printf 'What to try next:\n' >&2
-  printf '  1. Re-run with verbose output:\n' >&2
-  printf '       chezmoi apply --verbose --debug\n' >&2
-  printf '  2. If network calls failed, check connectivity to apt mirrors,\n' >&2
-  printf '     Homebrew, get.chezmoi.io, github.com, and your Go / PyPI\n' >&2
-  printf '     proxies.\n' >&2
-  printf '  3. Your pre-bootstrap configs (if any) were backed up here:\n' >&2
-  printf '       %s\n' "$backup_root" >&2
-  printf '  4. If this looks like a baseline bug, file an issue with the\n' >&2
-  printf '     script / line / exit code shown above.\n' >&2
+  print_diagnostic_hints
   printf '================================================================\n' >&2
 }
 

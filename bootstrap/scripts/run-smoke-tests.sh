@@ -23,9 +23,9 @@ render_template() {
 
   # --override-data-file injects the same fields that `.chezmoi.toml.tmpl`
   # would populate after `chezmoi init`. Without it, templates that read
-  # .name / .email / .isWsl explode on a fresh CI runner where
-  # `chezmoi init` has never run. Values are fake-but-well-formed; real
-  # users supply their own at init time.
+  # .name / .email explode on a fresh CI runner where `chezmoi init` has
+  # never run. Values are fake-but-well-formed; real users supply their
+  # own at init time.
   chezmoi --source="$repo_root" \
     --override-data-file "$tmp_data_file" \
     execute-template \
@@ -35,9 +35,9 @@ render_template() {
 # Render .chezmoi.toml.tmpl specifically. That template uses
 # `promptStringOnce`, which is only wired up under `chezmoi init` (or
 # `execute-template --init`). Using render_template() on it fails with
-# `function "promptStringOnce" not defined`. This helper exists so
-# smoke can exercise the WSL detection logic living in the init
-# template without hacking the general renderer.
+# `function "promptStringOnce" not defined`. This helper exists so smoke
+# can exercise the init template (the `[status]` exclude and the rendered
+# identity block) without hacking the general renderer.
 render_chezmoi_toml_tmpl() {
   local output_path="$1"
 
@@ -131,34 +131,19 @@ trap 'rm -rf "$tmp_dir"' EXIT
 
 # Stand-in chezmoi data for template rendering. Carries two concerns at
 # once:
-#   - `name` / `email` / `isWsl` mirror the shape that `.chezmoi.toml.tmpl`
-#     produces after `chezmoi init`, which normal templates (dot_gitconfig,
-#     shell env, etc.) read via .name / .email / .isWsl.
+#   - `name` / `email` mirror the shape that `.chezmoi.toml.tmpl` produces
+#     after `chezmoi init`, which normal templates (dot_gitconfig, shell
+#     env, etc.) read via .name / .email.
 #   - `gitName` / `gitEmail` short-circuit the `promptStringOnce` calls in
 #     `.chezmoi.toml.tmpl` itself so render_chezmoi_toml_tmpl can run
 #     non-interactively.
-#
-# isWsl tracks DOTFILES_FORCE_WSL so the WSL-shaped CI job (which exports
-# DOTFILES_FORCE_WSL=1) actually renders every downstream template with
-# .isWsl = true. Without this, the WSL job would only be testing the
-# four `.chezmoi.toml.tmpl` arms inside the escape-hatch block below
-# and every other render_template call would silently stay on the
-# non-WSL arm.
-smoke_is_wsl=false
-case "${DOTFILES_FORCE_WSL:-}" in
-1 | true | yes)
-  smoke_is_wsl=true
-  ;;
-esac
 tmp_data_file="$tmp_dir/chezmoi-data.toml"
 cat >"$tmp_data_file" <<EOF
 name = "Smoke Tests"
 email = "smoke@example.com"
-isWsl = $smoke_is_wsl
 gitName = "Smoke Tests"
 gitEmail = "smoke@example.com"
 EOF
-unset smoke_is_wsl
 
 # Literal strings asserted against rendered templates.
 # shellcheck disable=SC2016
@@ -195,7 +180,10 @@ syntax_check sh "$repo_root/dot_profile"
 
 render_template dot_gitconfig.tmpl "$tmp_dir/dot_gitconfig"
 assert_file_contains "$tmp_dir/dot_gitconfig" "path = ~/.gitconfig.local"
-assert_file_not_contains "$tmp_dir/dot_gitconfig" 'git.garena.com'
+# Defend the boundary property without naming any organization: the managed
+# gitconfig must not carry a host-specific URL rewrite. Real internal-host
+# denylist patterns live in the internal overlay's boundary-denylist.txt.
+assert_file_not_contains "$tmp_dir/dot_gitconfig" 'insteadOf'
 assert_file_contains "$repo_root/bootstrap/scripts/common.sh" "$shared_work_env_literal"
 
 log_step "📜" "Rendering and checking chezmoi bootstrap scripts..."
@@ -240,7 +228,7 @@ assert_file_contains "$tmp_dir/run_onchange_after_60-check.sh" "install_error_tr
 assert_file_contains "$tmp_dir/run_onchange_after_60-check.sh" "Core tools in this environment"
 assert_file_contains "$tmp_dir/run_onchange_after_60-check.sh" "print_version_line chezmoi"
 assert_file_contains "$tmp_dir/run_onchange_after_60-check.sh" "print_version_line git"
-assert_file_contains "$tmp_dir/run_onchange_after_60-check.sh" "Diagnostic hints"
+assert_file_contains "$tmp_dir/run_onchange_after_60-check.sh" "print_diagnostic_hints"
 
 log_step "🤖" "Verifying docs and repo-only files stay undeployed..."
 managed_listing="$(chezmoi managed --source="$repo_root")"
@@ -389,64 +377,23 @@ done
 assert_file_contains "$tmp_dir/run_onchange_after_30-install-mise.sh" "dotfiles_apply_mirror_env"
 assert_file_contains "$tmp_dir/run_onchange_after_30-install-mise.sh" "DOTFILES_MISE_INSTALL_URL"
 
-log_step "🪟" "Verifying WSL detection and DOTFILES_FORCE_WSL escape hatch..."
+log_step "�" "Verifying chezmoi init template renders..."
 
-# The baseline `.chezmoi.toml.tmpl` probes /proc/version for the
-# "microsoft" marker to decide isWsl. We add DOTFILES_FORCE_WSL as an
-# explicit override (accepts 1/true/yes to force on, 0/false/no to
-# force off; any other value falls through to the probe). These
-# assertions exercise every arm, including the fall-through, by saving
-# the caller's value once and driving each branch explicitly.
-_saved_force_wsl="${DOTFILES_FORCE_WSL+"$DOTFILES_FORCE_WSL"}"
-unset DOTFILES_FORCE_WSL
-
-tmp_wsl_probe="$tmp_dir/chezmoi-toml.probe"
-tmp_wsl_on="$tmp_dir/chezmoi-toml.force-on"
-tmp_wsl_off="$tmp_dir/chezmoi-toml.force-off"
-tmp_wsl_garbage="$tmp_dir/chezmoi-toml.garbage"
-
-render_chezmoi_toml_tmpl "$tmp_wsl_probe"
-if ! grep -Eq '^[[:space:]]*isWsl = (true|false)' "$tmp_wsl_probe"; then
-  fail_test ".chezmoi.toml.tmpl must emit 'isWsl = true|false' (got: $(grep -E '^[[:space:]]*isWsl' "$tmp_wsl_probe" || printf '<missing>'))"
-fi
-assert_file_contains "$tmp_wsl_probe" "[status]"
-assert_file_contains "$tmp_wsl_probe" 'exclude = ["scripts"]'
+# Render the init template once (it uses promptStringOnce, so it needs
+# --init plus the gitName/gitEmail stand-ins). Assert the non-script bits we
+# rely on: the status exclude that keeps hooks out of `chezmoi status`, the
+# rendered identity block, and the mise attestation defaults. Platform
+# branching lives in downstream templates and keys off `.chezmoi.os`, so
+# there is nothing WSL-specific to render here.
+tmp_chezmoi_toml="$tmp_dir/chezmoi-toml.rendered"
+render_chezmoi_toml_tmpl "$tmp_chezmoi_toml"
+assert_file_contains "$tmp_chezmoi_toml" "[status]"
+assert_file_contains "$tmp_chezmoi_toml" 'exclude = ["scripts"]'
+assert_file_contains "$tmp_chezmoi_toml" 'name = "Smoke Tests"'
+assert_file_contains "$tmp_chezmoi_toml" 'email = "smoke@example.com"'
 assert_file_contains "$repo_root/dot_config/mise/config.toml.tmpl" "[settings]"
 assert_file_contains "$repo_root/dot_config/mise/config.toml.tmpl" "github_attestations = false"
 assert_file_contains "$repo_root/dot_config/mise/config.toml.tmpl" "[settings.aqua]"
-
-DOTFILES_FORCE_WSL=1 render_chezmoi_toml_tmpl "$tmp_wsl_on"
-if ! grep -Eq '^[[:space:]]*isWsl = true[[:space:]]*$' "$tmp_wsl_on"; then
-  fail_test "DOTFILES_FORCE_WSL=1 did not flip isWsl to true"
-fi
-
-DOTFILES_FORCE_WSL=0 render_chezmoi_toml_tmpl "$tmp_wsl_off"
-if ! grep -Eq '^[[:space:]]*isWsl = false[[:space:]]*$' "$tmp_wsl_off"; then
-  fail_test "DOTFILES_FORCE_WSL=0 did not explicitly set isWsl to false"
-fi
-
-# Fall-through: anything that is not a recognised true/false keyword
-# must behave exactly like the probe-only case so a stray "maybe"
-# doesn't silently flip behaviour.
-DOTFILES_FORCE_WSL=maybe render_chezmoi_toml_tmpl "$tmp_wsl_garbage"
-if ! diff -q "$tmp_wsl_probe" "$tmp_wsl_garbage" >/dev/null; then
-  fail_test "DOTFILES_FORCE_WSL=maybe must fall through to the probe (got different output from probe-only baseline)"
-fi
-
-# Cheap shape invariant: force-on and force-off diverge only on the
-# isWsl line. If the hatch ever leaks into name/email rendering, this
-# trips.
-differing_lines="$(diff "$tmp_wsl_on" "$tmp_wsl_off" | grep -c '^[<>]' || true)"
-if [[ "$differing_lines" != "2" ]]; then
-  fail_test "force-on vs force-off should differ by exactly one line pair (got $differing_lines changed lines; isWsl should be the only delta)"
-fi
-
-# Restore the caller's DOTFILES_FORCE_WSL so any later smoke checks keep
-# the shape the CI job asked for.
-if [[ -n "${_saved_force_wsl+x}" ]]; then
-  export DOTFILES_FORCE_WSL="$_saved_force_wsl"
-fi
-unset _saved_force_wsl
 
 log_step "🔍" "Running shellcheck on bootstrap scripts..."
 shellcheck "$repo_root/bootstrap/scripts/common.sh" \

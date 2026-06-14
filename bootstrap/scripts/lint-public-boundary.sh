@@ -7,6 +7,8 @@ repo_root="$(cd "$bootstrap_dir/.." && pwd)"
 
 cd "$repo_root"
 
+denylist_file="bootstrap/manifests/system/boundary-denylist.txt"
+
 failures=0
 
 check_path_absent() {
@@ -18,19 +20,20 @@ check_path_absent() {
   fi
 }
 
+# Scan the entire working tree for a forbidden pattern. Unlike the previous
+# fixed list of paths, this covers the lint script itself, every dot_*
+# template, the bootstrap scripts, and the CI files, so a regression cannot
+# hide in an unscanned file. The denylist file is excluded because it
+# legitimately contains the patterns.
 check_pattern_absent() {
   local pattern="$1"
-  shift
   local matches=""
 
   matches="$(grep -RInE \
-    --include='*.md' \
-    --include='*.tmpl' \
-    --include='*.example' \
-    --include='*.sh' \
-    --include='*.yml' \
-    --include='*.yaml' \
-    "$pattern" "$@" 2>/dev/null || true)"
+    --binary-files=without-match \
+    --exclude-dir='.git' \
+    --exclude="$(basename "$denylist_file")" \
+    "$pattern" . 2>/dev/null || true)"
 
   if [[ -n "$matches" ]]; then
     printf '%s\n' "$matches" >&2
@@ -39,34 +42,23 @@ check_pattern_absent() {
   fi
 }
 
+# Collaboration and workflow files that must never ship in the public core.
 check_path_absent ".gitlab"
+check_path_absent ".gitlab-ci.yml"
 check_path_absent "AGENTS.md"
 check_path_absent "CODEOWNERS"
 check_path_absent "docs/02-corp-network-integration.md"
 
-scan_paths=(
-  "README.md"
-  "CONTRIBUTING.md"
-  "CHANGELOG.md"
-  ".chezmoi.toml.tmpl"
-  "dot_gitconfig.tmpl"
-  "docs/README.md"
-  "docs/01-onboarding.md"
-  "docs/03-macos-preflight.md"
-  "docs/04-maintenance.md"
-  "docs/local-overlay-examples"
-  ".github"
-)
-
-check_pattern_absent 'git\.garena\.com' "${scan_paths[@]}"
-check_pattern_absent '@shopee\.com' "${scan_paths[@]}"
-check_pattern_absent 'ssh://gitlab@' "${scan_paths[@]}"
-check_pattern_absent 'Shopee GitLab' "${scan_paths[@]}"
-check_pattern_absent 'Shopee identity' "${scan_paths[@]}"
-check_pattern_absent 'non-Shopee' "${scan_paths[@]}"
-check_pattern_absent 'Shopee-native' "${scan_paths[@]}"
-check_pattern_absent '<ssh-clone-url>' "${scan_paths[@]}"
-check_pattern_absent '<https-clone-url>' "${scan_paths[@]}"
+# Forbidden text patterns come from a denylist file, never hard-coded here, so
+# the public script names no internal infrastructure. The public file ships
+# only generic placeholders; the internal overlay extends it with
+# organization-specific hostnames, email domains, and identity strings.
+if [[ -f "$denylist_file" ]]; then
+  while IFS= read -r pattern; do
+    [[ -z "$pattern" ]] && continue
+    check_pattern_absent "$pattern"
+  done < <(sed -e 's/#.*//' -e '/^[[:space:]]*$/d' "$denylist_file")
+fi
 
 if [[ "$failures" -ne 0 ]]; then
   exit 1

@@ -93,7 +93,7 @@ If you add, rename, or remove an entry, confirm that:
 
 ## CI
 
-The current repository CI pipeline runs `bootstrap/scripts/run-smoke-tests.sh` on Ubuntu 24.04 for every push and reviewable change. A change should not be merged while the pipeline is failing.
+The repository CI runs on GitHub Actions for every push and pull request: `run-smoke-tests.sh` on both `ubuntu-latest` and `macos-latest`, a real `chezmoi init --apply` (`apply-linux`), and the public-boundary and secret scans. A change should not be merged while the pipeline is failing.
 
 ## Reporting Issues
 

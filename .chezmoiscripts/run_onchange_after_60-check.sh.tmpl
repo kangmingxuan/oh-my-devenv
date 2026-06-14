@@ -133,14 +133,7 @@ check_oh_my_zsh_plugins "$manifests_dir/shell/oh-my-zsh-plugins.txt" "${ZSH_CUST
 
 if [[ $errors -gt 0 ]]; then
   log_warning "$errors required tool(s) or asset(s) are missing."
-  log_info "Diagnostic hints:"
-  log_info "  1. Re-run with verbose output:  chezmoi apply --verbose --debug"
-  log_info "  2. Confirm network access to apt mirrors, Homebrew, GitHub,"
-  log_info "     mise.run / get.chezmoi.io, Go and PyPI proxies."
-  log_info "  3. If a single step repeatedly fails, try only that step:"
-  log_info "       chezmoi apply --verbose <script-under-.chezmoiscripts>"
-  log_info "  4. Your pre-bootstrap configs (if any) were backed up under"
-  log_info "       \${XDG_STATE_HOME:-\$HOME/.local/state}/chezmoi-first-run-backup/"
+  print_diagnostic_hints
   exit 1
 fi
 

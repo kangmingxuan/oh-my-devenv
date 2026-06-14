@@ -1,0 +1,16 @@
+version: 2
+updates:
+  # Keep the action versions used by the workflows under .github/workflows
+  # current. This is the one dependency surface Dependabot understands
+  # natively here; runtime/tool pins (mise, uv-tools, pre-commit, etc.) stay
+  # manually curated as described in docs/04-maintenance.md.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    commit-message:
+      prefix: ci
+    groups:
+      github-actions:
+        patterns:
+          - "*"

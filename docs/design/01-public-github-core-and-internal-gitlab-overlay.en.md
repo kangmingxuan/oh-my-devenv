@@ -16,6 +16,12 @@ Requirements:
 
 ## 2. Problem Statement
 
+> Note: this section describes the pre-split state that motivated the
+> public/internal model. The public core has since been debranded — the
+> GitLab host rewrites, internal identity guidance, and `.gitlab/` workflow
+> files described below no longer ship in the public repository. It is kept
+> as historical rationale, not a description of the current public tree.
+
 The current repository mixes two different concerns:
 
 1. a reusable cross-platform development environment baseline

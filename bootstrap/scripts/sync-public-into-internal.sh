@@ -67,6 +67,5 @@ Next steps:
   1. Resolve conflicts using docs/04-maintenance.md if the merge stopped.
   2. Run:
        bash bootstrap/scripts/run-smoke-tests.sh
-  3. Also run DOTFILES_FORCE_WSL=1 smoke when Linux/WSL conditionals changed.
-  4. Open a review branch / MR back into $internal_ref on the internal repo.
+  3. Open a review branch / MR back into $internal_ref on the internal repo.
 EOF

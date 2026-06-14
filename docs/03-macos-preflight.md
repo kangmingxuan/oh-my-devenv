@@ -1,8 +1,8 @@
 # macOS Preflight Checklist
 
-The repository CI currently covers the Linux and WSL-shaped shapes of this baseline via `smoke-tests-linux` and `smoke-tests-wsl-shaped`. There is **no shared macOS runner wired to this project yet**, and personal Macs are intentionally not mounted as self-hosted runners. This lightweight Linux smoke CI does not change the macOS automation strategy.
+The `smoke-tests-macos` GitHub Actions job runs the smoke suite on `macos-latest`, so the `darwin` template arms are rendered and shell-checked on every change. What CI still does **not** do on macOS is a real install: it never runs `brew bundle`, never installs mise runtimes, and never builds the Go/uv tools. Personal Macs are intentionally not mounted as self-hosted runners.
 
-Until a shared macOS runner exists, a review change that touches macOS-specific behaviour is validated by one contributor running the steps below on a real Mac and pasting the signoff template into the review description. The `smoke-tests-macos-manual` CI job is the pointer that reminds reviewers this checklist exists.
+Because the macOS job is render-only, a review change that touches macOS *install* behaviour is validated by one contributor running the steps below on a real Mac and pasting the signoff template into the review description.
 
 > Scope: run this when a review change touches `Brewfile`, any `darwin`-branched chezmoi template, `bootstrap/scripts/install-brew-packages.sh`, macOS-specific PATH wiring, or anything else that only runs on macOS. Linux-only changes do not require it.
 
@@ -124,16 +124,14 @@ If the MR does not touch any macOS-exercised surface, paste this shorter line in
 - Not exercised: MR diff is macOS-neutral (no Brewfile / darwin template / mac-specific path changes).
 ```
 
-## When A Shared macOS Runner Arrives
+## When Full macOS Install Validation Is Wired
 
-Swapping the `smoke-tests-macos-manual` stub for a real run is a one-diff change:
+The `smoke-tests-macos` job already covers rendering and syntax. Promoting CI to also validate a real macOS *install* is an additive change:
 
-1. Replace the stub CI job with a real macOS-oriented validation command sequence.
-2. Drop the `when: manual` line so the job runs automatically on every MR.
-3. Drop `allow_failure: true` so a failing macOS run blocks the review — today that line exists only to stop the current pipeline from blocking the `integration` stage on an un-triggered manual job.
-4. Point the job at the macOS runner tag in the same diff.
-5. Update `docs/04-maintenance.md` "Review Expectations" to describe the expanded CI surface, and update this document's introduction.
-6. Keep the preflight checklist itself — it remains the right document for MRs that touch macOS surface in ways a single CI shape cannot cover (new hardware, OS upgrade, Xcode CLT jumps).
+1. Add a job (or step) that runs a real `chezmoi init --apply` on a macOS runner, mirroring the `apply-linux` job, and asserts the final environment check passes.
+2. Add the macOS Brewfile-parity and mise-runtime checks from this checklist (steps 3 and 4) as scripted assertions.
+3. Update `docs/04-maintenance.md` "Review Expectations" to describe the expanded CI surface, and update this document's introduction.
+4. Keep the preflight checklist itself — it remains the right document for MRs that touch macOS surface in ways a single CI shape cannot cover (new hardware, OS upgrade, Xcode CLT jumps).
 
 ## Related Documents
 

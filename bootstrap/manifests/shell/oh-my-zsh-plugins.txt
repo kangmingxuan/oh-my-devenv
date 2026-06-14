@@ -1,4 +1,23 @@
-# repository path-relative-to-ZSH_CUSTOM
+# oh-my-zsh plugin manifest.
+#
+# CONTRACT (four readers depend on this shape — keep entries within it):
+#   - Each non-comment line is exactly two whitespace-separated fields:
+#       <github-owner/repo>  <path-relative-to-ZSH_CUSTOM>
+#   - The plugin's oh-my-zsh name is the BASENAME of the second field
+#     (plugins/zsh-autosuggestions -> zsh-autosuggestions). That name is
+#     what lands in plugins=(...) in dot_zshrc.tmpl.
+#   - `zsh-completions` is special-cased: it is NOT added to plugins=();
+#     its `/src` dir is put on fpath before compinit instead.
+#   - Order matters: keep zsh-syntax-highlighting last so it can wrap
+#     widgets defined by earlier plugins.
+#
+# The four readers that must stay in sync with the shape above:
+#   - dot_zshrc.tmpl                                  (builds plugins=()/fpath)
+#   - bootstrap/scripts/install-oh-my-zsh-assets.sh   (clones each repo)
+#   - .chezmoiscripts/run_onchange_after_60-check.sh.tmpl (verifies clones)
+#   - bootstrap/scripts/run-smoke-tests.sh            (asserts zshrc matches)
+# Adding a third field or a new special case means updating all four.
+
 zsh-users/zsh-autosuggestions plugins/zsh-autosuggestions
 zsh-users/zsh-completions plugins/zsh-completions
 # Keep zsh-syntax-highlighting last so it can wrap widgets after other plugins.

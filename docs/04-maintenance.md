@@ -103,6 +103,7 @@ The internal repository intentionally owns a small set of paths that may differ 
 - `.chezmoi.toml.tmpl`
 - `.chezmoiscripts/run_onchange_after_60-check.sh.tmpl`
 - `dot_gitconfig.tmpl`
+- `bootstrap/manifests/system/boundary-denylist.txt`
 - `docs/02-corp-network-integration.md`
 - `docs/local-overlay-examples/git-pre-push.example`
 - `bootstrap/scripts/run-smoke-tests.sh`
@@ -119,14 +120,8 @@ Use the strongest practical checks that match the change:
    bash bootstrap/scripts/run-smoke-tests.sh
    ```
 
-2. Also run this when Linux/WSL conditionals or `.chezmoi.toml.tmpl` changed:
-
-   ```bash
-   DOTFILES_FORCE_WSL=1 bash bootstrap/scripts/run-smoke-tests.sh
-   ```
-
-3. Follow [docs/03-macos-preflight.md](03-macos-preflight.md) if the synced change touches macOS-specific surface.
-4. Re-check internal-only behavior if the sync touched any overlay-owned path listed above.
+2. Follow [docs/03-macos-preflight.md](03-macos-preflight.md) if the synced change touches macOS-specific surface.
+3. Re-check internal-only behavior if the sync touched any overlay-owned path listed above.
 
 ### Conflict Rules
 
@@ -161,10 +156,13 @@ When adding new documentation, pick one canonical home and make other pages link
 
 A reviewable change is ready to merge when all of the following hold:
 
-- The CI pipeline is green. Every reviewable change runs two automatic smoke jobs, plus one manual macOS stub:
-  - `smoke-tests-linux` — the default Linux shape on a shared-runner `ubuntu:24.04` image.
-  - `smoke-tests-wsl-shaped` — the same smoke suite with `DOTFILES_FORCE_WSL=1` so the WSL branch in `.chezmoi.toml.tmpl` is exercised.
-   - `smoke-tests-macos-manual` — placeholder, manually triggered, that points the contributor at [`docs/03-macos-preflight.md`](03-macos-preflight.md). No shared macOS runner is wired to this project yet; review changes that touch macOS-specific surface are validated by the preflight checklist and a pasted signoff.
+- The CI pipeline is green. Every reviewable change runs these GitHub Actions jobs:
+  - `smoke-tests-linux` — renders and syntax-checks the baseline on `ubuntu-latest`.
+  - `smoke-tests-macos` — the same smoke suite on `macos-latest`, so the `darwin` template arms are rendered and shell-checked instead of going untested.
+  - `apply-linux` — a real `chezmoi init --apply` end to end on `ubuntu-latest`, asserting the final environment check prints `All checks passed.`
+  - `boundary-lint` and `secret-scan` — the public-boundary denylist and `gitleaks`.
+
+  Full macOS *install* validation (Brewfile parity, mise runtimes, Go/uv tools) still relies on the manual [`docs/03-macos-preflight.md`](03-macos-preflight.md) checklist and a pasted signoff; the `smoke-tests-macos` job only covers rendering and syntax.
 - At least one maintainer has approved the change.
 - The review description follows the repository's normal template and the change is in scope for the baseline.
 - No unresolved review threads remain.
@@ -262,30 +260,6 @@ Re-running the full bootstrap to confirm that a `DOTFILES_<KEY>` override points
 
 `bash bootstrap/scripts/run-smoke-tests.sh` still runs only under the implicit `external` mode, because the CI runner has no way to reach any internal endpoint. The assertions verify the mode-switch logic and defend the `external` defaults in the manifest; they do not try to dial the mirrors themselves.
 
-## Validating The WSL Branch
-
-`.chezmoi.toml.tmpl` detects WSL by grepping `/proc/version` for `microsoft`. That probe is invisible on macOS and often invisible on native Linux, so the isWsl branch silently rots unless exercised. The `smoke-tests-wsl-shaped` CI job covers this in lockstep with the default shape, but to reproduce it locally:
-
-1. Export the escape hatch:
-
-   ```bash
-   export DOTFILES_FORCE_WSL=1
-   ```
-
-2. Re-run the smoke suite. It should still pass, with every template rendered under the `isWsl = true` shape:
-
-   ```bash
-   bash bootstrap/scripts/run-smoke-tests.sh
-   ```
-
-3. Unset the variable when done:
-
-   ```bash
-   unset DOTFILES_FORCE_WSL
-   ```
-
-`DOTFILES_FORCE_WSL` accepts `1`, `true`, or `yes` to force WSL on; `0`, `false`, or `no` to force WSL off; and falls through to the `/proc/version` probe for any other value. Use it when the probe misfires (tmux/ssh sessions that strip the kernel banner, Linux containers meant to behave like a WSL runtime, CI jobs that need to pin behaviour). It does nothing on macOS because the non-Linux branch already sets isWsl to `false`.
-
 ## Security
 
 - `gitleaks` scans staged diffs on every commit via `pre-commit`. Bootstrap smoke tests run in CI only (see CI section below), not as a pre-commit hook.
@@ -298,11 +272,12 @@ Re-running the full bootstrap to confirm that a `DOTFILES_<KEY>` override points
 
 The repository CI pipeline is intentionally lightweight:
 
-- `smoke-tests-linux` and `smoke-tests-wsl-shaped` are the only automatic Linux jobs.
-- Both jobs prepare just enough tooling on a fresh `ubuntu:24.04` runner to execute `bootstrap/scripts/run-smoke-tests.sh`.
-- The pipeline is allowed to be simple and occasionally imperfect. It should catch obvious repo regressions, not model every clean-machine install path end to end.
+- `smoke-tests-linux` and `smoke-tests-macos` render and syntax-check the baseline on `ubuntu-latest` and `macos-latest`; running on both means the `darwin` template arms are exercised, not just the Linux ones.
+- `apply-linux` runs a real `chezmoi init --apply` end to end on `ubuntu-latest` and asserts the final environment check passes, covering installer semantics the render-only smoke suite cannot.
+- `boundary-lint` and `secret-scan` defend the public boundary and scan for secrets.
+- The pipeline is allowed to be simple and occasionally imperfect. It should catch obvious repo regressions, not model every clean-machine install path on every platform.
 
-The smoke suite is scoped to executable bootstrap behavior: template rendering, shell syntax, manifest parsing, deployability boundaries, mirror mode, WSL detection, and `shellcheck`. It deliberately does not freeze README prose, onboarding headings, changelog markers, badges, ownership wording, or retired CI lanes; those stay governed by review and the documentation boundaries above.
+The smoke suite is scoped to executable bootstrap behavior: template rendering, shell syntax, manifest parsing, deployability boundaries, mirror mode, and `shellcheck`. It deliberately does not freeze README prose, onboarding headings, changelog markers, badges, ownership wording, or retired CI lanes; those stay governed by review and the documentation boundaries above.
 
 If a change needs heavier confidence than the smoke jobs provide, validate it manually on a real machine or disposable VM and record that in the review description.
 

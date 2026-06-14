@@ -8,13 +8,12 @@
   - [ ] Bootstrap scripts (`.chezmoiscripts/*`, `bootstrap/scripts/*`)
   - [ ] Runtime / ecosystem manifests (`bootstrap/manifests/ecosystem/*`, `dot_config/mise/*`)
   - [ ] Documentation (`README.md`, `docs/*`, `CHANGELOG.md`)
-  - [ ] GitHub workflow / repository metadata (`.github/*`, `.gitlab-ci.yml`, `.pre-commit-config.yaml`)
+  - [ ] GitHub workflow / repository metadata (`.github/*`, `.pre-commit-config.yaml`)
   - [ ] Other (describe below)
 
 ## Validation
 
 - [ ] `bash bootstrap/scripts/run-smoke-tests.sh` passes locally
-- [ ] `DOTFILES_FORCE_WSL=1 bash bootstrap/scripts/run-smoke-tests.sh` passes locally (if Linux/WSL conditionals changed)
 - [ ] `bash bootstrap/scripts/lint-public-boundary.sh` passes locally
 - [ ] `pre-commit run --all-files` passes locally
 - [ ] GitHub Actions is green on this branch
