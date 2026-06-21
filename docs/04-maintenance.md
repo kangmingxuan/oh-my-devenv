@@ -230,6 +230,8 @@ If those three values differ, the contract drifted and the change is not ready t
 
 Re-running the full bootstrap to confirm that a `DOTFILES_<KEY>` override points at a working mirror is overkill. To validate a single override without touching the rest of the system:
 
+Mirror mode currently covers the consumers wired through `dotfiles_apply_mirror_env`: Go tools (`GOPROXY`), uv tools (`UV_INDEX_URL`), Homebrew API/bottles, the mise installer URL, and the oh-my-zsh main repo URL. It does not rewrite apt sources, mise runtime downloads, or oh-my-zsh plugin repositories.
+
 1. Open a fresh shell session so nothing from a previous `chezmoi apply` leaks in.
 2. Export the override you want to verify (or place the same value in `${XDG_CONFIG_HOME:-$HOME/.config}/work/env.sh` and open a fresh shell):
 

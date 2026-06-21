@@ -1,7 +1,8 @@
 # ~/.bash/work.bash
 #
 # Work-only (or team-only) shell customizations for interactive Bash sessions.
-# The baseline sources this file if present, so it runs after ~/.bashrc.
+# The baseline sources this file as a late interactive hook, after its own
+# aliases, prompt, functions, and key bindings.
 #
 # Typical contents:
 #   - Aliases for internal CLIs.

@@ -1,8 +1,8 @@
 # ~/.zsh/work.zsh
 #
 # Work-only (or team-only) shell customizations that should not live in the
-# shared baseline dot_zshrc.tmpl. The baseline sources this file if present,
-# so it runs at interactive shell start after the baseline's own config.
+# shared baseline dot_zshrc.tmpl. The baseline sources this file as a late
+# interactive hook, after its own aliases, prompt, functions, and key bindings.
 #
 # Typical contents:
 #     - Aliases for internal CLIs.

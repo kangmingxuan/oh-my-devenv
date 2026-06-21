@@ -37,10 +37,10 @@ Every file in this directory ends in `.example` on purpose:
 3. Fill in the `<placeholder>` tokens. Every placeholder is wrapped in angle
    brackets so a grep like `grep -RE '<[a-z-]+>' ~/.gitconfig.local` will catch
    anything you forgot.
-4. For SSH config, make sure `~/.ssh/config` contains the line
-   `Include ~/.ssh/config.d/*.conf` before any `Host *` catch-all. If you do
-   not yet have an `~/.ssh/config`, create one and paste `Include` as the first
-   non-comment line.
+4. For SSH config, the baseline-managed `~/.ssh/config` already includes
+   `~/.ssh/config.d/*.conf` before its `Host *` catch-all. If you adapt these
+   examples outside this baseline or keep a hand-managed top-level config, add
+   that `Include` line before any `Host *` block.
 5. For shell overlays, open a new shell to verify. `${XDG_CONFIG_HOME:-$HOME/.config}/work/env.sh`,
    `~/.zshrc.secrets`, `~/.bashrc.secrets`, `~/.zsh/work.zsh`, and
    `~/.bash/work.bash` are all guarded by `[[ -f ... ]]` sources in the
@@ -53,7 +53,7 @@ Every file in this directory ends in `.example` on purpose:
    - `${XDG_CONFIG_HOME:-$HOME/.config}/work/env.sh` is for shell-compatible, non-secret exports that Bash, Zsh, and bootstrap should all see.
    - The managed `~/.gitconfig` keeps your default Git identity; `~/.gitconfig.local` is for user-owned Git preferences and guardrails.
    - `~/.config/git/hooks/pre-push` is a user-owned guardrail, not part of the shared baseline.
-   - `~/.zsh/work.zsh` and `~/.bash/work.bash` are interactive-only overlays for aliases, functions, and prompt tweaks.
+   - `~/.zsh/work.zsh` and `~/.bash/work.bash` are late interactive-only overlays for aliases, functions, and prompt tweaks.
    - `~/.npmrc` is the right home for scoped internal npm registry configuration.
 
 ## Dual Worktree Setup
@@ -133,9 +133,9 @@ teammate's `~/`.
 
 - Anything with a real hostname, IP address, user handle, or token, even in a
   comment. The directory is committed to the repo and scanned by gitleaks.
-- Any file that changes `~/.ssh/config` itself (the top-level SSH config).
-  Modifying `~/.ssh/config` from a dotfiles repo fights with sshd updates and
-  other local tooling; stick to `~/.ssh/config.d/*.conf` fragments.
+- Any local overlay that replaces or edits `~/.ssh/config` itself. The baseline
+  owns that top-level config; local host additions should stay in
+  `~/.ssh/config.d/*.conf` fragments.
 - The default machine-wide `[user]` block that the baseline already writes into
    `~/.gitconfig`. Keep that machine-wide fallback in the managed file; use
   `~/.gitconfig.local` only for exceptions.

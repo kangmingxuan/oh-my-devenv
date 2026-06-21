@@ -21,7 +21,10 @@
 
 # --------------------------------------------------------------------------
 # Example: optional bootstrap mirror mode for restricted corporate networks.
-# Keep public-first defaults unless you actually need mirrors.
+# Keep public-first defaults unless you actually need mirrors. Mirror mode
+# currently covers Go tools, uv tools, Homebrew API/bottles, the mise installer,
+# and the oh-my-zsh main repo. It does not rewrite apt sources, mise runtime
+# downloads, or oh-my-zsh plugin repositories.
 # --------------------------------------------------------------------------
 # export DOTFILES_MIRROR_MODE=auto
 # export DOTFILES_INTERNAL_PROBE_URL='https://<internal-probe>/healthz'

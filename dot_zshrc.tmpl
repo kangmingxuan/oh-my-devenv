@@ -28,10 +28,6 @@
 # Load local secrets that are intentionally not tracked.
 [[ -f "$HOME/.zshrc.secrets" ]] && source "$HOME/.zshrc.secrets"
 
-# Load work- or team-specific interactive Zsh overlay that lives outside this
-# baseline. Keep non-secret environment variables in ~/.config/work/env.sh.
-[[ -f "$HOME/.zsh/work.zsh" ]] && source "$HOME/.zsh/work.zsh"
-
 typeset -U fpath
 zsh_user_completion_dir="${XDG_DATA_HOME:-$HOME/.local/share}/zsh/site-functions"
 
@@ -93,3 +89,8 @@ fi
 # Set GPG_TTY for GPG agent to work properly in terminal.
 export GPG_TTY="$(tty)"
 unset zsh_user_completion_dir
+
+# Load work/team interactive overlay last so it can intentionally override
+# baseline aliases, prompt, functions, and key bindings. Put shared non-secret
+# environment variables in ~/.config/work/env.sh instead.
+[[ -f "$HOME/.zsh/work.zsh" ]] && source "$HOME/.zsh/work.zsh"

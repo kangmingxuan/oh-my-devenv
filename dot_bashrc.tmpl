@@ -17,11 +17,6 @@ esac
 # shellcheck disable=SC1091
 [[ -f "$HOME/.bashrc.secrets" ]] && source "$HOME/.bashrc.secrets"
 
-# Load work- or team-specific interactive Bash overlay that lives outside this
-# baseline. Keep non-secret environment variables in ~/.config/work/env.sh.
-# shellcheck disable=SC1091
-[[ -f "$HOME/.bash/work.bash" ]] && source "$HOME/.bash/work.bash"
-
 # --- History Settings ---
 # Do not store duplicate lines or lines starting with spaces in history.
 HISTCONTROL=ignoreboth
@@ -118,3 +113,9 @@ fi
 
 # Set GPG_TTY for GPG agent to work properly in terminal.
 export GPG_TTY="$(tty)"
+
+# Load work/team interactive overlay last so it can intentionally override
+# baseline aliases, prompt, functions, and key bindings. Put shared non-secret
+# environment variables in ~/.config/work/env.sh instead.
+# shellcheck disable=SC1091
+[[ -f "$HOME/.bash/work.bash" ]] && source "$HOME/.bash/work.bash"
