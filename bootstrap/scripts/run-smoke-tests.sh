@@ -248,6 +248,19 @@ assert_file_contains "$tmp_dir/run_once_before_10-bootstrap.sh" "install_error_t
 render_template .chezmoiscripts/run_onchange_after_20-install-system-packages.sh.tmpl "$tmp_dir/run_onchange_after_20-install-system-packages.sh"
 syntax_check bash "$tmp_dir/run_onchange_after_20-install-system-packages.sh"
 assert_file_contains "$tmp_dir/run_onchange_after_20-install-system-packages.sh" "install_error_trap"
+if grep -Fq "Installing system packages via Homebrew" "$tmp_dir/run_onchange_after_20-install-system-packages.sh"; then
+  assert_file_contains "$tmp_dir/run_onchange_after_20-install-system-packages.sh" "Brewfile.optional hash:"
+  assert_file_contains "$tmp_dir/run_onchange_after_20-install-system-packages.sh" "DOTFILES_INSTALL_REPO_OPTIONAL_BREWFILE"
+  assert_file_contains "$tmp_dir/run_onchange_after_20-install-system-packages.sh" "DOTFILES_EXTRA_BREWFILES"
+  assert_file_contains "$tmp_dir/run_onchange_after_20-install-system-packages.sh" "entries must be absolute paths"
+  assert_file_contains "$tmp_dir/run_onchange_after_20-install-system-packages.sh" "extra Homebrew Brewfile not found"
+  assert_file_contains "$tmp_dir/run_onchange_after_20-install-system-packages.sh" "\"\$manifests_dir/system/Brewfile\""
+else
+  assert_file_contains "$tmp_dir/run_onchange_after_20-install-system-packages.sh" "Installing system packages via apt"
+  assert_file_not_contains "$tmp_dir/run_onchange_after_20-install-system-packages.sh" "Brewfile.optional"
+  assert_file_not_contains "$tmp_dir/run_onchange_after_20-install-system-packages.sh" "DOTFILES_INSTALL_REPO_OPTIONAL_BREWFILE"
+  assert_file_not_contains "$tmp_dir/run_onchange_after_20-install-system-packages.sh" "DOTFILES_EXTRA_BREWFILES"
+fi
 
 render_template .chezmoiscripts/run_onchange_after_25-install-shell-assets.sh.tmpl "$tmp_dir/run_onchange_after_25-install-shell-assets.sh"
 syntax_check bash "$tmp_dir/run_onchange_after_25-install-shell-assets.sh"

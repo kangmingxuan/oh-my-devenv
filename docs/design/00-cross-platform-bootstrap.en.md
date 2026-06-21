@@ -162,7 +162,8 @@ Requirements:
 - Use Homebrew for system tools
 - Manage package list with `Brewfile`
 - Install via `brew bundle`
-- Keep OrbStack as an optional local integration in `Brewfile.optional`; it is not installed by the baseline
+- Keep OrbStack as an optional local integration in `Brewfile.optional`; it is not installed by the baseline unless the user sets `DOTFILES_INSTALL_REPO_OPTIONAL_BREWFILE=1`
+- Allow first-bootstrap local Brewfile opt-ins through `DOTFILES_EXTRA_BREWFILES`; local changes after bootstrap are synced manually with `brew bundle install --file=...`
 - Manage shell framework and plugins outside Homebrew via a dedicated shell asset script that uses `git clone`
 
 ### Ubuntu / Debian / WSL
@@ -270,6 +271,7 @@ uv = "0.10.9"
 - Validate `brew` exists
 - Run `brew bundle` from a source-only `Brewfile` under `bootstrap/manifests/`
 - Keep baseline CLI tools in `Brewfile`; GUI app casks such as OrbStack stay in `Brewfile.optional`
+- After the baseline Brewfile, install repo optional and user-owned Brewfiles only when explicit macOS opt-in environment variables are set
 
 ### `install-oh-my-zsh-assets`
 
@@ -359,7 +361,7 @@ The final chosen approach is:
 
 - `chezmoi` manages configuration and orchestration
 - macOS uses Homebrew for system tools
-- OrbStack is optional on macOS; if installed locally, initialization is handled by the login-shell layer
+- OrbStack is optional on macOS; if installed through the opt-in Homebrew path, initialization is handled by the login-shell layer
 - Ubuntu / Debian / WSL use `apt` for system tools
 - `mise` manages language runtimes
 - Language ecosystem tools are installed through native ecosystem methods

@@ -162,7 +162,8 @@
 - 系统工具使用 Homebrew
 - 通过 `Brewfile` 管理包清单
 - 使用 `brew bundle` 安装
-- OrbStack 保持为 `Brewfile.optional` 中的可选本地集成，不由 baseline 默认安装
+- OrbStack 保持为 `Brewfile.optional` 中的可选本地集成；仅当用户设置 `DOTFILES_INSTALL_REPO_OPTIONAL_BREWFILE=1` 时安装，不由 baseline 默认安装
+- 支持通过 `DOTFILES_EXTRA_BREWFILES` 在首次 bootstrap 时安装用户本机 Brewfile；首次之后的本地清单变更用 `brew bundle install --file=...` 手动同步
 - shell 框架和插件不走 Homebrew，改由独立 shell 资产脚本通过 `git clone` 管理
 
 ### Ubuntu / Debian / WSL
@@ -270,6 +271,7 @@ uv = "0.10.9"
 - 校验 `brew` 存在
 - 从 `bootstrap/manifests/` 中的 source-only `Brewfile` 执行 `brew bundle`
 - baseline CLI 工具保留在 `Brewfile`；OrbStack 这类 GUI 应用 cask 保留在 `Brewfile.optional`
+- baseline Brewfile 之后，仅在显式 macOS opt-in 环境变量存在时安装 repo optional 或用户本机 Brewfile
 
 ### `install-oh-my-zsh-assets`
 
@@ -359,7 +361,7 @@ dotfiles 需要保证：
 
 - `chezmoi` 负责配置和编排
 - macOS 用 Homebrew 管系统工具
-- OrbStack 在 macOS 中是可选项；如用户本地安装，则由 shell 登录层接管初始化
+- OrbStack 在 macOS 中是可选项；如通过 opt-in Homebrew 路径安装，则由 shell 登录层接管初始化
 - Ubuntu / Debian / WSL 用 `apt` 管系统工具
 - `mise` 管语言运行时
 - 语言生态工具用各自原生方式安装

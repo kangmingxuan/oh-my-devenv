@@ -45,6 +45,27 @@ command -v git curl chezmoi
 
 Use the public GitHub URL below for the shared baseline. If you also maintain an internal mirror, use the corresponding local clone URL there instead.
 
+**Optional macOS local apps before first apply**
+
+The default macOS bootstrap installs only the shared baseline. To opt in to
+local Homebrew apps such as OrbStack during the first apply, declare them before
+running the init command below:
+
+```bash
+mkdir -p "${XDG_CONFIG_HOME:-$HOME/.config}/oh-my-devenv"
+cat > "${XDG_CONFIG_HOME:-$HOME/.config}/oh-my-devenv/Brewfile.local" <<'EOF'
+cask "orbstack"
+EOF
+cat >> "${XDG_CONFIG_HOME:-$HOME/.config}/oh-my-devenv/env.sh" <<'EOF'
+export DOTFILES_EXTRA_BREWFILES="${XDG_CONFIG_HOME:-$HOME/.config}/oh-my-devenv/Brewfile.local"
+EOF
+```
+
+To install this repo's optional catalog instead, set
+`DOTFILES_INSTALL_REPO_OPTIONAL_BREWFILE=1`. Local Brewfile changes after first
+bootstrap are synced explicitly with
+`brew bundle install --file="${XDG_CONFIG_HOME:-$HOME/.config}/oh-my-devenv/Brewfile.local"`.
+
 **SSH**
 
 ```bash

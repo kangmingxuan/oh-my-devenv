@@ -12,8 +12,38 @@ install_error_trap "$0"
 
 {{ if eq .chezmoi.os "darwin" -}}
 # Brewfile hash: {{ include "bootstrap/manifests/system/Brewfile" | sha256sum }}
+# Brewfile.optional hash: {{ include "bootstrap/manifests/system/Brewfile.optional" | sha256sum }}
 log_step "🍺" "Installing system packages via Homebrew..."
 bash "$scripts_dir/install-brew-packages.sh" "$manifests_dir/system/Brewfile"
+
+if [[ "${DOTFILES_INSTALL_REPO_OPTIONAL_BREWFILE:-0}" == "1" ]]; then
+  log_step "🍺" "Installing optional repo Homebrew packages..."
+  bash "$scripts_dir/install-brew-packages.sh" "$manifests_dir/system/Brewfile.optional"
+fi
+
+if [[ -n "${DOTFILES_EXTRA_BREWFILES:-}" ]]; then
+  IFS=':' read -r -a dotfiles_extra_brewfiles <<<"$DOTFILES_EXTRA_BREWFILES"
+
+  for dotfiles_extra_brewfile in "${dotfiles_extra_brewfiles[@]}"; do
+    if [[ -z "$dotfiles_extra_brewfile" ]]; then
+      echo "ERROR: DOTFILES_EXTRA_BREWFILES contains an empty path entry" >&2
+      exit 1
+    fi
+
+    if [[ "$dotfiles_extra_brewfile" != /* ]]; then
+      echo "ERROR: DOTFILES_EXTRA_BREWFILES entries must be absolute paths: $dotfiles_extra_brewfile" >&2
+      exit 1
+    fi
+
+    if [[ ! -f "$dotfiles_extra_brewfile" ]]; then
+      echo "ERROR: extra Homebrew Brewfile not found: $dotfiles_extra_brewfile" >&2
+      exit 1
+    fi
+
+    log_step "🍺" "Installing local Homebrew packages from $dotfiles_extra_brewfile..."
+    bash "$scripts_dir/install-brew-packages.sh" "$dotfiles_extra_brewfile"
+  done
+fi
 {{- else if eq .chezmoi.os "linux" -}}
 # apt-packages.txt hash: {{ include "bootstrap/manifests/system/apt-packages.txt" | sha256sum }}
 log_step "📦" "Installing system packages via apt..."
