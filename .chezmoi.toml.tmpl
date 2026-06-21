@@ -7,6 +7,11 @@
     # will execute by design.
     exclude = ["scripts"]
 
+[diff]
+    # Match status output: routine run_* hooks are reviewed through git,
+    # not as destination-file drift.
+    exclude = ["scripts"]
+
 [data]
     name = {{ $gitName | quote }}
     email = {{ $gitEmail | quote }}

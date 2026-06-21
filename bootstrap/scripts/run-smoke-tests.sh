@@ -420,6 +420,10 @@ tmp_chezmoi_toml="$tmp_dir/chezmoi-toml.rendered"
 render_chezmoi_toml_tmpl "$tmp_chezmoi_toml"
 assert_file_contains "$tmp_chezmoi_toml" "[status]"
 assert_file_contains "$tmp_chezmoi_toml" 'exclude = ["scripts"]'
+assert_file_contains "$tmp_chezmoi_toml" "[diff]"
+if [[ "$(grep -Fc 'exclude = ["scripts"]' "$tmp_chezmoi_toml")" -ne 2 ]]; then
+  fail_test ".chezmoi.toml.tmpl should exclude scripts for both status and diff"
+fi
 assert_file_contains "$tmp_chezmoi_toml" 'name = "Smoke Tests"'
 assert_file_contains "$tmp_chezmoi_toml" 'email = "smoke@example.com"'
 assert_file_contains "$repo_root/dot_config/mise/config.toml.tmpl" "[settings]"
