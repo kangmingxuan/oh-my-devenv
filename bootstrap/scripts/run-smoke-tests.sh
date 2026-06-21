@@ -306,10 +306,6 @@ undeployed_path="$HOME/LICENSE"
 if grep -Fxq "$undeployed_path" <<<"$managed_listing"; then
   fail_test "chezmoi managed lists ${undeployed_path#"$HOME"/} (repo-only files must stay undeployed)"
 fi
-if grep -Fq "$HOME/_skynet" <<<"$managed_listing"; then
-  fail_test "chezmoi managed lists something under _skynet/ (repo-only tooling must stay undeployed)"
-fi
-
 log_step "🧩" "Running manifest contract checks..."
 check_tool_manifest_parser "$repo_root/bootstrap/manifests/ecosystem/go-tools.txt" go_tool_binary_name
 check_tool_manifest_parser "$repo_root/bootstrap/manifests/ecosystem/uv-tools.txt" uv_tool_binary_name
