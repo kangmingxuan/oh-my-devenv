@@ -246,11 +246,11 @@ uv_tool_binary_name() {
   printf '%s\n' "$tool"
 }
 
-# Load the shared non-secret work environment if present so bootstrap sees the
+# Load the shared non-secret local environment if present so bootstrap sees the
 # same Go / mirror / registry-related exports as interactive shells.
 # shellcheck disable=SC1090,SC1091
-if [[ -f "${XDG_CONFIG_HOME:-$HOME/.config}/work/env.sh" ]]; then
-  source "${XDG_CONFIG_HOME:-$HOME/.config}/work/env.sh"
+if [[ -f "${XDG_CONFIG_HOME:-$HOME/.config}/oh-my-devenv/env.sh" ]]; then
+  source "${XDG_CONFIG_HOME:-$HOME/.config}/oh-my-devenv/env.sh"
 fi
 
 # shellcheck disable=SC1091

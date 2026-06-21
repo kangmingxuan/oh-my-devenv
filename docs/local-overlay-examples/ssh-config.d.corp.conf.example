@@ -1,14 +1,14 @@
 # ~/.ssh/config.d/<pick-a-name>.conf
 #
-# One drop-in fragment loaded into your SSH configuration via an Include
-# directive in ~/.ssh/config. The baseline never edits ~/.ssh/config itself
-# because it is owned by sshd / system tooling; all local additions live in
-# this drop-in directory.
+# One user-owned drop-in fragment loaded by the baseline-managed ~/.ssh/config
+# via `Include ~/.ssh/config.d/*.conf` before the global `Host *` block.
+# Keep local additions in this drop-in directory instead of editing the managed
+# top-level config.
 #
 # Prerequisite (one-time):
-#     1. Make sure ~/.ssh/config contains `Include ~/.ssh/config.d/*.conf`
-#        as its first non-comment line. If ~/.ssh/config does not exist,
-#        create it with just that one Include line.
+#     1. If you are not using the baseline-managed ~/.ssh/config, make sure your
+#        top-level config includes `Include ~/.ssh/config.d/*.conf` before any
+#        `Host *` catch-all.
 #     2. `chmod 600 ~/.ssh/config ~/.ssh/config.d/*.conf` — SSH refuses to
 #        parse loose-permission configs.
 

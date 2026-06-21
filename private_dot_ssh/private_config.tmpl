@@ -7,8 +7,9 @@ Include ~/.orbstack/ssh/conf*
 
 {{ end -}}
 # ============================================================================
-# Local (per-machine) SSH config - NOT managed by chezmoi
-# Put local-only hosts into ~/.ssh/config.d/*.conf (loaded in lexical order)
+# Local (per-machine) SSH drop-ins - not managed by chezmoi
+# The managed top-level config loads ~/.ssh/config.d/*.conf in lexical order.
+# Put local-only hosts in those fragments, not in this managed file.
 # ============================================================================
 Include ~/.ssh/config.d/*.conf
 

@@ -199,13 +199,13 @@ Removing a default is as significant as adding one. Before removing:
 - Confirm the default is not used by bootstrap scripts or smoke tests.
 - Add a note to the merge request describing what engineers should do on machines that already installed it.
 
-## Validating The Shared Work Env Overlay
+## Validating The Shared Local Env Overlay
 
-`${XDG_CONFIG_HOME:-$HOME/.config}/work/env.sh` is the one shared non-secret env slot that Bash, Zsh, and bootstrap all read. Use it for values like `GOPRIVATE`, `GONOSUMDB`, `GONOPROXY`, and `DOTFILES_*` mirror controls.
+`${XDG_CONFIG_HOME:-$HOME/.config}/oh-my-devenv/env.sh` is the one shared non-secret env slot that Bash, Zsh, and bootstrap all read. Use it for values like `GOPRIVATE`, `GONOSUMDB`, `GONOPROXY`, and `DOTFILES_*` mirror controls.
 
 To validate that all three consumers agree:
 
-1. Create the file from [`docs/local-overlay-examples/work-env.sh.example`](local-overlay-examples/work-env.sh.example) and add a test export such as `export GOPRIVATE='<private-module-prefixes>'`.
+1. Create the file from [`docs/local-overlay-examples/env.sh.example`](local-overlay-examples/env.sh.example) and add a test export such as `export GOPRIVATE='<private-module-prefixes>'`.
 2. Open a fresh Zsh and confirm it is visible:
 
    ```bash
@@ -230,8 +230,10 @@ If those three values differ, the contract drifted and the change is not ready t
 
 Re-running the full bootstrap to confirm that a `DOTFILES_<KEY>` override points at a working mirror is overkill. To validate a single override without touching the rest of the system:
 
+Mirror mode currently covers the consumers wired through `dotfiles_apply_mirror_env`: Go tools (`GOPROXY`), uv tools (`UV_INDEX_URL`), Homebrew API/bottles, the mise installer URL, and the oh-my-zsh main repo URL. It does not rewrite apt sources, mise runtime downloads, or oh-my-zsh plugin repositories.
+
 1. Open a fresh shell session so nothing from a previous `chezmoi apply` leaks in.
-2. Export the override you want to verify (or place the same value in `${XDG_CONFIG_HOME:-$HOME/.config}/work/env.sh` and open a fresh shell):
+2. Export the override you want to verify (or place the same value in `${XDG_CONFIG_HOME:-$HOME/.config}/oh-my-devenv/env.sh` and open a fresh shell):
 
    ```bash
    export DOTFILES_MIRROR_MODE=internal
@@ -263,7 +265,8 @@ Re-running the full bootstrap to confirm that a `DOTFILES_<KEY>` override points
 ## Security
 
 - `gitleaks` scans staged diffs on every commit via `pre-commit`. Bootstrap smoke tests run in CI only (see CI section below), not as a pre-commit hook.
-- Secrets and credentials never live in this repository. They stay in local overlays or user-owned stores (`~/.gitconfig.local`, `~/.config/git/hooks/pre-push`, `~/.zshrc.secrets`, `~/.bashrc.secrets`, `~/.ssh/config.d/*.conf`, `uv auth`, `~/.npmrc`).
+- Secrets and credentials never live in this repository. They stay in local overlays or user-owned stores (`${XDG_CONFIG_HOME:-$HOME/.config}/oh-my-devenv/secrets.sh`, `~/.gitconfig.local`, `~/.config/git/hooks/pre-push`, `~/.ssh/config.d/*.conf`, `uv auth`, `~/.npmrc`).
+- `bootstrap/scripts/common.sh` deliberately reads only `${XDG_CONFIG_HOME:-$HOME/.config}/oh-my-devenv/env.sh`, never `secrets.sh`. If Codex, Claude Code, or another automation needs tokens, launch it from a shell that explicitly sourced `secrets.sh` or use that tool's own secret/env injection.
 - The baseline's managed `mise` config defaults GitHub Artifact Attestations verification to off, and the runtime-install hook exports the same default for first bootstrap. This is a reliability tradeoff for shared egress environments (OrbStack VMs, shared CI runners, corp NAT) where anonymous GitHub API rate limits can otherwise break a clean install before the toolchain is usable.
 - To validate or dogfood the stricter path, opt back in explicitly with `MISE_GITHUB_ATTESTATIONS=true MISE_AQUA_GITHUB_ATTESTATIONS=true chezmoi apply`. Python follows the global setting unless `MISE_PYTHON_GITHUB_ATTESTATIONS` is set separately.
 - Report suspected exposed secrets privately to the maintainer; do not open a public issue or MR.
@@ -293,7 +296,7 @@ Use `bootstrap/scripts/uninstall.sh` when you need to tear down **only** what th
 
 **Overlays are never deleted**
 
-The script skips (and logs `[would-skip] overlay-protected`) for the local overlay slots documented in the README: `${XDG_CONFIG_HOME:-$HOME/.config}/work/env.sh`, `~/.zshrc.secrets`, `~/.bashrc.secrets`, `~/.zsh/work.zsh`, `~/.bash/work.bash`, `~/.gitconfig.local`, `~/.config/git/hooks/pre-push`, `~/.npmrc`, and `~/.ssh/config.d/*.conf`. If a path is both managed and an overlay (it should not be), the overlay rule wins.
+The script skips (and logs `[would-skip] overlay-protected`) for the local overlay slots documented in the README: `${XDG_CONFIG_HOME:-$HOME/.config}/oh-my-devenv/env.sh`, `${XDG_CONFIG_HOME:-$HOME/.config}/oh-my-devenv/secrets.sh`, `${XDG_CONFIG_HOME:-$HOME/.config}/oh-my-devenv/zshrc.zsh`, `${XDG_CONFIG_HOME:-$HOME/.config}/oh-my-devenv/bashrc.bash`, `~/.gitconfig.local`, `~/.config/git/hooks/pre-push`, `~/.npmrc`, and `~/.ssh/config.d/*.conf`. If a path is both managed and an overlay (it should not be), the overlay rule wins.
 
 User-owned Git hooks such as `~/.config/git/hooks/pre-push` also stay untouched.
 They are outside the managed destination set, so `uninstall.sh` never removes

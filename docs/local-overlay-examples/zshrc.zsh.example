@@ -1,0 +1,38 @@
+# ~/.config/oh-my-devenv/zshrc.zsh
+#
+# Zsh-only local customizations that should not live in the shared baseline.
+# The baseline sources this file as a late interactive hook, after its own
+# aliases, prompt, functions, and key bindings.
+#
+# Typical contents:
+#     - Aliases for internal CLIs.
+#     - Functions that wrap local workflows without encoding secrets.
+#     - Prompt augmentations for local directories.
+#
+# Keep this file free of secrets. Secrets belong in secrets.sh. Non-secret
+# environment variables that Bash, Zsh, and bootstrap should all see belong in
+# env.sh, not here.
+
+# --------------------------------------------------------------------------
+# Example: short aliases for common local commands.
+# --------------------------------------------------------------------------
+# alias <short-alias>='<long-local-command> --with common flags'
+
+# --------------------------------------------------------------------------
+# Example: a helper function. Functions composed from standard tools tend
+# to age better than aliases when the underlying CLI evolves.
+# --------------------------------------------------------------------------
+# local_ticket() {
+#     local ticket="${1:?usage: local_ticket <TICKET-ID>}"
+#     open "https://<ticket-system>/browse/${ticket}"
+# }
+
+# --------------------------------------------------------------------------
+# Example: prompt suffix that appears only inside selected checkouts.
+# --------------------------------------------------------------------------
+# _local_prompt_suffix() {
+#     case "$PWD" in
+#         "$HOME"/workspace/work/*) print -nP "%F{yellow}[work]%f " ;;
+#     esac
+# }
+# precmd_functions+=(_local_prompt_suffix)
