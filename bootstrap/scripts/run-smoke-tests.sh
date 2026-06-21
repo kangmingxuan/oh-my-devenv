@@ -77,6 +77,22 @@ assert_file_not_contains() {
   fi
 }
 
+assert_toml_section_contains() {
+  local file_path="$1"
+  local section_name="$2"
+  local expected="$3"
+  local section_header="[$section_name]"
+
+  if ! awk -v section_header="$section_header" -v expected="$expected" '
+    $0 == section_header { in_section = 1; next }
+    /^\[[^]]+\]/ && in_section { exit }
+    in_section && index($0, expected) { found = 1 }
+    END { exit found ? 0 : 1 }
+  ' "$file_path"; then
+    fail_test "$file_path section [$section_name] is missing expected content: $expected"
+  fi
+}
+
 check_tool_manifest_parser() {
   local manifest="$1"
   local parser_name="$2"
@@ -419,11 +435,9 @@ log_step "�" "Verifying chezmoi init template renders..."
 tmp_chezmoi_toml="$tmp_dir/chezmoi-toml.rendered"
 render_chezmoi_toml_tmpl "$tmp_chezmoi_toml"
 assert_file_contains "$tmp_chezmoi_toml" "[status]"
-assert_file_contains "$tmp_chezmoi_toml" 'exclude = ["scripts"]'
+assert_toml_section_contains "$tmp_chezmoi_toml" "status" 'exclude = ["scripts"]'
 assert_file_contains "$tmp_chezmoi_toml" "[diff]"
-if [[ "$(grep -Fc 'exclude = ["scripts"]' "$tmp_chezmoi_toml")" -ne 2 ]]; then
-  fail_test ".chezmoi.toml.tmpl should exclude scripts for both status and diff"
-fi
+assert_toml_section_contains "$tmp_chezmoi_toml" "diff" 'exclude = ["scripts"]'
 assert_file_contains "$tmp_chezmoi_toml" 'name = "Smoke Tests"'
 assert_file_contains "$tmp_chezmoi_toml" 'email = "smoke@example.com"'
 assert_file_contains "$repo_root/dot_config/mise/config.toml.tmpl" "[settings]"
