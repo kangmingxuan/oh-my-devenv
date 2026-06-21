@@ -35,6 +35,7 @@ This changelog is intentionally reset for the public-safe version of the reposit
 - `smoke-tests-macos` CI job that runs the smoke suite on `macos-latest`, so the `darwin` template arms are rendered and shell-checked instead of going untested.
 - `apply-linux` CI job that runs a real `chezmoi init --apply` end to end and asserts the final environment check passes, covering installer semantics the render-only smoke suite cannot.
 - Dependabot configuration to keep GitHub Actions versions current.
+- macOS Homebrew opt-in extension point for first-bootstrap optional packages, using `DOTFILES_INSTALL_REPO_OPTIONAL_BREWFILE` and `DOTFILES_EXTRA_BREWFILES`.
 
 ### Changed
 

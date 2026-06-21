@@ -26,6 +26,13 @@ You still need **SSH or HTTPS access** to the Git host that holds this repositor
 
 The shared baseline does not hard-code host-specific Git rewrites. If your environment needs private-host rewrites, SSH aliases, or host-specific guardrails, keep them in local overlays such as `~/.gitconfig.local` or the examples under `docs/local-overlay-examples/`.
 
+On macOS, optional Homebrew apps such as OrbStack are also local opt-ins. If
+you want them installed during the first `chezmoi init --apply`, create a local
+Brewfile before running bootstrap and expose it through
+`${XDG_CONFIG_HOME:-$HOME/.config}/oh-my-devenv/env.sh` with
+`DOTFILES_EXTRA_BREWFILES`. The default baseline still does not install
+OrbStack or other optional casks.
+
 ---
 
 ## What you'll be prompted for
@@ -39,7 +46,7 @@ The shared baseline does not hard-code host-specific Git rewrites. If your envir
 Bootstrap is split into ordered hooks under `.chezmoiscripts/`:
 
 1. **`run_once_before_10-*`** — one-time prerequisites and, if needed, **backup** of any pre-existing managed files before they are overwritten.
-2. **`run_onchange_after_20-*`** — system packages (`apt` on Linux / WSL, Homebrew on macOS).
+2. **`run_onchange_after_20-*`** — system packages (`apt` on Linux / WSL, Homebrew on macOS), plus explicit macOS Homebrew opt-ins from `DOTFILES_INSTALL_REPO_OPTIONAL_BREWFILE` or `DOTFILES_EXTRA_BREWFILES`.
 3. **`run_onchange_after_25-*`** — shell assets (oh-my-zsh and plugins from the manifest).
 4. **`run_onchange_after_30-*`** — install mise itself.
 5. **`run_onchange_after_40-*`** — install language runtimes via mise.

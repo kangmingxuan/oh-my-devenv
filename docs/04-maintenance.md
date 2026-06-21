@@ -181,7 +181,7 @@ Milestones cut annotated git tags (`v0.<M>.0`). After a milestone's final MR mer
 
 Third-party dependencies pulled in by this repository fall into these categories:
 
-- **System packages** (`apt`, Homebrew): bump the manifest files (`bootstrap/manifests/system/apt-packages.txt`, `bootstrap/manifests/system/Brewfile`). Prefer stable distro names over version pins.
+- **System packages** (`apt`, Homebrew): bump the manifest files (`bootstrap/manifests/system/apt-packages.txt`, `bootstrap/manifests/system/Brewfile`). Prefer stable distro names over version pins. macOS GUI apps and personal CLIs stay opt-in through `Brewfile.optional` or user-owned `DOTFILES_EXTRA_BREWFILES` paths, not baseline defaults.
 - **Shell assets** (oh-my-zsh and plugins): managed by explicit Git clone/update. The upstream repository is captured in `bootstrap/manifests/shell/oh-my-zsh-plugins.txt`.
 - **Runtimes** (mise): pinned in `dot_config/mise/config.toml.tmpl`. Bump intentionally.
 - **Binary-distributed tools** (for example `golangci-lint`, `uv`, and `usage`): pinned via mise alongside the runtimes.
@@ -191,6 +191,11 @@ Third-party dependencies pulled in by this repository fall into these categories
 When bumping a pinned dependency, keep the bump isolated in its own merge request and include a short note in the MR description explaining why.
 
 If you touch the install flow itself, keep the change scoped and review the relevant entrypoint under `bootstrap/scripts/install-*.sh` before merging.
+
+For macOS Homebrew opt-ins, remember that `DOTFILES_EXTRA_BREWFILES` is a
+first-bootstrap convenience rather than an always-on sync loop. Document manual
+`brew bundle install --file=...` commands for any local Brewfile workflow you
+introduce.
 
 ## Removing Things
 

@@ -1,14 +1,58 @@
+# macOS / Windows metadata
+.DS_Store
+.AppleDouble
+.LSOverride
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Editors and IDEs
 .idea/
 .vscode/
-
-# Editor backup files
+*.code-workspace
 *.swp
 *.swo
+*.swn
 *~
 
-# OS metadata
-.DS_Store
-Thumbs.db
+# Local agent / assistant state
+.agents/
+.claude/
+.codex/
 
-# Local agent scratch space
-_skynet/
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+
+# Local chezmoi render / test data
+.ci-chezmoi-data.toml
+chezmoi.toml
+chezmoi-data.toml
+
+# Logs, caches, and temporary files
+*.log
+*.tmp
+*.temp
+*.bak
+*.orig
+*.rej
+.cache/
+.tmp/
+tmp/
+temp/
+
+# Common tool caches / build output
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+node_modules/
+coverage/
+dist/
+build/
+target/
