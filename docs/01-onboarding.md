@@ -68,7 +68,7 @@ If anything fails, the script exits non-zero and prints diagnostic hints — see
 
 If you are on a corporate or otherwise restricted network, public registries may be slow or blocked. Keep those overrides local to your machine rather than baking them into the shared baseline. Start from [**Local overlay examples**](local-overlay-examples/README.md) before your first apply:
 
-- Put non-secret Go and mirror settings in `${XDG_CONFIG_HOME:-$HOME/.config}/work/env.sh`
+- Put non-secret Go and mirror settings in `${XDG_CONFIG_HOME:-$HOME/.config}/oh-my-devenv/env.sh`
 - Keep internal npm scopes in `~/.npmrc`, not in shell startup files
 - Keep Python internal indexes project-local and `uv`-only
 - Set **`DOTFILES_MIRROR_MODE`** before `chezmoi init --apply` when bootstrap itself needs internal endpoints
@@ -77,7 +77,7 @@ If you are on a corporate or otherwise restricted network, public registries may
 
 ## What to do next
 
-1. **Reload your shell** (or `source` your `~/.zshrc` / `~/.bashrc`) so `PATH`, completions, and any optional `${XDG_CONFIG_HOME:-$HOME/.config}/work/env.sh` exports pick up the new tools.
+1. **Reload your shell** (or `source` your `~/.zshrc` / `~/.bashrc`) so `PATH`, completions, and any optional `${XDG_CONFIG_HOME:-$HOME/.config}/oh-my-devenv/env.sh` exports pick up the new tools.
 2. If you need machine-only tweaks, start from the templates under [`docs/local-overlay-examples/`](local-overlay-examples/README.md) — they are **not** deployed by default.
 3. Use the root [README](../README.md) for the small set of day-one commands such as `chezmoi update` and `chezmoi apply`, or jump straight to [`docs/README.md`](README.md) for the full docs map.
 

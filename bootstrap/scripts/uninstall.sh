@@ -78,11 +78,13 @@ is_overlay_path() {
   local p="$1"
 
   case "$p" in
-    "$HOME/.zshrc.secrets" | "$HOME/.bashrc.secrets" | \
+    "${XDG_CONFIG_HOME:-$HOME/.config}/oh-my-devenv/env.sh" | \
+      "${XDG_CONFIG_HOME:-$HOME/.config}/oh-my-devenv/secrets.sh" | \
+      "${XDG_CONFIG_HOME:-$HOME/.config}/oh-my-devenv/zshrc.zsh" | \
+      "${XDG_CONFIG_HOME:-$HOME/.config}/oh-my-devenv/bashrc.bash" | \
       "$HOME/.gitconfig.local" | \
       "$HOME/.config/git/hooks/pre-push" | \
-      "$HOME/.zsh/work.zsh" | "$HOME/.bash/work.bash" | \
-      "${XDG_CONFIG_HOME:-$HOME/.config}/work/env.sh" | "$HOME/.npmrc")
+      "$HOME/.npmrc")
       return 0
       ;;
   esac
@@ -257,13 +259,12 @@ emit_standalone_overlay_slots() {
   local f
 
   for f in \
-    "$HOME/.zshrc.secrets" \
-    "$HOME/.bashrc.secrets" \
+    "${XDG_CONFIG_HOME:-$HOME/.config}/oh-my-devenv/env.sh" \
+    "${XDG_CONFIG_HOME:-$HOME/.config}/oh-my-devenv/secrets.sh" \
+    "${XDG_CONFIG_HOME:-$HOME/.config}/oh-my-devenv/zshrc.zsh" \
+    "${XDG_CONFIG_HOME:-$HOME/.config}/oh-my-devenv/bashrc.bash" \
     "$HOME/.gitconfig.local" \
     "$HOME/.config/git/hooks/pre-push" \
-    "$HOME/.zsh/work.zsh" \
-    "$HOME/.bash/work.bash" \
-    "${XDG_CONFIG_HOME:-$HOME/.config}/work/env.sh" \
     "$HOME/.npmrc"; do
     [[ -e "$f" ]] || continue
     [[ -n "${overlay_logged[$f]:-}" ]] && continue

@@ -7,14 +7,13 @@ the baseline leaves to each user's home directory or user-owned tool config:
 
 | Example file                            | Real overlay location              | Sourced / read by                                   |
 | --------------------------------------- | ---------------------------------- | --------------------------------------------------- |
-| `work-env.sh.example`                   | `${XDG_CONFIG_HOME:-$HOME/.config}/work/env.sh` | `~/.zsh/env.zsh`, `~/.bash/env.bash`, `bootstrap/scripts/common.sh` |
+| `env.sh.example`                        | `${XDG_CONFIG_HOME:-$HOME/.config}/oh-my-devenv/env.sh` | `~/.zsh/env.zsh`, `~/.bash/env.bash`, `bootstrap/scripts/common.sh` |
+| `secrets.sh.example`                    | `${XDG_CONFIG_HOME:-$HOME/.config}/oh-my-devenv/secrets.sh` | `~/.zshrc`, `~/.bashrc` |
+| `zshrc.zsh.example`                     | `${XDG_CONFIG_HOME:-$HOME/.config}/oh-my-devenv/zshrc.zsh` | Baseline `dot_zshrc.tmpl` via a guarded `source`    |
+| `bashrc.bash.example`                   | `${XDG_CONFIG_HOME:-$HOME/.config}/oh-my-devenv/bashrc.bash` | Baseline `dot_bashrc.tmpl` via a guarded `source`   |
 | `gitconfig.local.example`               | `~/.gitconfig.local`               | Baseline `dot_gitconfig.tmpl` via `[include]`       |
 | `git-pre-push.example`                  | `~/.config/git/hooks/pre-push`     | Git via `core.hooksPath`                            |
 | `ssh-config.d.corp.conf.example`        | `~/.ssh/config.d/<your-alias>.conf` | `~/.ssh/config` via its `Include ~/.ssh/config.d/*.conf` directive |
-| `zshrc.secrets.example`                 | `~/.zshrc.secrets`                 | Baseline `dot_zshrc.tmpl` via a guarded `source`    |
-| `bashrc.secrets.example`                | `~/.bashrc.secrets`                | Baseline `dot_bashrc.tmpl` via a guarded `source`   |
-| `zsh-work.zsh.example`                  | `~/.zsh/work.zsh`                  | Baseline `dot_zshrc.tmpl` via a guarded `source`    |
-| `bash-work.bash.example`                | `~/.bash/work.bash`                | Baseline `dot_bashrc.tmpl` via a guarded `source`   |
 | `npmrc.example`                         | `~/.npmrc`                         | `npm`                                               |
 
 ## Why `.example`?
@@ -41,20 +40,35 @@ Every file in this directory ends in `.example` on purpose:
    `~/.ssh/config.d/*.conf` before its `Host *` catch-all. If you adapt these
    examples outside this baseline or keep a hand-managed top-level config, add
    that `Include` line before any `Host *` block.
-5. For shell overlays, open a new shell to verify. `${XDG_CONFIG_HOME:-$HOME/.config}/work/env.sh`,
-   `~/.zshrc.secrets`, `~/.bashrc.secrets`, `~/.zsh/work.zsh`, and
-   `~/.bash/work.bash` are all guarded by `[[ -f ... ]]` sources in the
-   baseline, so a missing file is silently ignored and a present file is loaded
-   on next shell start.
+5. For shell overlays, open a new shell to verify. The files under
+   `${XDG_CONFIG_HOME:-$HOME/.config}/oh-my-devenv/` are all guarded by
+   `[[ -f ... ]]` sources in the baseline, so a missing file is silently ignored
+   and a present file is loaded on next shell start.
 6. For a Git hook copied from `git-pre-push.example`, run `chmod 755 ~/.config/git/hooks/pre-push`
    and then test it against one repo that should match your rule and one that
    should not before you trust it.
 7. Keep responsibilities clean:
-   - `${XDG_CONFIG_HOME:-$HOME/.config}/work/env.sh` is for shell-compatible, non-secret exports that Bash, Zsh, and bootstrap should all see.
+   - `${XDG_CONFIG_HOME:-$HOME/.config}/oh-my-devenv/env.sh` is for shell-compatible, non-secret exports that Bash, Zsh, and bootstrap should all see.
+   - `${XDG_CONFIG_HOME:-$HOME/.config}/oh-my-devenv/secrets.sh` is for shell-compatible secrets that interactive Bash and Zsh read automatically; bootstrap and non-interactive shell commands never read it automatically.
+   - `${XDG_CONFIG_HOME:-$HOME/.config}/oh-my-devenv/zshrc.zsh` and `${XDG_CONFIG_HOME:-$HOME/.config}/oh-my-devenv/bashrc.bash` are late interactive-only overlays for aliases, functions, and prompt tweaks.
    - The managed `~/.gitconfig` keeps your default Git identity; `~/.gitconfig.local` is for user-owned Git preferences and guardrails.
    - `~/.config/git/hooks/pre-push` is a user-owned guardrail, not part of the shared baseline.
-   - `~/.zsh/work.zsh` and `~/.bash/work.bash` are late interactive-only overlays for aliases, functions, and prompt tweaks.
    - `~/.npmrc` is the right home for scoped internal npm registry configuration.
+
+## Automation Tokens
+
+Some local automation needs tokens, including coding agents such as Codex or
+Claude Code. Keep those tokens in `secrets.sh`, not `env.sh`, and inject them
+deliberately by starting the tool from an environment that sourced the file:
+
+```bash
+source "${XDG_CONFIG_HOME:-$HOME/.config}/oh-my-devenv/secrets.sh"
+codex
+```
+
+Use the tool's own secret or environment configuration when that is a better
+fit. The baseline intentionally does not make non-interactive shell commands
+source `secrets.sh`.
 
 ## Dual Worktree Setup
 

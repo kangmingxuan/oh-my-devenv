@@ -20,12 +20,12 @@ Changes that do **not** belong in this repository:
 
 Use the documented local extension points for machine-specific or team-specific values:
 
-- Shared non-secret work env: `${XDG_CONFIG_HOME:-$HOME/.config}/work/env.sh`
+- Shared non-secret local env: `${XDG_CONFIG_HOME:-$HOME/.config}/oh-my-devenv/env.sh`
+- Shell secrets: `${XDG_CONFIG_HOME:-$HOME/.config}/oh-my-devenv/secrets.sh`
+- Optional interactive shell overlays: `${XDG_CONFIG_HOME:-$HOME/.config}/oh-my-devenv/zshrc.zsh`, `${XDG_CONFIG_HOME:-$HOME/.config}/oh-my-devenv/bashrc.bash`
 - Extra SSH hosts: `~/.ssh/config.d/*.conf`
 - Extra Git configuration: `~/.gitconfig.local`
 - Optional local Git guardrails: `~/.config/git/hooks/`
-- Shell secrets: `~/.zshrc.secrets`, `~/.bashrc.secrets`
-- Optional interactive shell overlays: `~/.zsh/work.zsh`, `~/.bash/work.bash`
 - Optional scoped npm registry config: `~/.npmrc`
 
 ## Shared vs. Internal Changes

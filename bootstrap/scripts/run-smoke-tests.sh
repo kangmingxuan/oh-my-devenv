@@ -147,34 +147,64 @@ EOF
 
 # Literal strings asserted against rendered templates.
 # shellcheck disable=SC2016
-shared_work_env_literal='${XDG_CONFIG_HOME:-$HOME/.config}/work/env.sh'
+shared_env_literal='${XDG_CONFIG_HOME:-$HOME/.config}/oh-my-devenv/env.sh'
 # shellcheck disable=SC2016
-zsh_work_env_literal='$HOME/.zsh/work.zsh'
+shared_secrets_literal='${XDG_CONFIG_HOME:-$HOME/.config}/oh-my-devenv/secrets.sh'
+# shellcheck disable=SC2016
+zsh_overlay_literal='${XDG_CONFIG_HOME:-$HOME/.config}/oh-my-devenv/zshrc.zsh'
+# shellcheck disable=SC2016
+bash_overlay_literal='${XDG_CONFIG_HOME:-$HOME/.config}/oh-my-devenv/bashrc.bash'
+old_shell_overlay_patterns=(
+  '.zshrc.secrets'
+  '.bashrc.secrets'
+  '.zsh/work.zsh'
+  '.bash/work.bash'
+  'work/env.sh'
+  'work-env.sh.example'
+  'zshrc.secrets.example'
+  'bashrc.secrets.example'
+  'zsh-work.zsh.example'
+  'bash-work.bash.example'
+)
 
 log_step "🧪" "Running local smoke tests..."
 
 log_step "📝" "Rendering and checking shell templates..."
 render_template dot_zshrc.tmpl "$tmp_dir/dot_zshrc"
 syntax_check zsh "$tmp_dir/dot_zshrc"
-assert_file_contains "$tmp_dir/dot_zshrc" "\$HOME/.zshrc.secrets"
-assert_file_contains "$tmp_dir/dot_zshrc" "\$HOME/.zsh/work.zsh"
+assert_file_contains "$tmp_dir/dot_zshrc" "$shared_secrets_literal"
+assert_file_contains "$tmp_dir/dot_zshrc" "$zsh_overlay_literal"
 
 render_template dot_zprofile.tmpl "$tmp_dir/dot_zprofile"
 syntax_check zsh "$tmp_dir/dot_zprofile"
 
 render_template dot_zsh/env.zsh.tmpl "$tmp_dir/env.zsh"
 syntax_check zsh "$tmp_dir/env.zsh"
-assert_file_contains "$tmp_dir/env.zsh" "$shared_work_env_literal"
-assert_file_not_contains "$tmp_dir/env.zsh" "$zsh_work_env_literal"
+assert_file_contains "$tmp_dir/env.zsh" "$shared_env_literal"
+assert_file_not_contains "$tmp_dir/env.zsh" "$shared_secrets_literal"
+assert_file_not_contains "$tmp_dir/env.zsh" "$zsh_overlay_literal"
 
 render_template dot_bashrc.tmpl "$tmp_dir/dot_bashrc"
 syntax_check bash "$tmp_dir/dot_bashrc"
-assert_file_contains "$tmp_dir/dot_bashrc" "\$HOME/.bashrc.secrets"
-assert_file_contains "$tmp_dir/dot_bashrc" "\$HOME/.bash/work.bash"
+assert_file_contains "$tmp_dir/dot_bashrc" "$shared_secrets_literal"
+assert_file_contains "$tmp_dir/dot_bashrc" "$bash_overlay_literal"
 
 render_template dot_bash/env.bash.tmpl "$tmp_dir/env.bash"
 syntax_check bash "$tmp_dir/env.bash"
-assert_file_contains "$tmp_dir/env.bash" "$shared_work_env_literal"
+assert_file_contains "$tmp_dir/env.bash" "$shared_env_literal"
+assert_file_not_contains "$tmp_dir/env.bash" "$shared_secrets_literal"
+assert_file_not_contains "$tmp_dir/env.bash" "$bash_overlay_literal"
+
+for old_shell_overlay_pattern in "${old_shell_overlay_patterns[@]}"; do
+  assert_file_not_contains "$tmp_dir/dot_zshrc" "$old_shell_overlay_pattern"
+  assert_file_not_contains "$tmp_dir/env.zsh" "$old_shell_overlay_pattern"
+  assert_file_not_contains "$tmp_dir/dot_bashrc" "$old_shell_overlay_pattern"
+  assert_file_not_contains "$tmp_dir/env.bash" "$old_shell_overlay_pattern"
+  assert_file_not_contains "$repo_root/bootstrap/scripts/common.sh" "$old_shell_overlay_pattern"
+  if grep -RInF -- "$old_shell_overlay_pattern" "$repo_root/docs/local-overlay-examples" >/dev/null 2>&1; then
+    fail_test "docs/local-overlay-examples still references legacy shell overlay path: $old_shell_overlay_pattern"
+  fi
+done
 
 syntax_check sh "$repo_root/dot_profile"
 
@@ -184,7 +214,8 @@ assert_file_contains "$tmp_dir/dot_gitconfig" "path = ~/.gitconfig.local"
 # gitconfig must not carry a host-specific URL rewrite. Real internal-host
 # denylist patterns live in the internal overlay's boundary-denylist.txt.
 assert_file_not_contains "$tmp_dir/dot_gitconfig" 'insteadOf'
-assert_file_contains "$repo_root/bootstrap/scripts/common.sh" "$shared_work_env_literal"
+assert_file_contains "$repo_root/bootstrap/scripts/common.sh" "$shared_env_literal"
+assert_file_not_contains "$repo_root/bootstrap/scripts/common.sh" "$shared_secrets_literal"
 
 log_step "📜" "Rendering and checking chezmoi bootstrap scripts..."
 render_template .chezmoiscripts/run_once_before_10-bootstrap.sh.tmpl "$tmp_dir/run_once_before_10-bootstrap.sh"
