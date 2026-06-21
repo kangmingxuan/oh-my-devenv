@@ -41,8 +41,8 @@ Use [`docs/04-maintenance.md`](docs/04-maintenance.md) as the day-to-day handboo
 ## Development Workflow
 
 1. Create a feature branch from `main`.
-2. Make focused changes. Prefer one topic per merge request.
-3. Run the smoke tests locally before opening a merge request:
+2. Make focused changes. Prefer one topic per pull request.
+3. Run the smoke tests locally before opening a pull request:
 
    ```bash
    bash bootstrap/scripts/run-smoke-tests.sh
@@ -54,7 +54,7 @@ Use [`docs/04-maintenance.md`](docs/04-maintenance.md) as the day-to-day handboo
    pre-commit run --all-files
    ```
 
-5. Open a merge request or pull request against `main` using the repository's review template when one is provided.
+5. Open a pull request against `main` using the repository's review template when one is provided.
 
 ## Commit Style
 

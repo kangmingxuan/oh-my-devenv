@@ -289,6 +289,10 @@ undeployed_path="$HOME/CHANGELOG.md"
 if grep -Fxq "$undeployed_path" <<<"$managed_listing"; then
   fail_test "chezmoi managed lists ${undeployed_path#"$HOME"/} (repo-only files must stay undeployed)"
 fi
+undeployed_path="$HOME/LICENSE"
+if grep -Fxq "$undeployed_path" <<<"$managed_listing"; then
+  fail_test "chezmoi managed lists ${undeployed_path#"$HOME"/} (repo-only files must stay undeployed)"
+fi
 if grep -Fq "$HOME/_skynet" <<<"$managed_listing"; then
   fail_test "chezmoi managed lists something under _skynet/ (repo-only tooling must stay undeployed)"
 fi
@@ -424,7 +428,7 @@ done
 assert_file_contains "$tmp_dir/run_onchange_after_30-install-mise.sh" "dotfiles_apply_mirror_env"
 assert_file_contains "$tmp_dir/run_onchange_after_30-install-mise.sh" "DOTFILES_MISE_INSTALL_URL"
 
-log_step "�" "Verifying chezmoi init template renders..."
+log_step "🧬" "Verifying chezmoi init template renders..."
 
 # Render the init template once (it uses promptStringOnce, so it needs
 # --init plus the gitName/gitEmail stand-ins). Assert the non-script bits we
