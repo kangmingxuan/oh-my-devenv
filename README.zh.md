@@ -61,7 +61,7 @@ if [[ -x /opt/homebrew/bin/brew ]]; then
 elif [[ -x /usr/local/bin/brew ]]; then
   eval "$(/usr/local/bin/brew shellenv)"
 fi
-brew install chezmoi
+brew install git curl chezmoi
 command -v git curl chezmoi
 ```
 

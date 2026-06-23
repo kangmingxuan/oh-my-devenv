@@ -48,7 +48,7 @@ A reviewable change is ready to merge when all of the following hold:
   - `smoke-tests-linux` — renders and syntax-checks the baseline on `ubuntu-latest`.
   - `smoke-tests-macos` — the same smoke suite on `macos-latest`, so the `darwin` template arms are rendered and shell-checked instead of going untested.
   - `apply-linux` — a real `chezmoi init --apply` end to end on `ubuntu-latest`, asserting the final environment check prints `All checks passed.`
-  - `secret-scan` — `gitleaks` via `pre-commit`.
+  - `secret-scan` — a full `gitleaks` scan of the repository tree.
 
   Full macOS *install* validation (Brewfile parity, mise runtimes, Go/uv tools) still relies on the manual [`docs/04-macos-preflight.md`](04-macos-preflight.md) checklist and a pasted signoff; the `smoke-tests-macos` job only covers rendering and syntax.
 - At least one maintainer has approved the change.
@@ -170,7 +170,7 @@ The repository CI pipeline is intentionally lightweight:
 
 - `smoke-tests-linux` and `smoke-tests-macos` render and syntax-check the baseline on `ubuntu-latest` and `macos-latest`; running on both means the `darwin` template arms are exercised, not just the Linux ones.
 - `apply-linux` runs a real `chezmoi init --apply` end to end on `ubuntu-latest` and asserts the final environment check passes, covering installer semantics the render-only smoke suite cannot.
-- `secret-scan` runs `gitleaks` (via `pre-commit`) to catch committed secrets.
+- `secret-scan` runs `gitleaks` over the repository tree to catch committed secrets.
 - The pipeline is allowed to be simple and occasionally imperfect. It should catch obvious repo regressions, not model every clean-machine install path on every platform.
 
 The smoke suite is scoped to executable bootstrap behavior: template rendering, shell syntax, manifest parsing, deployability boundaries, mirror mode, and `shellcheck`. It deliberately does not freeze README prose, onboarding headings, changelog markers, badges, ownership wording, or retired CI lanes; those stay governed by review and the documentation boundaries above.
