@@ -45,6 +45,7 @@ OrbStack or other optional casks.
 
 Bootstrap is split into ordered hooks under `.chezmoiscripts/`:
 
+0. **`run_before_00-*`** — prints the startup banner (hide it with `NO_LOGO=1`).
 1. **`run_once_before_10-*`** — one-time prerequisites and, if needed, **backup** of any pre-existing managed files before they are overwritten.
 2. **`run_onchange_after_20-*`** — system packages (`apt` on Linux / WSL, Homebrew on macOS), plus explicit macOS Homebrew opt-ins from `DOTFILES_INSTALL_REPO_OPTIONAL_BREWFILE` or `DOTFILES_EXTRA_BREWFILES`.
 3. **`run_onchange_after_25-*`** — shell assets (oh-my-zsh and plugins from the manifest).
@@ -53,9 +54,9 @@ Bootstrap is split into ordered hooks under `.chezmoiscripts/`:
 6. **`run_onchange_after_50-*`** — sync ecosystem tools (`go install`, `uv tool`, etc.).
 7. **`run_onchange_after_60-*`** — final environment check and a short “welcome” summary.
 
-You may also see a short startup banner at the beginning of an interactive apply; set `NO_LOGO=1` to hide it in automation. The generated chezmoi config excludes scripts from `chezmoi status`, so routine hook runs do not make a clean setup look locally modified.
+The generated chezmoi config excludes scripts from `chezmoi status`, so routine hook runs do not make a clean setup look locally modified.
 
-The baseline also defaults `mise` GitHub attestation verification to off during installs, because fresh machines behind a shared egress IP can otherwise hit GitHub API rate limits while fetching `uv`, `golangci-lint`, or Python. If you explicitly want attestation verification on your machine, re-run with `MISE_GITHUB_ATTESTATIONS=true MISE_AQUA_GITHUB_ATTESTATIONS=true`.
+The baseline also defaults `mise` GitHub attestation verification to off during installs, because fresh machines behind a shared egress IP can otherwise hit GitHub API rate limits while fetching `uv`, `golangci-lint`, or Python. If you explicitly want attestation verification on your machine, re-run with `MISE_GITHUB_ATTESTATIONS=true MISE_AQUA_GITHUB_ATTESTATIONS=true`. Python follows that global setting unless you set `MISE_PYTHON_GITHUB_ATTESTATIONS` separately.
 
 ---
 
@@ -78,7 +79,7 @@ If you are on a corporate or otherwise restricted network, public registries may
 - Put non-secret Go and mirror settings in `${XDG_CONFIG_HOME:-$HOME/.config}/oh-my-devenv/env.sh`
 - Keep internal npm scopes in `~/.npmrc`, not in shell startup files
 - Keep Python internal indexes project-local and `uv`-only
-- Set **`DOTFILES_MIRROR_MODE`** before `chezmoi init --apply` when bootstrap itself needs internal endpoints
+- Set **`DOTFILES_MIRROR_MODE`** before `chezmoi init --apply` when bootstrap itself needs mirror endpoints
 
 ---
 
@@ -86,7 +87,7 @@ If you are on a corporate or otherwise restricted network, public registries may
 
 1. **Reload your shell** (or `source` your `~/.zshrc` / `~/.bashrc`) so `PATH`, completions, and any optional `${XDG_CONFIG_HOME:-$HOME/.config}/oh-my-devenv/env.sh` exports pick up the new tools.
 2. If you need machine-only tweaks, start from the templates under [`docs/local-overlay-examples/`](local-overlay-examples/README.md) — they are **not** deployed by default.
-3. Use the root [README](../README.md) for the small set of day-one commands such as `chezmoi update` and `chezmoi apply`, or jump straight to [`docs/README.md`](README.md) for the full docs map.
+3. Keep [`02-reference.md`](02-reference.md) handy for day-to-day commands and every environment variable / flag, or jump to [`docs/README.md`](README.md) for the full docs map.
 
 ---
 

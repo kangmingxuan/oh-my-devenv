@@ -97,64 +97,6 @@ Use the tool's own secret or environment configuration when that is a better
 fit. The baseline intentionally does not make non-interactive shell commands
 source `secrets.sh`.
 
-## Dual Worktree Setup
-
-If you maintain both a public GitHub copy and an internal overlay, keep them in
-**separate worktrees** so each one can carry the right Git identity and default
-push remote.
-
-Recommended shape:
-
-1. Create the extra worktree from the shared repository clone:
-
-   ```bash
-   git worktree add ~/workspace/oh-my-devenv-public public-upstream
-   git worktree add ~/workspace/oh-my-devenv-internal main
-   ```
-
-2. Enable per-worktree Git config in the repository:
-
-   ```bash
-   git -C ~/workspace/oh-my-devenv-public config extensions.worktreeConfig true
-   ```
-
-3. Set the **public** worktree identity and default push remote:
-
-   ```bash
-   git -C ~/workspace/oh-my-devenv-public config --worktree user.name "<your-name>"
-   git -C ~/workspace/oh-my-devenv-public config --worktree user.email "<your-public-email>"
-   git -C ~/workspace/oh-my-devenv-public config --worktree remote.pushDefault public
-   ```
-
-4. Set the **internal** worktree identity and default push remote:
-
-   ```bash
-   git -C ~/workspace/oh-my-devenv-internal config --worktree user.name "<your-name>"
-   git -C ~/workspace/oh-my-devenv-internal config --worktree user.email "<your-work-email>"
-   git -C ~/workspace/oh-my-devenv-internal config --worktree remote.pushDefault origin
-   ```
-
-5. Validate that the split stuck:
-
-   ```bash
-   git -C ~/workspace/oh-my-devenv-public config --worktree --get user.email
-   git -C ~/workspace/oh-my-devenv-public config --worktree --get remote.pushDefault
-   git -C ~/workspace/oh-my-devenv-internal config --worktree --get user.email
-   git -C ~/workspace/oh-my-devenv-internal config --worktree --get remote.pushDefault
-   ```
-
-Keep the machine-wide fallback identity in the managed `~/.gitconfig`, and keep
-the worktree-specific identities in the repositories themselves. Do **not** try
-to solve the public/internal split by editing `~/.gitconfig.local` before every
-commit.
-
-If you are also using the pre-push guardrail, export `WORK_EMAIL_SUFFIX` and
-`WORK_GIT_HOST` from a local secrets file or hard-code them in the copied hook
-on your machine. The hook will then block the two common mistakes:
-
-- pushing a work identity to a non-work remote
-- pushing a non-work identity to the protected work remote
-
 ## What Belongs Here vs. Upstream
 
 These overlays exist specifically for values that **must not** be part of the

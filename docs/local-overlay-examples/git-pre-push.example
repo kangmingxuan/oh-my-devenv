@@ -9,10 +9,10 @@ set -euo pipefail
 # Replace the placeholders below before you rely on this guardrail.
 # Leaving them untouched turns the hook into a no-op.
 #
-# This hook works especially well with a split public/internal worktree setup,
-# where each worktree keeps its own `user.email` and `remote.pushDefault`.
-# The hook then catches the common cross-push mistakes without changing how you
-# commit locally.
+# This hook works especially well when you push to more than one remote with
+# different identities (for example a work remote and a personal one). The hook
+# then catches the common cross-push mistakes without changing how you commit
+# locally.
 #
 # The guardrail is intentionally thin:
 #   - block your work identity from pushing to non-matching remotes

@@ -226,9 +226,8 @@ syntax_check sh "$repo_root/dot_profile"
 
 render_template dot_gitconfig.tmpl "$tmp_dir/dot_gitconfig"
 assert_file_contains "$tmp_dir/dot_gitconfig" "path = ~/.gitconfig.local"
-# Defend the boundary property without naming any organization: the managed
-# gitconfig must not carry a host-specific URL rewrite. Real internal-host
-# denylist patterns live in the internal overlay's boundary-denylist.txt.
+# The managed gitconfig must stay host-neutral: no hard-coded URL rewrites, so
+# the baseline carries no organization-specific Git routing.
 assert_file_not_contains "$tmp_dir/dot_gitconfig" 'insteadOf'
 assert_file_contains "$repo_root/bootstrap/scripts/common.sh" "$shared_env_literal"
 assert_file_not_contains "$repo_root/bootstrap/scripts/common.sh" "$shared_secrets_literal"
@@ -465,9 +464,7 @@ shellcheck "$repo_root/bootstrap/scripts/common.sh" \
   "$repo_root/bootstrap/scripts/install-go-tools.sh" \
   "$repo_root/bootstrap/scripts/install-oh-my-zsh-assets.sh" \
   "$repo_root/bootstrap/scripts/install-uv-tools.sh" \
-  "$repo_root/bootstrap/scripts/lint-public-boundary.sh" \
   "$repo_root/bootstrap/scripts/mirrors.sh" \
-  "$repo_root/bootstrap/scripts/sync-public-into-internal.sh" \
   "$repo_root/bootstrap/scripts/uninstall.sh" \
   "$repo_root/bootstrap/scripts/run-smoke-tests.sh"
 

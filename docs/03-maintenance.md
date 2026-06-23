@@ -18,119 +18,6 @@ The repository is maintained on a **best-effort** basis by a single maintainer. 
 
 For now this repository does not require a formal maintainer rotation. The maintainer is whoever currently owns the baseline. If ownership later splits across areas (bootstrap vs docs vs CI, or the owner becomes a group), update the repository's ownership metadata and this note together.
 
-## Managing The Public/Internal Split
-
-This repository now operates as a **public core** plus an **internal overlay**.
-
-- The public GitHub repository is the source of truth for shared bootstrap logic, shared docs, and other public-safe defaults.
-- The internal GitLab repository is the source of truth for internal-only defaults, internal workflow files, and internal operational docs.
-- When a change is in scope for both distributions, land it in the public repo first and sync it into the internal repo after review.
-
-### Decide Where To Edit First
-
-Use this rule before opening a branch:
-
-1. If the change benefits both distributions or changes shared runtime behavior, start in the public worktree.
-2. If the change depends on internal hosts, internal identity rules, or GitLab-only workflow, start in the internal worktree.
-3. If the change starts from an internal use case but the mechanism is reusable, upstream the mechanism to public and keep only the values or policy internal.
-
-Examples of **public-first** changes:
-
-- bootstrap script fixes
-- manifest updates for broadly useful tools
-- shared shell/template behavior
-- public-safe documentation clarifications
-- changes to the public quick-start or contribution flow
-
-Examples of **internal-only** changes:
-
-- built-in rewrites for internal Git hosts
-- internal CI / issue / MR workflow files
-- internal corporate-network instructions
-- guardrails tied to internal email domains or internal remotes
-
-### Recommended Local Layout
-
-The current maintainer workflow uses two local worktrees with different Git identities and push defaults:
-
-- **Public worktree**: branch `public-upstream`, tracking `public/main`
-- **Internal worktree**: branch `main`, tracking `origin/main`
-
-That split keeps public commits on a public identity and internal commits on an internal identity while reducing the chance of pushing the right code to the wrong remote.
-
-### Syncing Shared Changes From Public Into Internal
-
-After a shared change lands on GitHub `main`, sync it into the internal repo from the internal worktree:
-
-1. Fetch both remotes:
-
-   ```bash
-   git fetch --multiple public origin --prune
-   ```
-
-   If you want a helper for the branch creation and merge skeleton, start from:
-
-   ```bash
-   bash bootstrap/scripts/sync-public-into-internal.sh
-   ```
-
-2. Cut a short-lived sync branch from internal `main`:
-
-   ```bash
-   git switch -c sync/public-<date> origin/main
-   ```
-
-3. Merge the latest public core:
-
-   ```bash
-   git merge --no-ff public/main
-   ```
-
-4. Resolve conflicts using the boundary rules below.
-5. Run the validation checklist below.
-6. Open a GitLab review branch / MR back into internal `main`.
-
-Do **not** edit `public-upstream` directly from the internal worktree. Treat it as the public history anchor, not as a scratch branch.
-
-### Known Internal Overlay-Owned Paths
-
-The internal repository intentionally owns a small set of paths that may differ from the public core. When a sync touches one of these, assume the internal side needs a deliberate review instead of accepting the merge blindly.
-
-- `.gitlab-ci.yml`
-- `.gitlab/**`
-- `AGENTS.md`
-- `CODEOWNERS`
-- `.chezmoi.toml.tmpl`
-- `.chezmoiscripts/run_onchange_after_60-check.sh.tmpl`
-- `dot_gitconfig.tmpl`
-- `bootstrap/manifests/system/boundary-denylist.txt`
-- `docs/02-corp-network-integration.md`
-- `docs/local-overlay-examples/git-pre-push.example`
-- `bootstrap/scripts/run-smoke-tests.sh`
-
-If a shared improvement belongs in one of those files, extract the reusable part into the public repo first and then re-apply the internal-only part on top.
-
-### Validation After A Public->Internal Sync
-
-Use the strongest practical checks that match the change:
-
-1. Always run:
-
-   ```bash
-   bash bootstrap/scripts/run-smoke-tests.sh
-   ```
-
-2. Follow [docs/03-macos-preflight.md](03-macos-preflight.md) if the synced change touches macOS-specific surface.
-3. Re-check internal-only behavior if the sync touched any overlay-owned path listed above.
-
-### Conflict Rules
-
-When a sync conflicts, use these default rules:
-
-- **Shared behavior wins in the public repo first.** If the conflict is really about shared runtime behavior, update the public repo and sync again instead of inventing a one-off internal patch.
-- **Internal-only policy wins in the internal repo.** Keep internal hosts, internal identity rules, and GitLab-only workflow local to the internal branch.
-- **Do not hide uncertainty inside a merge conflict resolution.** If you cannot explain why a line belongs on one side, stop and classify the change again.
-
 ## Documentation Boundaries
 
 Keep the doc set opinionated and non-overlapping:
@@ -138,10 +25,11 @@ Keep the doc set opinionated and non-overlapping:
 - `README.md`: landing page, quick start, concise repository tour, and the first links a new reader sees on the repository host.
 - `docs/README.md`: the documentation index and "which page should I read?" router.
 - `docs/01-onboarding.md`: the ordered first-run journey from a clean machine to a working baseline.
+- `docs/02-reference.md`: lookup tables for bootstrap hooks, installed tools, day-to-day commands, and environment variables / flags.
 - `docs/local-overlay-examples/`: copyable machine-local templates that deliberately do not deploy through `chezmoi`.
-- `docs/03-macos-preflight.md`: manual review steps for review changes that touch macOS-specific behavior.
+- `docs/04-macos-preflight.md`: manual review steps for review changes that touch macOS-specific behavior.
 - `docs/design/`: rationale and technical design, not operational steps.
-- `docs/04-maintenance.md`: maintainer workflow, validation expectations, dependency hygiene, and release discipline.
+- `docs/03-maintenance.md`: maintainer workflow, validation expectations, dependency hygiene, and release discipline.
 
 When adding new documentation, pick one canonical home and make other pages link to it instead of copying long instructions in multiple places.
 
@@ -160,9 +48,9 @@ A reviewable change is ready to merge when all of the following hold:
   - `smoke-tests-linux` — renders and syntax-checks the baseline on `ubuntu-latest`.
   - `smoke-tests-macos` — the same smoke suite on `macos-latest`, so the `darwin` template arms are rendered and shell-checked instead of going untested.
   - `apply-linux` — a real `chezmoi init --apply` end to end on `ubuntu-latest`, asserting the final environment check prints `All checks passed.`
-  - `boundary-lint` and `secret-scan` — the public-boundary denylist and `gitleaks`.
+  - `secret-scan` — a full `gitleaks` scan of the repository tree.
 
-  Full macOS *install* validation (Brewfile parity, mise runtimes, Go/uv tools) still relies on the manual [`docs/03-macos-preflight.md`](03-macos-preflight.md) checklist and a pasted signoff; the `smoke-tests-macos` job only covers rendering and syntax.
+  Full macOS *install* validation (Brewfile parity, mise runtimes, Go/uv tools) still relies on the manual [`docs/04-macos-preflight.md`](04-macos-preflight.md) checklist and a pasted signoff; the `smoke-tests-macos` job only covers rendering and syntax.
 - At least one maintainer has approved the change.
 - The review description follows the repository's normal template and the change is in scope for the baseline.
 - No unresolved review threads remain.
@@ -182,7 +70,7 @@ Milestones cut annotated git tags (`v0.<M>.0`). After a milestone's final MR mer
 Third-party dependencies pulled in by this repository fall into these categories:
 
 - **System packages** (`apt`, Homebrew): bump the manifest files (`bootstrap/manifests/system/apt-packages.txt`, `bootstrap/manifests/system/Brewfile`). Prefer stable distro names over version pins. macOS GUI apps and personal CLIs stay opt-in through `Brewfile.optional` or user-owned `DOTFILES_EXTRA_BREWFILES` paths, not baseline defaults.
-- **Shell assets** (oh-my-zsh and plugins): managed by explicit Git clone/update. The upstream repository is captured in `bootstrap/manifests/shell/oh-my-zsh-plugins.txt`.
+- **Shell assets** (oh-my-zsh and plugins): managed by explicit Git clone/update. The upstream repository is captured in `bootstrap/manifests/shell/oh-my-zsh-plugins.txt`. That manifest uses a strict two-field, order-sensitive contract shared by four readers (`dot_zshrc.tmpl`, `install-oh-my-zsh-assets.sh`, the `60-check` hook, and `run-smoke-tests.sh`); adding a field or special case means updating all four.
 - **Runtimes** (mise): pinned in `dot_config/mise/config.toml.tmpl`. Bump intentionally.
 - **Binary-distributed tools** (for example `golangci-lint`, `uv`, and `usage`): pinned via mise alongside the runtimes.
 - **Go tools** (`bootstrap/manifests/ecosystem/go-tools.txt`): `@latest` by default, pin only when a regression is known.
@@ -282,7 +170,7 @@ The repository CI pipeline is intentionally lightweight:
 
 - `smoke-tests-linux` and `smoke-tests-macos` render and syntax-check the baseline on `ubuntu-latest` and `macos-latest`; running on both means the `darwin` template arms are exercised, not just the Linux ones.
 - `apply-linux` runs a real `chezmoi init --apply` end to end on `ubuntu-latest` and asserts the final environment check passes, covering installer semantics the render-only smoke suite cannot.
-- `boundary-lint` and `secret-scan` defend the public boundary and scan for secrets.
+- `secret-scan` runs `gitleaks` over the repository tree to catch committed secrets.
 - The pipeline is allowed to be simple and occasionally imperfect. It should catch obvious repo regressions, not model every clean-machine install path on every platform.
 
 The smoke suite is scoped to executable bootstrap behavior: template rendering, shell syntax, manifest parsing, deployability boundaries, mirror mode, and `shellcheck`. It deliberately does not freeze README prose, onboarding headings, changelog markers, badges, ownership wording, or retired CI lanes; those stay governed by review and the documentation boundaries above.
@@ -320,7 +208,7 @@ When your active `chezmoi source-path` points **outside** `~/.local/share/` (for
 - `docs/README.md` — documentation index and reader routing.
 - `README.md` — user-facing bootstrap instructions and repository tour.
 - `docs/01-onboarding.md` — five-minute first-run walkthrough (ordered steps from clean laptop to baseline).
+- `docs/02-reference.md` — bootstrap hooks, installed tools, day-to-day commands, and the full environment-variable / flag reference.
 - `CONTRIBUTING.md` — contributor workflow and scope rules.
-- `docs/design/01-public-github-core-and-internal-gitlab-overlay.en.md` — the design rationale for the current public/internal repository model.
-- `docs/design/02-public-release-and-versioning.en.md` — release and versioning policy for the public repository.
-- `CHANGELOG.md` — human-readable release history per milestone, plus the semver / tagging policy. Every MR that ships a user-visible change updates its `[Unreleased]` section.
+- `docs/design/01-release-and-versioning.en.md` — release and versioning policy.
+- `CHANGELOG.md` — human-readable release history per milestone, plus the semver / tagging policy. Every PR that ships a user-visible change updates its `[Unreleased]` section.
