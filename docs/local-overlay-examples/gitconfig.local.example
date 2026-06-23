@@ -29,15 +29,11 @@
 # git -C ~/workspace/personal/<repo> config user.name "<your-real-name>"
 # git -C ~/workspace/personal/<repo> config user.email "<your.personal.email@example.com>"
 
-# If you maintain separate public/internal worktrees, do not put those
-# per-worktree identities in ~/.gitconfig.local. Keep them in the worktree
-# configs instead:
+# If you use multiple worktrees that each need their own identity, keep those
+# per-worktree identities in the worktree configs, not in ~/.gitconfig.local:
 #
-# git -C ~/workspace/oh-my-devenv-public config extensions.worktreeConfig true
-# git -C ~/workspace/oh-my-devenv-public config --worktree user.email "<your-public-email>"
-# git -C ~/workspace/oh-my-devenv-public config --worktree remote.pushDefault public
-# git -C ~/workspace/oh-my-devenv-internal config --worktree user.email "<your-work-email>"
-# git -C ~/workspace/oh-my-devenv-internal config --worktree remote.pushDefault origin
+# git -C ~/workspace/<repo> config extensions.worktreeConfig true
+# git -C ~/workspace/<repo> config --worktree user.email "<identity-for-this-worktree>"
 
 # --------------------------------------------------------------------------
 # Optional: insteadOf for host-specific Git URLs.

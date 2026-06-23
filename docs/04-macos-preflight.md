@@ -130,10 +130,10 @@ The `smoke-tests-macos` job already covers rendering and syntax. Promoting CI to
 
 1. Add a job (or step) that runs a real `chezmoi init --apply` on a macOS runner, mirroring the `apply-linux` job, and asserts the final environment check passes.
 2. Add the macOS Brewfile-parity and mise-runtime checks from this checklist (steps 3 and 4) as scripted assertions.
-3. Update `docs/04-maintenance.md` "Review Expectations" to describe the expanded CI surface, and update this document's introduction.
+3. Update `docs/03-maintenance.md` "Review Expectations" to describe the expanded CI surface, and update this document's introduction.
 4. Keep the preflight checklist itself — it remains the right document for MRs that touch macOS surface in ways a single CI shape cannot cover (new hardware, OS upgrade, Xcode CLT jumps).
 
 ## Related Documents
 
 - [`README.md`](../README.md) — user-facing bootstrap instructions.
-- [`docs/04-maintenance.md`](04-maintenance.md) — day-to-day maintenance model and CI job list.
+- [`docs/03-maintenance.md`](03-maintenance.md) — day-to-day maintenance model and CI job list.
