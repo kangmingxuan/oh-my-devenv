@@ -1,18 +1,25 @@
+# Repository documentation and metadata. These files belong in the source repo
+# but should not be deployed into $HOME as normal targets.
 README.md
+README.zh.md
 CHANGELOG.md
+CONTRIBUTING.md
 LICENSE
 docs/**
 .gitignore
 .pre-commit-config.yaml
 .github
 .github/**
+
+# Local or assistant/runtime state must not be deployed from this source tree.
 .agents
 .agents/**
 .claude
 .claude/**
 .codex
 .codex/**
+
+# Source-only bootstrap assets. Hooks read these from the source checkout.
 bootstrap
 bootstrap/**
-CONTRIBUTING.md
 .ci-chezmoi-data.toml
