@@ -112,7 +112,10 @@ if command -v fzf >/dev/null 2>&1; then
 fi
 
 # Set GPG_TTY for GPG agent to work properly in terminal.
-export GPG_TTY="$(tty)"
+if [ -t 0 ]; then
+  GPG_TTY="$(tty)"
+  export GPG_TTY
+fi
 
 # Load local interactive overlay last so it can intentionally override
 # baseline aliases, prompt, functions, and key bindings. Put shared non-secret
