@@ -75,6 +75,8 @@ check_oh_my_zsh_plugins() {
   local plugin_path=""
 
   while IFS= read -r plugin_entry; do
+    # shellcheck disable=SC2086
+    # Manifest entries are repo/path pairs and must split on IFS here.
     set -- $plugin_entry
     plugin_repo="${1:-}"
     plugin_path="${2:-}"

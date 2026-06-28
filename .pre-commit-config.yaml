@@ -5,3 +5,12 @@ repos:
       - id: gitleaks
         args:
           - --redact=100
+  - repo: local
+    hooks:
+      - id: shellcheck-bootstrap-scripts
+        name: shellcheck bootstrap scripts
+        entry: shellcheck
+        language: system
+        files: ^bootstrap/scripts/.*\.sh$
+        args:
+          - -x
