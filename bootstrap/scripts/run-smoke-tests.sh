@@ -448,11 +448,15 @@ for consumer in \
 done
 # 30-install-mise.sh.tmpl is the only consumer we touched inside a
 # chezmoi template; assert its rendered form also wired the helper.
+mise_install_line="mise_install_url=\"\${DOTFILES_MISE_INSTALL_URL:-https://mise.run}\""
+mise_curl_line="curl -fsSL \"\$mise_install_url\" | sh"
 assert_file_contains "$tmp_dir/run_onchange_after_30-install-mise.sh" "dotfiles_apply_mirror_env"
 if grep -Fq 'curl -fsSL' "$tmp_dir/run_onchange_after_30-install-mise.sh"; then
-  assert_file_contains "$tmp_dir/run_onchange_after_30-install-mise.sh" "DOTFILES_MISE_INSTALL_URL"
+  assert_file_contains "$tmp_dir/run_onchange_after_30-install-mise.sh" "$mise_install_line"
+  assert_file_contains "$tmp_dir/run_onchange_after_30-install-mise.sh" "$mise_curl_line"
 else
-  assert_file_not_contains "$tmp_dir/run_onchange_after_30-install-mise.sh" "DOTFILES_MISE_INSTALL_URL"
+  assert_file_not_contains "$tmp_dir/run_onchange_after_30-install-mise.sh" "$mise_install_line"
+  assert_file_not_contains "$tmp_dir/run_onchange_after_30-install-mise.sh" "$mise_curl_line"
   assert_file_contains "$tmp_dir/run_onchange_after_30-install-mise.sh" "\"\$BREW_CMD\" install mise"
 fi
 
