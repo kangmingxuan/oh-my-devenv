@@ -5,12 +5,10 @@ repos:
       - id: gitleaks
         args:
           - --redact=100
-  - repo: local
+  - repo: https://github.com/shellcheck-py/shellcheck-py
+    rev: v0.11.0.1
     hooks:
-      - id: shellcheck-bootstrap-scripts
-        name: shellcheck bootstrap scripts
-        entry: shellcheck
-        language: system
+      - id: shellcheck
         files: ^bootstrap/scripts/.*\.sh$
         args:
           - -x

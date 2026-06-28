@@ -73,15 +73,12 @@ check_oh_my_zsh_plugins() {
   local plugin_entry=""
   local plugin_repo=""
   local plugin_path=""
+  local extra_field=""
 
   while IFS= read -r plugin_entry; do
-    # shellcheck disable=SC2086
-    # Manifest entries are repo/path pairs and must split on IFS here.
-    set -- $plugin_entry
-    plugin_repo="${1:-}"
-    plugin_path="${2:-}"
+    read -r plugin_repo plugin_path extra_field <<<"$plugin_entry"
 
-    if [[ -z "$plugin_repo" || -z "$plugin_path" ]]; then
+    if [[ -z "$plugin_repo" || -z "$plugin_path" || -n "$extra_field" ]]; then
       log_warning "Skipping invalid oh-my-zsh plugin entry in $manifest: $plugin_entry"
       errors=$((errors + 1))
       continue
