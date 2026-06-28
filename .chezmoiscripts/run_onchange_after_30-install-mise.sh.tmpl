@@ -13,8 +13,6 @@ install_error_trap "$0"
 # iff the user supplied it. See bootstrap/scripts/mirrors.sh.
 dotfiles_apply_mirror_env
 
-mise_install_url="${DOTFILES_MISE_INSTALL_URL:-https://mise.run}"
-
 mise_bin=""
 
 if command -v mise >/dev/null 2>&1; then
@@ -39,6 +37,7 @@ else
   eval "$($BREW_CMD shellenv)"
   "$BREW_CMD" install mise
 {{ else -}}
+  mise_install_url="${DOTFILES_MISE_INSTALL_URL:-https://mise.run}"
   curl -fsSL "$mise_install_url" | sh
 {{ end -}}
   log_step "✅" "mise installed successfully."

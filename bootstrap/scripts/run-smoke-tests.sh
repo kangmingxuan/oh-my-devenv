@@ -54,6 +54,12 @@ syntax_check() {
   "$shell_name" -n "$file_path"
 }
 
+shellcheck_rendered_bash() {
+  local file_path="$1"
+
+  shellcheck -s bash -e SC1091 "$file_path"
+}
+
 fail_test() {
   printf 'ERROR: %s\n' "$*" >&2
   exit 1
@@ -202,11 +208,13 @@ assert_file_not_contains "$tmp_dir/env.zsh" "$zsh_overlay_literal"
 
 render_template dot_bashrc.tmpl "$tmp_dir/dot_bashrc"
 syntax_check bash "$tmp_dir/dot_bashrc"
+shellcheck_rendered_bash "$tmp_dir/dot_bashrc"
 assert_file_contains "$tmp_dir/dot_bashrc" "$shared_secrets_literal"
 assert_file_contains "$tmp_dir/dot_bashrc" "$bash_overlay_literal"
 
 render_template dot_bash/env.bash.tmpl "$tmp_dir/env.bash"
 syntax_check bash "$tmp_dir/env.bash"
+shellcheck_rendered_bash "$tmp_dir/env.bash"
 assert_file_contains "$tmp_dir/env.bash" "$shared_env_literal"
 assert_file_not_contains "$tmp_dir/env.bash" "$shared_secrets_literal"
 assert_file_not_contains "$tmp_dir/env.bash" "$bash_overlay_literal"
@@ -235,6 +243,7 @@ assert_file_not_contains "$repo_root/bootstrap/scripts/common.sh" "$shared_secre
 log_step "📜" "Rendering and checking chezmoi bootstrap scripts..."
 render_template .chezmoiscripts/run_once_before_10-bootstrap.sh.tmpl "$tmp_dir/run_once_before_10-bootstrap.sh"
 syntax_check bash "$tmp_dir/run_once_before_10-bootstrap.sh"
+shellcheck_rendered_bash "$tmp_dir/run_once_before_10-bootstrap.sh"
 assert_file_contains "$tmp_dir/run_once_before_10-bootstrap.sh" "backup_existing_managed_configs()"
 assert_file_contains "$tmp_dir/run_once_before_10-bootstrap.sh" "chezmoi-first-run-backup"
 assert_file_contains "$tmp_dir/run_once_before_10-bootstrap.sh" ".ssh/config"
@@ -246,6 +255,7 @@ assert_file_contains "$tmp_dir/run_once_before_10-bootstrap.sh" "install_error_t
 
 render_template .chezmoiscripts/run_onchange_after_20-install-system-packages.sh.tmpl "$tmp_dir/run_onchange_after_20-install-system-packages.sh"
 syntax_check bash "$tmp_dir/run_onchange_after_20-install-system-packages.sh"
+shellcheck_rendered_bash "$tmp_dir/run_onchange_after_20-install-system-packages.sh"
 assert_file_contains "$tmp_dir/run_onchange_after_20-install-system-packages.sh" "install_error_trap"
 if grep -Fq "Installing system packages via Homebrew" "$tmp_dir/run_onchange_after_20-install-system-packages.sh"; then
   assert_file_contains "$tmp_dir/run_onchange_after_20-install-system-packages.sh" "Brewfile.optional hash:"
@@ -263,14 +273,17 @@ fi
 
 render_template .chezmoiscripts/run_onchange_after_25-install-shell-assets.sh.tmpl "$tmp_dir/run_onchange_after_25-install-shell-assets.sh"
 syntax_check bash "$tmp_dir/run_onchange_after_25-install-shell-assets.sh"
+shellcheck_rendered_bash "$tmp_dir/run_onchange_after_25-install-shell-assets.sh"
 assert_file_contains "$tmp_dir/run_onchange_after_25-install-shell-assets.sh" "install_error_trap"
 
 render_template .chezmoiscripts/run_onchange_after_30-install-mise.sh.tmpl "$tmp_dir/run_onchange_after_30-install-mise.sh"
 syntax_check bash "$tmp_dir/run_onchange_after_30-install-mise.sh"
+shellcheck_rendered_bash "$tmp_dir/run_onchange_after_30-install-mise.sh"
 assert_file_contains "$tmp_dir/run_onchange_after_30-install-mise.sh" "install_error_trap"
 
 render_template .chezmoiscripts/run_onchange_after_40-install-runtimes.sh.tmpl "$tmp_dir/run_onchange_after_40-install-runtimes.sh"
 syntax_check bash "$tmp_dir/run_onchange_after_40-install-runtimes.sh"
+shellcheck_rendered_bash "$tmp_dir/run_onchange_after_40-install-runtimes.sh"
 assert_file_contains "$tmp_dir/run_onchange_after_40-install-runtimes.sh" "install_error_trap"
 assert_file_contains "$tmp_dir/run_onchange_after_40-install-runtimes.sh" "MISE_GITHUB_ATTESTATIONS=\"\${MISE_GITHUB_ATTESTATIONS:-false}\""
 assert_file_contains "$tmp_dir/run_onchange_after_40-install-runtimes.sh" "MISE_AQUA_GITHUB_ATTESTATIONS=\"\${MISE_AQUA_GITHUB_ATTESTATIONS:-false}\""
@@ -279,10 +292,12 @@ assert_file_contains "$tmp_dir/run_onchange_after_40-install-runtimes.sh" "mise 
 
 render_template .chezmoiscripts/run_onchange_after_50-sync-ecosystem-tools.sh.tmpl "$tmp_dir/run_onchange_after_50-sync-ecosystem-tools.sh"
 syntax_check bash "$tmp_dir/run_onchange_after_50-sync-ecosystem-tools.sh"
+shellcheck_rendered_bash "$tmp_dir/run_onchange_after_50-sync-ecosystem-tools.sh"
 assert_file_contains "$tmp_dir/run_onchange_after_50-sync-ecosystem-tools.sh" "install_error_trap"
 
 render_template .chezmoiscripts/run_onchange_after_60-check.sh.tmpl "$tmp_dir/run_onchange_after_60-check.sh"
 syntax_check bash "$tmp_dir/run_onchange_after_60-check.sh"
+shellcheck_rendered_bash "$tmp_dir/run_onchange_after_60-check.sh"
 assert_file_contains "$tmp_dir/run_onchange_after_60-check.sh" "install_error_trap"
 assert_file_contains "$tmp_dir/run_onchange_after_60-check.sh" "Core tools in this environment"
 assert_file_contains "$tmp_dir/run_onchange_after_60-check.sh" "print_version_line chezmoi"
@@ -433,8 +448,17 @@ for consumer in \
 done
 # 30-install-mise.sh.tmpl is the only consumer we touched inside a
 # chezmoi template; assert its rendered form also wired the helper.
+mise_install_line="mise_install_url=\"\${DOTFILES_MISE_INSTALL_URL:-https://mise.run}\""
+mise_curl_line="curl -fsSL \"\$mise_install_url\" | sh"
 assert_file_contains "$tmp_dir/run_onchange_after_30-install-mise.sh" "dotfiles_apply_mirror_env"
-assert_file_contains "$tmp_dir/run_onchange_after_30-install-mise.sh" "DOTFILES_MISE_INSTALL_URL"
+if grep -Fq 'curl -fsSL' "$tmp_dir/run_onchange_after_30-install-mise.sh"; then
+  assert_file_contains "$tmp_dir/run_onchange_after_30-install-mise.sh" "$mise_install_line"
+  assert_file_contains "$tmp_dir/run_onchange_after_30-install-mise.sh" "$mise_curl_line"
+else
+  assert_file_not_contains "$tmp_dir/run_onchange_after_30-install-mise.sh" "$mise_install_line"
+  assert_file_not_contains "$tmp_dir/run_onchange_after_30-install-mise.sh" "$mise_curl_line"
+  assert_file_contains "$tmp_dir/run_onchange_after_30-install-mise.sh" "\"\$BREW_CMD\" install mise"
+fi
 
 log_step "🧬" "Verifying chezmoi init template renders..."
 

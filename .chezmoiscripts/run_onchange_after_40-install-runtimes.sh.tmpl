@@ -6,7 +6,6 @@ set -euo pipefail
 export PATH="$HOME/.local/bin:$HOME/.local/share/mise/shims:$PATH"
 
 bootstrap_dir='{{ joinPath .chezmoi.sourceDir "bootstrap" }}'
-source_dir='{{ .chezmoi.sourceDir }}'
 scripts_dir="$bootstrap_dir/scripts"
 
 source "$scripts_dir/common.sh"

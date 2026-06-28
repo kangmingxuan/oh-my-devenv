@@ -5,8 +5,3 @@ setup_go_env() {
   export GOBIN="${GOBIN:-$GOPATH/bin}"
   mkdir -p "$GOBIN"
 }
-
-prepend_go_bin_to_path() {
-  setup_go_env
-  export PATH="$GOBIN:$PATH"
-}
