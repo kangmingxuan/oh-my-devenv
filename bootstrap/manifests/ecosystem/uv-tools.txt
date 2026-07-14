@@ -1,5 +1,5 @@
 # Prefer pinned versions for fast-moving Python CLI tools so diagnostics and
 # local automation stay stable across machines.
-ruff==0.15.5
-basedpyright==1.38.2
-pre-commit==4.5.1
+ruff==0.15.21
+basedpyright==1.39.9
+pre-commit==4.6.0

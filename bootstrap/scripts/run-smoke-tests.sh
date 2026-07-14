@@ -323,6 +323,16 @@ fi
 log_step "🧩" "Running manifest contract checks..."
 check_tool_manifest_parser "$repo_root/bootstrap/manifests/ecosystem/go-tools.txt" go_tool_binary_name
 check_tool_manifest_parser "$repo_root/bootstrap/manifests/ecosystem/uv-tools.txt" uv_tool_binary_name
+if grep -Eq '@latest([[:space:]]|$)' "$repo_root/bootstrap/manifests/ecosystem/go-tools.txt"; then
+  fail_test "go-tools.txt must pin exact versions instead of @latest"
+fi
+
+mise_config="$repo_root/dot_config/mise/config.toml.tmpl"
+for runtime in go node python; do
+  if ! grep -Eq "^${runtime} = \"v?[0-9]+\.[0-9]+\.[0-9]+\"$" "$mise_config"; then
+    fail_test "mise config must pin $runtime to a complete major.minor.patch version"
+  fi
+done
 check_oh_my_zsh_manifest_contract "$repo_root/bootstrap/manifests/shell/oh-my-zsh-plugins.txt" "$tmp_dir/dot_zshrc"
 assert_file_contains "$tmp_dir/run_onchange_after_60-check.sh" "check_manifest_cmds \"\$manifests_dir/ecosystem/go-tools.txt\" go_tool_binary_name"
 assert_file_contains "$tmp_dir/run_onchange_after_60-check.sh" "check_manifest_cmds \"\$manifests_dir/ecosystem/uv-tools.txt\" uv_tool_binary_name"

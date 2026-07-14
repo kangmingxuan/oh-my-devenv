@@ -36,7 +36,7 @@ is the source of truth for exact packages and pinned versions.
 |-------|--------------|----------|----------|
 | System packages | `apt` (Linux / WSL) | [`bootstrap/manifests/system/apt-packages.txt`](../bootstrap/manifests/system/apt-packages.txt) | git, curl, wget, zsh, tmux, jq, ripgrep, fzf, direnv, fd-find, bat, tree, zip, unzip, shellcheck, shfmt, build-essential, pkg-config |
 | System packages | Homebrew (macOS) | [`bootstrap/manifests/system/Brewfile`](../bootstrap/manifests/system/Brewfile) | the same CLI set plus yq, gnupg, pinentry-mac, and gh |
-| Runtimes | [mise](https://mise.jdx.dev/) | [`dot_config/mise/config.toml.tmpl`](../dot_config/mise/config.toml.tmpl) | go, node, python, golangci-lint, uv, usage (versions pinned here) |
+| Runtimes and binary tools | [mise](https://mise.jdx.dev/) | [`dot_config/mise/config.toml.tmpl`](../dot_config/mise/config.toml.tmpl) | go, node, python, golangci-lint, uv (versions pinned here) |
 | Go tools | `go install` | [`bootstrap/manifests/ecosystem/go-tools.txt`](../bootstrap/manifests/ecosystem/go-tools.txt) | gopls, dlv |
 | Python tools | `uv tool` | [`bootstrap/manifests/ecosystem/uv-tools.txt`](../bootstrap/manifests/ecosystem/uv-tools.txt) | ruff, basedpyright, pre-commit |
 | Shell assets | git clone | [`bootstrap/manifests/shell/oh-my-zsh-plugins.txt`](../bootstrap/manifests/shell/oh-my-zsh-plugins.txt) | oh-my-zsh + zsh-autosuggestions, zsh-completions, zsh-syntax-highlighting |
