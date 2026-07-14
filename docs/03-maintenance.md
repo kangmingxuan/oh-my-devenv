@@ -71,12 +71,15 @@ Third-party dependencies pulled in by this repository fall into these categories
 
 - **System packages** (`apt`, Homebrew): bump the manifest files (`bootstrap/manifests/system/apt-packages.txt`, `bootstrap/manifests/system/Brewfile`). Prefer stable distro names over version pins. macOS GUI apps and personal CLIs stay opt-in through `Brewfile.optional` or user-owned `DOTFILES_EXTRA_BREWFILES` paths, not baseline defaults.
 - **Shell assets** (oh-my-zsh and plugins): managed by explicit Git clone/update. The upstream repository is captured in `bootstrap/manifests/shell/oh-my-zsh-plugins.txt`. That manifest uses a strict two-field, order-sensitive contract shared by four readers (`dot_zshrc.tmpl`, `install-oh-my-zsh-assets.sh`, the `60-check` hook, and `run-smoke-tests.sh`); adding a field or special case means updating all four.
-- **Runtimes** (mise): pinned in `dot_config/mise/config.toml.tmpl`. Bump intentionally.
-- **Binary-distributed tools** (for example `golangci-lint`, `uv`, and `usage`): pinned via mise alongside the runtimes.
-- **Go tools** (`bootstrap/manifests/ecosystem/go-tools.txt`): `@latest` by default, pin only when a regression is known.
+- **Runtimes** (mise): pinned to complete versions in `dot_config/mise/config.toml.tmpl`. Bump intentionally.
+- **Binary-distributed tools** (for example `golangci-lint` and `uv`): pinned via mise alongside the runtimes.
+- **Go tools** (`bootstrap/manifests/ecosystem/go-tools.txt`): pin exact module versions so clean installs and existing machines converge.
 - **Python tools** (`bootstrap/manifests/ecosystem/uv-tools.txt`): prefer pinned versions.
 
-When bumping a pinned dependency, keep the bump isolated in its own merge request and include a short note in the MR description explaining why.
+Related low-risk dependency updates may share a merge request when they use the
+same validation path and remain easy to review and roll back. Keep major,
+breaking, or independently risky upgrades isolated, and explain the grouping
+and validation in the merge request description.
 
 If you touch the install flow itself, keep the change scoped and review the relevant entrypoint under `bootstrap/scripts/install-*.sh` before merging.
 

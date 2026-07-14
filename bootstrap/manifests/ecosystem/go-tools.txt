@@ -1,4 +1,6 @@
-# Go tools accept module@version syntax. Keep `@latest` unless a known
-# regression or compatibility issue justifies pinning.
-golang.org/x/tools/gopls@latest
-github.com/go-delve/delve/cmd/dlv@latest
+# Go tools accept module@version syntax. Pin exact versions so installs are
+# reproducible and version bumps trigger the run_onchange hook.
+# gopls v0.22+ requires Go 1.26; v0.21.1 is the newest release compatible with
+# the baseline's Go 1.25 runtime.
+golang.org/x/tools/gopls@v0.21.1
+github.com/go-delve/delve/cmd/dlv@v1.27.0

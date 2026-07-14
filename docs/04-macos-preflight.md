@@ -74,7 +74,9 @@ mise list        # what is installed, per runtime
 mise doctor      # mise's own self-check; warnings are usually cosmetic, errors are not
 ```
 
-Expected outcome: `mise current` agrees with the manifest (`go 1.25`, `node 24`, `python 3.13`, `golangci-lint v2.11.2`, `uv 0.10.9`, `usage 2.18.2`). Any mismatch goes into the signoff.
+Expected outcome: `mise current` agrees exactly with
+[`dot_config/mise/config.toml.tmpl`](../dot_config/mise/config.toml.tmpl). Any
+mismatch goes into the signoff.
 
 ## 5. Hand-Validate go / uv Tool State
 

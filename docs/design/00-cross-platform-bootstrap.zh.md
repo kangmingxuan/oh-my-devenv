@@ -22,7 +22,7 @@
 2. **系统包管理器**：
    - macOS 使用 `Homebrew`
    - Ubuntu / Debian / WSL 使用 `apt`
-3. **mise**：负责语言运行时与二进制分发工具的版本管理，如 Go / Node / Python / `golangci-lint` / `usage`
+3. **mise**：负责语言运行时与二进制分发工具的版本管理，如 Go / Node / Python / `golangci-lint` / `uv`
 4. **生态工具安装器**：负责语言生态内工具
    - Go：`go install`（如 `gopls`、`dlv`）
    - Python：`uv tool`
@@ -221,22 +221,23 @@ bat
 ### `go-tools.txt`
 
 ```text
-golang.org/x/tools/gopls@latest
-github.com/go-delve/delve/cmd/dlv@latest
+golang.org/x/tools/gopls@v0.21.1
+github.com/go-delve/delve/cmd/dlv@v1.27.0
 ```
 
 说明：
 
 - `go-tools.txt` 直接使用 `go install` 的 `module@version` 语法
-- 默认可以保留 `@latest`
-- 只有在遇到已知回归或兼容性问题时再固定版本
+- 固定精确版本，让全新安装与已有机器收敛到相同结果
+- 有意升级版本，使 manifest hash 能触发生态工具安装 hook
+- 确保每个工具都兼容固定的 Go runtime；gopls v0.22 及以上版本要求 Go 1.26
 
 ### `uv-tools.txt`
 
 ```text
-ruff==0.15.5
-basedpyright==1.38.2
-pre-commit==4.5.1
+ruff==0.15.21
+basedpyright==1.39.9
+pre-commit==4.6.0
 ```
 
 说明：
@@ -248,11 +249,10 @@ pre-commit==4.5.1
 
 ```toml
 [tools]
-go = "1.25"
-golangci-lint = "v2.11.2"
-node = "24"
-python = "3.13"
-usage = "2.18.2"
+go = "1.25.12"
+golangci-lint = "v2.12.2"
+node = "24.18.0"
+python = "3.13.14"
 uv = "0.10.9"
 ```
 

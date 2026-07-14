@@ -22,7 +22,7 @@ Use the following layered model:
 2. **System package manager**:
    - macOS uses `Homebrew`
    - Ubuntu / Debian / WSL use `apt`
-3. **mise**: manages runtime versions and binary-distributed tools such as Go / Node / Python / `golangci-lint` / `usage`
+3. **mise**: manages runtime versions and binary-distributed tools such as Go / Node / Python / `golangci-lint` / `uv`
 4. **Ecosystem tool installers**: manage language-specific tools
    - Go: `go install` (for tools such as `gopls` and `dlv`)
    - Python: `uv tool`
@@ -221,22 +221,23 @@ bat
 ### `go-tools.txt`
 
 ```text
-golang.org/x/tools/gopls@latest
-github.com/go-delve/delve/cmd/dlv@latest
+golang.org/x/tools/gopls@v0.21.1
+github.com/go-delve/delve/cmd/dlv@v1.27.0
 ```
 
 Notes:
 
 - `go-tools.txt` uses native `go install` `module@version` syntax
-- Keep `@latest` by default
-- Pin only when you need to hold a known-good version because of a regression or compatibility issue
+- Pin exact versions so clean installs and existing machines converge
+- Bump versions intentionally so the manifest hash triggers the ecosystem-tool hook
+- Keep each tool compatible with the pinned Go runtime; gopls v0.22 and newer require Go 1.26
 
 ### `uv-tools.txt`
 
 ```text
-ruff==0.15.5
-basedpyright==1.38.2
-pre-commit==4.5.1
+ruff==0.15.21
+basedpyright==1.39.9
+pre-commit==4.6.0
 ```
 
 Notes:
@@ -248,11 +249,10 @@ Notes:
 
 ```toml
 [tools]
-go = "1.25"
-golangci-lint = "v2.11.2"
-node = "24"
-python = "3.13"
-usage = "2.18.2"
+go = "1.25.12"
+golangci-lint = "v2.12.2"
+node = "24.18.0"
+python = "3.13.14"
 uv = "0.10.9"
 ```
 

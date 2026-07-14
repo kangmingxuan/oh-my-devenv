@@ -29,9 +29,11 @@ This repository versions the baseline with [Semantic Versioning 2.0](https://sem
 
 ### Changed
 
+- Pinned Go, Node, and Python to complete patch versions; refreshed the Go, Python, lint, hook, and secret-scanning tools to current compatible releases; and made related low-risk dependency maintenance a single reviewable change.
 - Reworked the root `README.md` into a more scannable landing page: added status and platform badges, a "What you get" feature summary, and a Mermaid bootstrap-flow diagram; relocated the verbose first-run details to `docs/01-onboarding.md`; and moved the best-effort scope note into its own section. The Quick Start steps and the `#quick-start` anchor are unchanged.
 - Reorganized `docs/README.md` around reader intent (use / customize / look up / understand / maintain) and refreshed the operational docs to match the current bootstrap — the `run_before_00-banner` hook, the `MISE_PYTHON_GITHUB_ATTESTATIONS` override, and the oh-my-zsh plugin-manifest contract.
 
 ### Removed
 
+- The unused `usage` CLI from the shared baseline. Existing machine-local installs are left untouched and can be removed explicitly with `mise uninstall usage@2.18.2`.
 - The unused `isWsl` chezmoi data flag and the `DOTFILES_FORCE_WSL` escape hatch, plus the redundant `smoke-tests-wsl-shaped` CI job. WSL continues to work through the standard Linux path.
