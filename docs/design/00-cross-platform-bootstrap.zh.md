@@ -253,7 +253,7 @@ go = "1.25.12"
 golangci-lint = "v2.12.2"
 node = "24.18.0"
 python = "3.13.14"
-uv = "0.10.9"
+uv = "0.11.28"
 ```
 
 ## 10. helper script 职责
