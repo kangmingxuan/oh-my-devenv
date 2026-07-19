@@ -1,0 +1,9 @@
+# Copy this file to ~/.config/ghostty/config.local.ghostty.
+# The managed Ghostty baseline loads it last, so values here override shared
+# defaults without becoming part of the repository.
+
+# Example machine-specific overrides:
+# font-size = 14
+# window-width = 140
+# window-height = 40
+# keybind = global:f12=unbind

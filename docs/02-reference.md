@@ -16,13 +16,14 @@ manifest changes (chezmoi tracks a content hash), so routine re-applies are chea
 | Order | Hook | What it does |
 |-------|------|--------------|
 | 0 | `run_before_00-banner` | Prints the startup banner. Suppress with `NO_LOGO=1`. |
-| 1 | `run_once_before_10-bootstrap` | One-time setup: backs up any pre-existing managed files, then prompts once for your Git author name and email. |
+| 1 | `run_once_before_10-bootstrap` | One-time setup: backs up any pre-existing managed files and ensures minimum prerequisites. |
 | 2 | `run_onchange_after_20-install-system-packages` | Installs system packages — `apt` on Linux / WSL, Homebrew on macOS. Honors the macOS Brewfile opt-ins below. |
-| 3 | `run_onchange_after_25-install-shell-assets` | Installs oh-my-zsh and the plugins from the shell manifest. |
-| 4 | `run_onchange_after_30-install-mise` | Installs [mise](https://mise.jdx.dev/) (Homebrew on macOS, installer script on Linux). |
-| 5 | `run_onchange_after_40-install-runtimes` | Runs `mise install` to fetch the pinned runtimes. |
-| 6 | `run_onchange_after_50-sync-ecosystem-tools` | Installs the Go tools (`go install`) and Python tools (`uv tool`). |
-| 7 | `run_onchange_after_60-check` | Final environment check. On success prints **`All checks passed.`**, a core-tool version list, and a short next-steps block. |
+| 3 | `run_onchange_after_22-install-desktop-assets` | When selected, installs Ghostty and Maple Mono NF CN on supported desktop platforms. |
+| 4 | `run_onchange_after_25-install-shell-assets` | Installs oh-my-zsh and the plugins from the shell manifest. |
+| 5 | `run_onchange_after_30-install-mise` | Installs [mise](https://mise.jdx.dev/) (Homebrew on macOS, installer script on Linux). |
+| 6 | `run_onchange_after_40-install-runtimes` | Runs `mise install` to fetch the pinned runtimes. |
+| 7 | `run_onchange_after_50-sync-ecosystem-tools` | Installs the Go tools (`go install`) and Python tools (`uv tool`). |
+| 8 | `run_onchange_after_60-check` | Final environment check. On success prints **`All checks passed.`**, a core-tool version list, and a short next-steps block. |
 
 The first-run backups land under
 `${XDG_STATE_HOME:-$HOME/.local/state}/chezmoi-first-run-backup/<timestamp>/`.
@@ -36,14 +37,29 @@ is the source of truth for exact packages and pinned versions.
 |-------|--------------|----------|----------|
 | System packages | `apt` (Linux / WSL) | [`bootstrap/manifests/system/apt-packages.txt`](../bootstrap/manifests/system/apt-packages.txt) | git, curl, wget, zsh, tmux, jq, ripgrep, fzf, direnv, fd-find, bat, tree, zip, unzip, shellcheck, shfmt, build-essential, pkg-config |
 | System packages | Homebrew (macOS) | [`bootstrap/manifests/system/Brewfile`](../bootstrap/manifests/system/Brewfile) | the same CLI set plus yq, gnupg, pinentry-mac, and gh |
+| Desktop assets | Homebrew (macOS) | [`bootstrap/manifests/desktop/Brewfile`](../bootstrap/manifests/desktop/Brewfile) | Ghostty and Maple Mono NF CN |
+| Desktop terminal | `apt` + managed config (Ubuntu 26.04+) | [`bootstrap/manifests/desktop/apt-packages.txt`](../bootstrap/manifests/desktop/apt-packages.txt) | Ghostty, Fontconfig support, and a managed `monospace` compatibility rule |
+| Desktop font | verified archive (Ubuntu 26.04+) | [`bootstrap/manifests/desktop/maple-mono-nf-cn.env`](../bootstrap/manifests/desktop/maple-mono-nf-cn.env) | pinned Maple Mono NF CN release installed under the user data directory |
 | Runtimes and binary tools | [mise](https://mise.jdx.dev/) | [`dot_config/mise/config.toml.tmpl`](../dot_config/mise/config.toml.tmpl) | go, node, python, golangci-lint, uv (versions pinned here) |
 | Go tools | `go install` | [`bootstrap/manifests/ecosystem/go-tools.txt`](../bootstrap/manifests/ecosystem/go-tools.txt) | gopls, dlv |
 | Python tools | `uv tool` | [`bootstrap/manifests/ecosystem/uv-tools.txt`](../bootstrap/manifests/ecosystem/uv-tools.txt) | ruff, basedpyright, pre-commit |
 | Shell assets | git clone | [`bootstrap/manifests/shell/oh-my-zsh-plugins.txt`](../bootstrap/manifests/shell/oh-my-zsh-plugins.txt) | oh-my-zsh + zsh-autosuggestions, zsh-completions, zsh-syntax-highlighting |
 
-macOS GUI apps are never installed by default. OrbStack lives in
+The desktop layer is controlled by the persisted `desktopBaseline` machine
+choice. It is supported on macOS and non-WSL Ubuntu 26.04+; other platforms
+render no Ghostty config and install no desktop assets. OrbStack remains outside
+that shared choice: it lives in
 [`bootstrap/manifests/system/Brewfile.optional`](../bootstrap/manifests/system/Brewfile.optional)
 and only installs when you opt in (see the Brewfile flags below).
+
+On supported Ubuntu machines,
+`~/.config/fontconfig/conf.d/99-oh-my-devenv-maple-mono-nf-cn.conf` makes the
+generic Fontconfig `monospace` family resolve to Maple Mono NF CN before distro
+fallbacks. Ghostty needs that compatibility rule on the supported Linux stack;
+because the match is deliberately generic, the preference also applies to
+other Fontconfig clients. The final check verifies both that Fontconfig loaded
+the managed fragment and that `fc-match monospace` returns the regular Maple
+Mono NF CN face.
 
 ## Day-to-day commands
 
@@ -56,6 +72,11 @@ chezmoi apply
 
 # First-time bootstrap on a clean machine
 chezmoi init --apply https://github.com/kangmingxuan/oh-my-devenv.git
+
+# Change this machine's persisted desktop-baseline choice:
+# edit [data].desktopBaseline, then apply
+chezmoi edit-config
+chezmoi apply
 
 # Where is the source tree?
 chezmoi source-path
@@ -106,6 +127,12 @@ validate a single override.
 | `DOTFILES_MISE_INSTALL_URL` | — | Override the mise installer URL. |
 | `DOTFILES_OH_MY_ZSH_GIT_URL` | — | Override the oh-my-zsh main-repo clone URL. |
 
+### Pinned artifact downloads
+
+| Variable | Default | Effect |
+|----------|---------|--------|
+| `DOTFILES_MAPLE_MONO_URL` | pinned upstream release URL | Ubuntu-only alternate URL for the exact Maple Mono archive named in the manifest. The fixed SHA-256 digest still has to match. |
+
 ### macOS package opt-ins
 
 | Variable | Default | Effect |
@@ -145,6 +172,13 @@ common slots:
 - `${XDG_CONFIG_HOME:-$HOME/.config}/oh-my-devenv/secrets.sh` — secrets read by interactive shells only.
 - `~/.gitconfig.local` — user-owned Git preferences on top of the managed identity.
 - `~/.ssh/config.d/*.conf` — extra SSH hosts.
+- `~/.config/ghostty/config.local.ghostty` — machine-only Ghostty overrides loaded after the managed baseline.
+
+Ghostty still recognizes the pre-1.2.3 `config` filename. On an existing
+machine, migrate intentional overrides from that file into
+`config.local.ghostty` and archive the old file; otherwise its later load order
+can shadow shared values. The canonical order is documented in Ghostty's
+[configuration reference](https://ghostty.org/docs/config#file-location).
 
 ## Related documents
 

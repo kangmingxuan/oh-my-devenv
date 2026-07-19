@@ -82,6 +82,7 @@ is_overlay_path() {
       "${XDG_CONFIG_HOME:-$HOME/.config}/oh-my-devenv/secrets.sh" | \
       "${XDG_CONFIG_HOME:-$HOME/.config}/oh-my-devenv/zshrc.zsh" | \
       "${XDG_CONFIG_HOME:-$HOME/.config}/oh-my-devenv/bashrc.bash" | \
+      "${XDG_CONFIG_HOME:-$HOME/.config}/ghostty/config.local.ghostty" | \
       "$HOME/.gitconfig.local" | \
       "$HOME/.config/git/hooks/pre-push" | \
       "$HOME/.npmrc")
@@ -109,7 +110,8 @@ is_whitelist_dir() {
   local p="$1"
 
   case "$p" in
-    "$HOME/.oh-my-zsh")
+    "$HOME/.oh-my-zsh" | \
+      "${XDG_DATA_HOME:-$HOME/.local/share}/fonts/maple-mono-nf-cn")
       return 0
       ;;
     "${XDG_STATE_HOME:-$HOME/.local/state}/chezmoi-first-run-backup")
@@ -208,6 +210,11 @@ if [[ -d "$HOME/.oh-my-zsh" ]]; then
   add_candidate "$HOME/.oh-my-zsh"
 fi
 
+managed_font_dir="${XDG_DATA_HOME:-$HOME/.local/share}/fonts/maple-mono-nf-cn"
+if [[ -f "$managed_font_dir/.oh-my-devenv-managed" ]]; then
+  add_candidate "$managed_font_dir"
+fi
+
 if [[ -d "${XDG_STATE_HOME:-$HOME/.local/state}/chezmoi-first-run-backup" ]]; then
   add_candidate "${XDG_STATE_HOME:-$HOME/.local/state}/chezmoi-first-run-backup"
 fi
@@ -263,6 +270,7 @@ emit_standalone_overlay_slots() {
     "${XDG_CONFIG_HOME:-$HOME/.config}/oh-my-devenv/secrets.sh" \
     "${XDG_CONFIG_HOME:-$HOME/.config}/oh-my-devenv/zshrc.zsh" \
     "${XDG_CONFIG_HOME:-$HOME/.config}/oh-my-devenv/bashrc.bash" \
+    "${XDG_CONFIG_HOME:-$HOME/.config}/ghostty/config.local.ghostty" \
     "$HOME/.gitconfig.local" \
     "$HOME/.config/git/hooks/pre-push" \
     "$HOME/.npmrc"; do

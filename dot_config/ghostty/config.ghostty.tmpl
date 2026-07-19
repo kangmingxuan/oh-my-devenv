@@ -1,0 +1,37 @@
+{{- $desktopBaseline := false -}}
+{{- if hasKey . "desktopBaseline" -}}
+{{- $desktopBaseline = .desktopBaseline -}}
+{{- end -}}
+{{- $isSupportedDesktop := eq (includeTemplate "desktop-platform-supported" .) "true" -}}
+{{- if and $desktopBaseline $isSupportedDesktop -}}
+# Shared Ghostty desktop baseline. Machine-specific overrides belong in
+# config.local.ghostty, which is loaded last when present.
+
+# Appearance
+theme = Molokai
+font-family = Maple Mono NF CN
+font-size = 12
+font-feature = zero
+background-opacity = 1.0
+
+# Window
+window-padding-x = 10
+window-padding-y = 8
+window-width = 120
+window-height = 32
+
+# Behavior
+mouse-hide-while-typing = true
+copy-on-select = true
+shell-integration-features = cursor,sudo,title,ssh-env,ssh-terminfo,path
+
+# Notify when a command taking at least Ghostty's default threshold finishes
+# while the terminal is unfocused.
+notify-on-command-finish = unfocused
+notify-on-command-finish-action = bell,notify
+
+# Toggle the quick terminal even while another application is focused.
+keybind = global:f12=toggle_quick_terminal
+
+config-file = ?config.local.ghostty
+{{- end -}}

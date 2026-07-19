@@ -1,0 +1,35 @@
+{{- $desktopBaseline := false -}}
+{{- if hasKey . "desktopBaseline" -}}
+{{- $desktopBaseline = .desktopBaseline -}}
+{{- end -}}
+{{- if $desktopBaseline -}}
+{{- $isSupportedDesktop := eq (includeTemplate "desktop-platform-supported" .) "true" -}}
+#!/bin/bash
+
+set -euo pipefail
+
+bootstrap_dir='{{ joinPath .chezmoi.sourceDir "bootstrap" }}'
+scripts_dir="$bootstrap_dir/scripts"
+manifests_dir="$bootstrap_dir/manifests"
+
+source "$scripts_dir/common.sh"
+install_error_trap "$0"
+
+{{ if eq .chezmoi.os "darwin" -}}
+# Desktop Brewfile hash: {{ include "bootstrap/manifests/desktop/Brewfile" | sha256sum }}
+log_step "🖥️" "Installing the desktop baseline via Homebrew..."
+bash "$scripts_dir/install-brew-packages.sh" "$manifests_dir/desktop/Brewfile"
+{{- else if $isSupportedDesktop -}}
+# Desktop apt manifest hash: {{ include "bootstrap/manifests/desktop/apt-packages.txt" | sha256sum }}
+# Maple Mono manifest hash: {{ include "bootstrap/manifests/desktop/maple-mono-nf-cn.env" | sha256sum }}
+# Maple Mono installer hash: {{ include "bootstrap/scripts/install-maple-mono-font.sh" | sha256sum }}
+log_step "🖥️" "Installing the Ubuntu desktop baseline..."
+bash "$scripts_dir/install-apt-packages.sh" "$manifests_dir/desktop/apt-packages.txt"
+bash "$scripts_dir/install-maple-mono-font.sh" "$manifests_dir/desktop/maple-mono-nf-cn.env"
+{{- else }}
+log_warning "Desktop baseline requested, but automatic installation is supported only on macOS and Ubuntu 26.04+ outside WSL."
+exit 0
+{{- end }}
+
+log_step "✅" "Desktop baseline installation complete."
+{{- end -}}

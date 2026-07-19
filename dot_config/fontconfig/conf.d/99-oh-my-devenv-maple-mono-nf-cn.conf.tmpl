@@ -1,0 +1,28 @@
+{{- $desktopBaseline := false -}}
+{{- if hasKey . "desktopBaseline" -}}
+{{- $desktopBaseline = .desktopBaseline -}}
+{{- end -}}
+{{- $isSupportedDesktop := eq (includeTemplate "desktop-platform-supported" .) "true" -}}
+{{- $enableMapleMonoAlias := and (eq .chezmoi.os "linux") $desktopBaseline $isSupportedDesktop -}}
+<?xml version="1.0"?>
+<!DOCTYPE fontconfig SYSTEM "urn:fontconfig:fonts.dtd">
+<fontconfig>{{ if $enableMapleMonoAlias }}
+  <description>Prefer Maple Mono NF CN for the generic monospace family</description>
+
+  <!--
+    Ghostty's Linux font discovery can otherwise resolve its monospace query
+    to the distribution default even when config.ghostty explicitly selects
+    Maple Mono NF CN. Keep the requested family ahead of those fallbacks.
+  -->
+  <match target="pattern">
+    <test name="family" qual="any" compare="eq">
+      <string>monospace</string>
+    </test>
+    <edit name="family" mode="prepend" binding="strong">
+      <string>Maple Mono NF CN</string>
+    </edit>
+  </match>
+{{- else }}
+  <!-- Intentionally inactive outside the supported Linux desktop baseline. -->
+{{- end }}
+</fontconfig>
