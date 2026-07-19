@@ -310,6 +310,18 @@ else
   assert_file_contains "$tmp_dir/run_onchange_after_22-install-desktop-assets.sh" "supported only on macOS and Ubuntu 26.04+ outside WSL"
 fi
 
+unsupported_desktop_hook="$tmp_dir/run_onchange_after_22-install-desktop-assets.unsupported-linux.sh"
+chezmoi --source="$repo_root" \
+  --override-data '{"desktopBaseline":true,"chezmoi":{"os":"linux","osRelease":{"id":"ubuntu","versionID":"24.04"},"kernel":{"osrelease":"linux"}}}' \
+  execute-template \
+  --file "$repo_root/.chezmoiscripts/run_onchange_after_22-install-desktop-assets.sh.tmpl" \
+  >"$unsupported_desktop_hook"
+syntax_check bash "$unsupported_desktop_hook"
+shellcheck_rendered_bash "$unsupported_desktop_hook"
+assert_file_contains "$unsupported_desktop_hook" "supported only on macOS and Ubuntu 26.04+ outside WSL"
+assert_file_not_contains "$unsupported_desktop_hook" 'manifests_dir='
+assert_file_not_contains "$unsupported_desktop_hook" "Desktop baseline installation complete."
+
 render_template dot_config/ghostty/config.ghostty.tmpl "$tmp_dir/config.ghostty"
 if (( desktop_platform_supported == 1 )); then
   assert_file_contains "$tmp_dir/config.ghostty" "font-family = Maple Mono NF CN"
