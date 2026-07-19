@@ -28,6 +28,7 @@ jobs:
           cat >"$tmp_data_file" <<'EOF'
           gitName = "CI Runner"
           gitEmail = "ci@example.com"
+          desktopBaseline = false
           EOF
 
           chezmoi execute-template --init \

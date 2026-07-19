@@ -12,6 +12,7 @@ After a successful first `chezmoi apply`, you should have:
 - **Runtimes**: `go`, `node`, `python`, and [mise](https://mise.jdx.dev/) as the version manager.
 - **Tooling**: `git`, `curl`, `uv`, `golangci-lint`, `shellcheck`, `shfmt`, plus the Go and Python CLI tools declared in `bootstrap/manifests/ecosystem/`.
 - **Dotfiles**: managed copies of `~/.zshrc`, `~/.bashrc`, `~/.gitconfig`, mise config, and related files — tuned for a shared baseline, not for one person’s taste.
+- **Optional desktop baseline**: Ghostty, Maple Mono NF CN, and managed terminal/font configuration on macOS or non-WSL Ubuntu 26.04+.
 - **Python workflow**: `uv` as the only documented package / auth / publish path; no pip-era machine-global config in the baseline.
 
 Exact versions move with `main`; the final check script prints what you actually got on this machine.
@@ -26,7 +27,8 @@ You still need **SSH or HTTPS access** to the Git host that holds this repositor
 
 The shared baseline does not hard-code host-specific Git rewrites. If your environment needs private-host rewrites, SSH aliases, or host-specific guardrails, keep them in local overlays such as `~/.gitconfig.local` or the examples under `docs/local-overlay-examples/`.
 
-On macOS, optional Homebrew apps such as OrbStack are also local opt-ins. If
+Ghostty and its configured font form one explicit shared desktop choice. Other
+macOS Homebrew apps such as OrbStack remain local opt-ins. If
 you want them installed during the first `chezmoi init --apply`, create a local
 Brewfile before running bootstrap and expose it through
 `${XDG_CONFIG_HOME:-$HOME/.config}/oh-my-devenv/env.sh` with
@@ -37,7 +39,41 @@ OrbStack or other optional casks.
 
 ## What you'll be prompted for
 
-`chezmoi` will ask for a **Git author name** and **email address**. Those values become the default Git identity in the managed `~/.gitconfig` and **only affect this computer** — they are not committed back into the repo. If you later need a different identity for a specific repository, prefer repo-local `git config user.name ...` / `git config user.email ...` in that repository instead of duplicating the machine-wide default in a shared overlay.
+`chezmoi` will ask for a **Git author name**, **email address**, and whether to
+install the **desktop baseline**. Those values only affect this computer and are
+not committed back into the repository.
+
+The desktop choice defaults to yes on macOS and on non-WSL Ubuntu 26.04+ when
+the init process can see a graphical-session signal (`XDG_CURRENT_DESKTOP`,
+`WAYLAND_DISPLAY`, or `DISPLAY`). It defaults to no elsewhere. The answer is
+persisted as `desktopBaseline` in the local chezmoi data, so later applies do not
+guess again. To change it deliberately, edit the local config, set
+`desktopBaseline = true` or `false` under `[data]`, and apply:
+
+```bash
+chezmoi edit-config
+chezmoi apply
+```
+
+The Git values become the default identity in the managed `~/.gitconfig`. If
+you later need a different identity for a specific repository, prefer repo-local
+`git config user.name ...` / `git config user.email ...` in that repository
+instead of duplicating the machine-wide default in a shared overlay.
+
+On an existing Ghostty machine, check for the pre-1.2.3 filename
+`~/.config/ghostty/config`. Ghostty still loads that file after the managed
+`config.ghostty`, so it can shadow shared values. Move any intentional
+machine-only differences to `config.local.ghostty`, validate them with
+`ghostty +validate-config`, and archive the old file instead of deleting it
+blindly. See Ghostty's [configuration-file order](https://ghostty.org/docs/config#file-location).
+
+On supported Ubuntu machines, the desktop baseline also manages
+`~/.config/fontconfig/conf.d/99-oh-my-devenv-maple-mono-nf-cn.conf`. This rule
+prepends Maple Mono NF CN with a strong binding when an application requests
+the generic `monospace` family. It is the Linux compatibility path used by
+Ghostty, and it intentionally affects every Fontconfig client that requests
+generic `monospace`. Turning off `desktopBaseline` and applying again leaves a
+valid but inactive managed fragment, so the preference does not linger.
 
 ---
 
@@ -48,11 +84,12 @@ Bootstrap is split into ordered hooks under `.chezmoiscripts/`:
 0. **`run_before_00-*`** — prints the startup banner (hide it with `NO_LOGO=1`).
 1. **`run_once_before_10-*`** — one-time prerequisites and, if needed, **backup** of any pre-existing managed files before they are overwritten.
 2. **`run_onchange_after_20-*`** — system packages (`apt` on Linux / WSL, Homebrew on macOS), plus explicit macOS Homebrew opt-ins from `DOTFILES_INSTALL_REPO_OPTIONAL_BREWFILE` or `DOTFILES_EXTRA_BREWFILES`.
-3. **`run_onchange_after_25-*`** — shell assets (oh-my-zsh and plugins from the manifest).
-4. **`run_onchange_after_30-*`** — install mise itself.
-5. **`run_onchange_after_40-*`** — install language runtimes via mise.
-6. **`run_onchange_after_50-*`** — sync ecosystem tools (`go install`, `uv tool`, etc.).
-7. **`run_onchange_after_60-*`** — final environment check and a short “welcome” summary.
+3. **`run_onchange_after_22-*`** — when selected, installs Ghostty and Maple Mono NF CN from the platform-specific desktop manifests.
+4. **`run_onchange_after_25-*`** — shell assets (oh-my-zsh and plugins from the manifest).
+5. **`run_onchange_after_30-*`** — install mise itself.
+6. **`run_onchange_after_40-*`** — install language runtimes via mise.
+7. **`run_onchange_after_50-*`** — sync ecosystem tools (`go install`, `uv tool`, etc.).
+8. **`run_onchange_after_60-*`** — final environment check and a short “welcome” summary.
 
 The generated chezmoi config excludes scripts from `chezmoi status`, so routine hook runs do not make a clean setup look locally modified.
 
@@ -80,6 +117,7 @@ If you are on a corporate or otherwise restricted network, public registries may
 - Keep internal npm scopes in `~/.npmrc`, not in shell startup files
 - Keep Python internal indexes project-local and `uv`-only
 - Set **`DOTFILES_MIRROR_MODE`** before `chezmoi init --apply` when bootstrap itself needs mirror endpoints
+- On Ubuntu, the pinned Maple Mono archive uses a resumable download and SHA-256 verification. If GitHub Releases is unavailable, set **`DOTFILES_MAPLE_MONO_URL`** to an alternate URL serving the exact same archive.
 
 ---
 

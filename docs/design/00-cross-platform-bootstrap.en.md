@@ -13,6 +13,7 @@ Requirements:
 - Use `chezmoi` as the single source of truth for dotfiles
 - Automatically install required tools on a new machine
 - Clearly separate responsibilities across system tools, language runtimes, and ecosystem tools
+- Offer one explicit, portable desktop-terminal baseline on supported workstations without affecting server, WSL, or CI installs
 
 ## 2. Design Decision
 
@@ -22,12 +23,13 @@ Use the following layered model:
 2. **System package manager**:
    - macOS uses `Homebrew`
    - Ubuntu / Debian / WSL use `apt`
-3. **mise**: manages runtime versions and binary-distributed tools such as Go / Node / Python / `golangci-lint` / `uv`
-4. **Ecosystem tool installers**: manage language-specific tools
+3. **Desktop asset installer**: when selected, installs Ghostty and Maple Mono NF CN from a separate platform-specific manifest
+4. **mise**: manages runtime versions and binary-distributed tools such as Go / Node / Python / `golangci-lint` / `uv`
+5. **Ecosystem tool installers**: manage language-specific tools
    - Go: `go install` (for tools such as `gopls` and `dlv`)
    - Python: `uv tool`
    - Node: global install only when truly necessary
-5. **Shell asset installer**: manages shell frameworks and plugins that are explicit runtime dependencies of the dotfiles but are not a good fit for the system package manager
+6. **Shell asset installer**: manages shell frameworks and plugins that are explicit runtime dependencies of the dotfiles but are not a good fit for the system package manager
    - install `oh-my-zsh` and selected plugins
 
 **Constraint: Do not use Homebrew on Linux / WSL.**
@@ -39,6 +41,7 @@ Use the following layered model:
 - Shell configuration
 - Git configuration
 - Editor configuration
+- Ghostty configuration when the machine selects the desktop baseline
 - Template files
 - Installation script orchestration
 
@@ -47,6 +50,7 @@ Use the following layered model:
 - Core CLI utilities
 - Build tools
 - Common Unix utilities
+- Ghostty on supported desktop platforms
 
 Examples:
 
@@ -90,6 +94,7 @@ Recommended structure:
 ├── .chezmoiscripts/
 │   ├── run_once_before_10-bootstrap.sh.tmpl
 │   ├── run_onchange_after_20-install-system-packages.sh.tmpl
+│   ├── run_onchange_after_22-install-desktop-assets.sh.tmpl
 │   ├── run_onchange_after_25-install-shell-assets.sh.tmpl
 │   ├── run_onchange_after_30-install-mise.sh.tmpl
 │   ├── run_onchange_after_40-install-runtimes.sh.tmpl
@@ -97,6 +102,10 @@ Recommended structure:
 │   └── run_onchange_after_60-check.sh.tmpl
 ├── bootstrap/
 │   ├── manifests/
+│   │   ├── desktop/
+│   │   │   ├── apt-packages.txt
+│   │   │   ├── Brewfile
+│   │   │   └── maple-mono-nf-cn.env
 │   │   ├── shell/
 │   │   │   └── oh-my-zsh-plugins.txt
 │   │   ├── system/
@@ -110,12 +119,18 @@ Recommended structure:
 │       ├── go-env.sh
 │       ├── install-apt-packages.sh
 │       ├── install-brew-packages.sh
+│       ├── install-maple-mono-font.sh
 │       ├── install-go-tools.sh
 │       ├── install-oh-my-zsh-assets.sh
 │       └── install-uv-tools.sh
 └── dot_config/
-   └── mise/
-      └── config.toml.tmpl
+    ├── fontconfig/
+    │   └── conf.d/
+    │       └── 99-oh-my-devenv-maple-mono-nf-cn.conf.tmpl
+    ├── ghostty/
+    │   └── config.ghostty.tmpl
+    └── mise/
+        └── config.toml.tmpl
 ```
 
 ## 5. Bootstrap Flow
@@ -126,6 +141,7 @@ New machine initialization flow:
 2. Run `chezmoi init --apply <repo>`
 3. Let `chezmoi` trigger follow-up scripts automatically:
    - Install system tools
+   - Install selected desktop assets on supported workstations
    - Install shell assets
    - Install `mise`
    - Install runtimes
@@ -140,11 +156,12 @@ Recommended execution order:
 
 1. `run_once_before_10-bootstrap.sh.tmpl`
 2. `run_onchange_after_20-install-system-packages.sh.tmpl`
-3. `run_onchange_after_25-install-shell-assets.sh.tmpl`
-4. `run_onchange_after_30-install-mise.sh.tmpl`
-5. `run_onchange_after_40-install-runtimes.sh.tmpl`
-6. `run_onchange_after_50-sync-ecosystem-tools.sh.tmpl`
-7. `run_onchange_after_60-check.sh.tmpl`
+3. `run_onchange_after_22-install-desktop-assets.sh.tmpl`
+4. `run_onchange_after_25-install-shell-assets.sh.tmpl`
+5. `run_onchange_after_30-install-mise.sh.tmpl`
+6. `run_onchange_after_40-install-runtimes.sh.tmpl`
+7. `run_onchange_after_50-sync-ecosystem-tools.sh.tmpl`
+8. `run_onchange_after_60-check.sh.tmpl`
 
 Requirements:
 
@@ -162,6 +179,7 @@ Requirements:
 - Use Homebrew for system tools
 - Manage package list with `Brewfile`
 - Install via `brew bundle`
+- When `desktopBaseline` is selected, install Ghostty and Maple Mono NF CN from the separate desktop `Brewfile`
 - Keep OrbStack as an optional local integration in `Brewfile.optional`; it is not installed by the baseline unless the user sets `DOTFILES_INSTALL_REPO_OPTIONAL_BREWFILE=1`
 - Allow first-bootstrap local Brewfile opt-ins through `DOTFILES_EXTRA_BREWFILES`; local changes after bootstrap are synced manually with `brew bundle install --file=...`
 - Manage shell framework and plugins outside Homebrew via a dedicated shell asset script that uses `git clone`
@@ -173,11 +191,14 @@ Requirements:
 - Do not introduce Homebrew
 - Install `zsh` via `apt` when the shell layer depends on it
 - Reuse the same shell asset script as macOS to install `oh-my-zsh` and plugins
+- Only non-WSL Ubuntu 26.04+ participates in the selected desktop baseline: install Ghostty through apt and the pinned, verified Maple Mono archive in the user font directory
+- On that Linux desktop baseline, manage a strong generic `monospace` Fontconfig preference for Maple Mono NF CN; render the fragment as a valid no-op when the choice is disabled so previously enabled machines converge cleanly
 
 ### WSL
 
 - Treated as a Linux subtype
 - Only manage the environment inside WSL
+- Never install the desktop baseline
 - Do not manage native Windows software
 
 ## 8. Platform Detection
@@ -185,8 +206,10 @@ Requirements:
 Use native `chezmoi` template variables for OS-level branching, and do not maintain an extra `detect-platform` script:
 
 - Distinguish OS: `{{ if eq .chezmoi.os "darwin" }}` or `{{ if eq .chezmoi.os "linux" }}`
-- Distinguish Linux distro: `{{ if eq .chezmoi.osRelease.id "ubuntu" "debian" }}`
-- Distinguish WSL: detect and set a custom variable in `.chezmoi.toml.tmpl` during initialization, for example by checking whether `/proc/version` contains `microsoft`, then expose it to template context
+- Distinguish Linux distribution and release through `.chezmoi.osRelease.id` and `.chezmoi.osRelease.versionID`
+- Distinguish WSL by checking `.chezmoi.kernel.osrelease` for `microsoft`; no persisted custom platform flag is needed
+- Treat macOS, or non-WSL Ubuntu with `versionID >= 26.04`, as an installation-supported desktop platform
+- Use `XDG_CURRENT_DESKTOP`, `WAYLAND_DISPLAY`, or `DISPLAY` only to choose the initial Ubuntu prompt default. Persist the user's `desktopBaseline` answer and never infer it again during routine applies
 
 ## 9. Manifest File Conventions
 
@@ -270,8 +293,16 @@ uv = "0.11.28"
 - Run only on macOS
 - Validate `brew` exists
 - Run `brew bundle` from a source-only `Brewfile` under `bootstrap/manifests/`
-- Keep baseline CLI tools in `Brewfile`; GUI app casks such as OrbStack stay in `Brewfile.optional`
+- Keep baseline CLI tools in the system `Brewfile`; keep the selected Ghostty/font pair in the desktop `Brewfile`; unrelated GUI app casks such as OrbStack stay in `Brewfile.optional`
 - After the baseline Brewfile, install repo optional and user-owned Brewfiles only when explicit macOS opt-in environment variables are set
+
+### `install-maple-mono-font`
+
+- Run only from the supported Ubuntu desktop path
+- Read a pinned release URL and SHA-256 digest from `bootstrap/manifests/desktop/maple-mono-nf-cn.env`
+- Reuse a compatible existing font installation instead of creating a duplicate
+- Resume interrupted downloads, verify the digest and required PostScript names, and only replace a directory marked as baseline-owned
+- Install under `${XDG_DATA_HOME:-$HOME/.local/share}/fonts` and refresh Fontconfig
 
 ### `install-oh-my-zsh-assets`
 

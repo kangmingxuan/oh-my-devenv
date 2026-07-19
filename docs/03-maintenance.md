@@ -69,7 +69,8 @@ Milestones cut annotated git tags (`v0.<M>.0`). After a milestone's final MR mer
 
 Third-party dependencies pulled in by this repository fall into these categories:
 
-- **System packages** (`apt`, Homebrew): bump the manifest files (`bootstrap/manifests/system/apt-packages.txt`, `bootstrap/manifests/system/Brewfile`). Prefer stable distro names over version pins. macOS GUI apps and personal CLIs stay opt-in through `Brewfile.optional` or user-owned `DOTFILES_EXTRA_BREWFILES` paths, not baseline defaults.
+- **System packages** (`apt`, Homebrew): bump the manifest files (`bootstrap/manifests/system/apt-packages.txt`, `bootstrap/manifests/system/Brewfile`). Prefer stable distro names over version pins.
+- **Desktop assets**: keep the explicit shared Ghostty choice in `bootstrap/manifests/desktop/`. The macOS Brewfile owns Ghostty and its font cask; the Ubuntu 26.04+ apt manifest owns Ghostty; `maple-mono-nf-cn.env` pins the Linux font archive URL and SHA-256 digest; and the managed Fontconfig fragment keeps Linux font selection aligned with Ghostty's configured family. Extra GUI apps and personal CLIs stay opt-in through `Brewfile.optional` or user-owned `DOTFILES_EXTRA_BREWFILES` paths.
 - **Shell assets** (oh-my-zsh and plugins): managed by explicit Git clone/update. The upstream repository is captured in `bootstrap/manifests/shell/oh-my-zsh-plugins.txt`. That manifest uses a strict two-field, order-sensitive contract shared by four readers (`dot_zshrc.tmpl`, `install-oh-my-zsh-assets.sh`, the `60-check` hook, and `run-smoke-tests.sh`); adding a field or special case means updating all four.
 - **Runtimes** (mise): pinned to complete versions in `dot_config/mise/config.toml.tmpl`. Bump intentionally.
 - **Binary-distributed tools** (for example `golangci-lint` and `uv`): pinned via mise alongside the runtimes.
@@ -164,6 +165,7 @@ Mirror mode currently covers the consumers wired through `dotfiles_apply_mirror_
 - Secrets and credentials never live in this repository. They stay in local overlays or user-owned stores (`${XDG_CONFIG_HOME:-$HOME/.config}/oh-my-devenv/secrets.sh`, `~/.gitconfig.local`, `~/.config/git/hooks/pre-push`, `~/.ssh/config.d/*.conf`, `uv auth`, `~/.npmrc`).
 - `bootstrap/scripts/common.sh` deliberately reads only `${XDG_CONFIG_HOME:-$HOME/.config}/oh-my-devenv/env.sh`, never `secrets.sh`. If Codex, Claude Code, or another automation needs tokens, launch it from a shell that explicitly sourced `secrets.sh` or use that tool's own secret/env injection.
 - The baseline's managed `mise` config defaults GitHub Artifact Attestations verification to off, and the runtime-install hook exports the same default for first bootstrap. This is a reliability tradeoff for shared egress environments (OrbStack VMs, shared CI runners, corp NAT) where anonymous GitHub API rate limits can otherwise break a clean install before the toolchain is usable.
+- The Ubuntu font installer accepts a resumable alternate download URL, but always verifies the repository-pinned SHA-256 digest and required PostScript names before replacing a baseline-owned font directory.
 - To validate or dogfood the stricter path, opt back in explicitly with `MISE_GITHUB_ATTESTATIONS=true MISE_AQUA_GITHUB_ATTESTATIONS=true chezmoi apply`. Python follows the global setting unless `MISE_PYTHON_GITHUB_ATTESTATIONS` is set separately.
 - Report suspected exposed secrets privately to the maintainer; do not open a public issue or MR.
 
@@ -172,7 +174,7 @@ Mirror mode currently covers the consumers wired through `dotfiles_apply_mirror_
 The repository CI pipeline is intentionally lightweight:
 
 - `smoke-tests-linux` and `smoke-tests-macos` render and syntax-check the baseline on `ubuntu-latest` and `macos-latest`; running on both means the `darwin` template arms are exercised, not just the Linux ones.
-- `apply-linux` runs a real `chezmoi init --apply` end to end on `ubuntu-latest` and asserts the final environment check passes, covering installer semantics the render-only smoke suite cannot.
+- `apply-linux` runs a real `chezmoi init --apply` end to end on `ubuntu-latest` and asserts the final environment check passes, covering installer semantics the render-only smoke suite cannot. Its fixture explicitly disables the desktop choice because the hosted runner is not a supported workstation.
 - `secret-scan` runs `gitleaks` over the repository tree to catch committed secrets.
 - The pipeline is allowed to be simple and occasionally imperfect. It should catch obvious repo regressions, not model every clean-machine install path on every platform.
 
@@ -182,7 +184,7 @@ If a change needs heavier confidence than the smoke jobs provide, validate it ma
 
 ## Disposable environment reset
 
-Use `bootstrap/scripts/uninstall.sh` when you need to tear down **only** what this baseline's `chezmoi apply` put on disk — for example a throwaway Linux container, a CI scratch image, or a VM you are about to re-image. The script is intentionally narrow: it does **not** remove apt/Homebrew packages, mise shims, or language runtimes the bootstrap installed; it only reverses chezmoi-managed destination files plus a short whitelist of bootstrap-owned directories (`~/.oh-my-zsh`, `~/.local/state/chezmoi-first-run-backup/`, and the chezmoi source tree under `~/.local/share/` when that is the canonical data path).
+Use `bootstrap/scripts/uninstall.sh` when you need to tear down **only** what this baseline's `chezmoi apply` put on disk — for example a throwaway Linux container, a CI scratch image, or a VM you are about to re-image. The script is intentionally narrow: it does **not** remove apt/Homebrew packages, mise shims, or language runtimes the bootstrap installed; it only reverses chezmoi-managed destination files plus a short whitelist of bootstrap-owned directories (`~/.oh-my-zsh`, `~/.local/state/chezmoi-first-run-backup/`, the marker-owned Maple Mono user-font directory, and the chezmoi source tree under `~/.local/share/` when that is the canonical data path).
 
 **Defaults and flags**
 
@@ -192,7 +194,7 @@ Use `bootstrap/scripts/uninstall.sh` when you need to tear down **only** what th
 
 **Overlays are never deleted**
 
-The script skips (and logs `[would-skip] overlay-protected`) for the local overlay slots documented in the README: `${XDG_CONFIG_HOME:-$HOME/.config}/oh-my-devenv/env.sh`, `${XDG_CONFIG_HOME:-$HOME/.config}/oh-my-devenv/secrets.sh`, `${XDG_CONFIG_HOME:-$HOME/.config}/oh-my-devenv/zshrc.zsh`, `${XDG_CONFIG_HOME:-$HOME/.config}/oh-my-devenv/bashrc.bash`, `~/.gitconfig.local`, `~/.config/git/hooks/pre-push`, `~/.npmrc`, and `~/.ssh/config.d/*.conf`. If a path is both managed and an overlay (it should not be), the overlay rule wins.
+The script skips (and logs `[would-skip] overlay-protected`) for the local overlay slots documented in the README: `${XDG_CONFIG_HOME:-$HOME/.config}/oh-my-devenv/env.sh`, `${XDG_CONFIG_HOME:-$HOME/.config}/oh-my-devenv/secrets.sh`, `${XDG_CONFIG_HOME:-$HOME/.config}/oh-my-devenv/zshrc.zsh`, `${XDG_CONFIG_HOME:-$HOME/.config}/oh-my-devenv/bashrc.bash`, `${XDG_CONFIG_HOME:-$HOME/.config}/ghostty/config.local.ghostty`, `~/.gitconfig.local`, `~/.config/git/hooks/pre-push`, `~/.npmrc`, and `~/.ssh/config.d/*.conf`. If a path is both managed and an overlay (it should not be), the overlay rule wins.
 
 User-owned Git hooks such as `~/.config/git/hooks/pre-push` also stay untouched.
 They are outside the managed destination set, so `uninstall.sh` never removes

@@ -4,13 +4,14 @@ The `smoke-tests-macos` GitHub Actions job runs the smoke suite on `macos-latest
 
 Because the macOS job is render-only, a review change that touches macOS *install* behaviour is validated by one contributor running the steps below on a real Mac and pasting the signoff template into the review description.
 
-> Scope: run this when a review change touches `Brewfile`, any `darwin`-branched chezmoi template, `bootstrap/scripts/install-brew-packages.sh`, macOS-specific PATH wiring, or anything else that only runs on macOS. Linux-only changes do not require it.
+> Scope: run this when a review change touches either `Brewfile`, any `darwin`-branched chezmoi template, `bootstrap/scripts/install-brew-packages.sh`, macOS-specific PATH wiring, or anything else that only runs on macOS. Linux-only changes do not require it.
 
 ## When You Need To Run This
 
 Run the full preflight when the MR diff includes any of:
 
 - `bootstrap/manifests/system/Brewfile`
+- `bootstrap/manifests/desktop/Brewfile`
 - `bootstrap/scripts/install-brew-packages.sh`
 - Any `.chezmoiscripts/*.sh.tmpl` block gated on `eq .chezmoi.os "darwin"`
 - macOS-specific PATH or `brew shellenv` wiring in `dot_zprofile.tmpl`, `dot_zshrc.tmpl`, `dot_bashrc.tmpl`, or `dot_profile`
@@ -46,10 +47,10 @@ git rev-parse HEAD   # record this SHA -- goes into the signoff
 This is the same command every macOS contributor runs for a fresh bootstrap. The preflight deliberately uses the interactive form so you exercise the prompt path end-to-end.
 
 ```bash
-chezmoi init --apply --source="$(pwd)"
+chezmoi init --prompt --apply --source="$(pwd)"
 ```
 
-Answer the two `chezmoi init` prompts (Git author name, email address) with the values you actually use on this machine. If you have already run `chezmoi init` on this Mac, the cached answers are reused silently.
+Answer the three `chezmoi init` prompts (Git author name, email address, and the desktop-baseline choice) with the values you actually use on this machine. Select the desktop baseline so this checklist exercises Ghostty and Maple Mono. The explicit `--prompt` makes this preflight re-exercise all three choices even on an existing setup; normal first-run and update commands keep reusing the persisted answers.
 
 Expected outcome: `.chezmoiscripts/run_onchange_after_60-check.sh` runs last and reports `All checks passed.` If it exits non-zero, capture the failing line, attach it to the review, and stop — the change is not ready to merge.
 
@@ -60,11 +61,26 @@ Expected outcome: `.chezmoiscripts/run_onchange_after_60-check.sh` runs last and
 ```bash
 cd "$(chezmoi source-path)"
 brew bundle check --file=bootstrap/manifests/system/Brewfile --verbose
+brew bundle check --file=bootstrap/manifests/desktop/Brewfile --verbose
 ```
 
-Expected outcome: `The Brewfile's dependencies are satisfied.` Any line starting with `->` means the manifest and the machine disagree. That is either a real MR bug or a pre-existing drift you should note in the signoff.
+Expected outcome: both commands report `The Brewfile's dependencies are satisfied.` Any line starting with `->` means the manifest and the machine disagree. That is either a real MR bug or a pre-existing drift you should note in the signoff.
 
-## 4. Hand-Validate mise Runtime State
+## 4. Hand-Validate The Desktop Baseline
+
+```bash
+brew list --cask ghostty font-maple-mono-nf-cn
+ghostty_cli="$(command -v ghostty || true)"
+: "${ghostty_cli:=/Applications/Ghostty.app/Contents/MacOS/Ghostty}"
+test -x "$ghostty_cli"
+"$ghostty_cli" +validate-config
+```
+
+Expected outcome: both casks are installed and Ghostty accepts the effective
+managed configuration, including any machine-local
+`~/.config/ghostty/config.local.ghostty` overrides.
+
+## 5. Hand-Validate mise Runtime State
 
 `60-check.sh` checks that each runtime binary is on PATH. It does not verify that the runtime version mise actually installed matches `dot_config/mise/config.toml.tmpl`. On a Mac, mise is installed via Homebrew rather than `https://mise.run`, so this is the single place where the runtime install path diverges from Linux — worth a direct inspection:
 
@@ -78,7 +94,7 @@ Expected outcome: `mise current` agrees exactly with
 [`dot_config/mise/config.toml.tmpl`](../dot_config/mise/config.toml.tmpl). Any
 mismatch goes into the signoff.
 
-## 5. Hand-Validate go / uv Tool State
+## 6. Hand-Validate go / uv Tool State
 
 ```bash
 gopls version
@@ -90,7 +106,7 @@ pre-commit --version
 
 Expected outcome: each command prints a version and exits 0. A missing command means `50-sync-ecosystem-tools.sh` did not finish cleanly on this machine — capture the log and stop.
 
-## 6. Run The Local Smoke Suite
+## 7. Run The Local Smoke Suite
 
 Catch macOS-only issues the Linux CI will never see (for example a Darwin-only template arm that shellcheck would not render on Linux):
 
@@ -100,7 +116,7 @@ bash bootstrap/scripts/run-smoke-tests.sh
 
 Expected outcome: `Smoke tests passed.` This is the same script CI runs; if it fails on a Mac but passes on the Linux CI, you have found a macOS-specific regression.
 
-## 7. Paste The Signoff Into The Review
+## 8. Paste The Signoff Into The Review
 
 Copy the template below verbatim into the review description (append to the existing validation section) and fill in each field. The wall of `[x]` entries is the point: reviewers can scan it in five seconds to know the change is macOS-safe.
 
@@ -110,7 +126,8 @@ Copy the template below verbatim into the review description (append to the exis
 - [ ] MR SHA validated: `<git rev-parse HEAD output>`
 - [ ] Hardware / OS: `<arm64 | x86_64>` — macOS `<version>`
 - [ ] `chezmoi init --apply` completed; `60-check.sh` reported `All checks passed.`
-- [ ] `brew bundle check` reported `The Brewfile's dependencies are satisfied.`
+- [ ] Both `brew bundle check` commands reported `The Brewfile's dependencies are satisfied.`
+- [ ] Ghostty and Maple Mono casks are installed; `ghostty +validate-config` succeeds
 - [ ] `mise current` agrees with `dot_config/mise/config.toml.tmpl`
 - [ ] `gopls`, `dlv`, `ruff`, `basedpyright`, `pre-commit` all print versions
 - [ ] `bash bootstrap/scripts/run-smoke-tests.sh` passed
@@ -131,7 +148,7 @@ If the MR does not touch any macOS-exercised surface, paste this shorter line in
 The `smoke-tests-macos` job already covers rendering and syntax. Promoting CI to also validate a real macOS *install* is an additive change:
 
 1. Add a job (or step) that runs a real `chezmoi init --apply` on a macOS runner, mirroring the `apply-linux` job, and asserts the final environment check passes.
-2. Add the macOS Brewfile-parity and mise-runtime checks from this checklist (steps 3 and 4) as scripted assertions.
+2. Add the macOS Brewfile-parity, desktop-baseline, and mise-runtime checks from this checklist (steps 3 through 5) as scripted assertions.
 3. Update `docs/03-maintenance.md` "Review Expectations" to describe the expanded CI surface, and update this document's introduction.
 4. Keep the preflight checklist itself — it remains the right document for MRs that touch macOS surface in ways a single CI shape cannot cover (new hardware, OS upgrade, Xcode CLT jumps).
 

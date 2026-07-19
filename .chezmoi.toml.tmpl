@@ -1,5 +1,16 @@
 {{- $gitName := promptStringOnce . "gitName" "Git author name" "" -}}
 {{- $gitEmail := promptStringOnce . "gitEmail" "Git author email address" "" -}}
+{{- $isSupportedDesktop := eq (includeTemplate "desktop-platform-supported" .) "true" -}}
+{{- $hasGraphicalSession := or
+    (ne (env "XDG_CURRENT_DESKTOP") "")
+    (ne (env "WAYLAND_DISPLAY") "")
+    (ne (env "DISPLAY") "")
+-}}
+{{- $desktopBaselineDefault := or
+    (eq .chezmoi.os "darwin")
+    (and $isSupportedDesktop $hasGraphicalSession)
+-}}
+{{- $desktopBaseline := promptBoolOnce . "desktopBaseline" "Install desktop baseline (Ghostty + Maple Mono NF CN)" $desktopBaselineDefault -}}
 
 [status]
     # Keep routine run_* hooks out of `chezmoi status` so the output
@@ -15,3 +26,4 @@
 [data]
     name = {{ $gitName | quote }}
     email = {{ $gitEmail | quote }}
+    desktopBaseline = {{ $desktopBaseline }}

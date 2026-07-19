@@ -1,0 +1,3 @@
+# Shared desktop terminal and its configured font.
+cask "ghostty"
+cask "font-maple-mono-nf-cn"

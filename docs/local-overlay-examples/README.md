@@ -16,6 +16,7 @@ the baseline leaves to each user's home directory or user-owned tool config:
 | `ssh-config.d.corp.conf.example`        | `~/.ssh/config.d/<your-alias>.conf` | `~/.ssh/config` via its `Include ~/.ssh/config.d/*.conf` directive |
 | `npmrc.example`                         | `~/.npmrc`                         | `npm`                                               |
 | `Brewfile.local.example`                | `${XDG_CONFIG_HOME:-$HOME/.config}/oh-my-devenv/Brewfile.local` | macOS bootstrap when `DOTFILES_EXTRA_BREWFILES` points to it |
+| `ghostty-config.local.ghostty.example`  | `${XDG_CONFIG_HOME:-$HOME/.config}/ghostty/config.local.ghostty` | Managed Ghostty `config.ghostty` via `config-file` |
 
 ## Why `.example`?
 
@@ -48,7 +49,9 @@ Every file in this directory ends in `.example` on purpose:
 6. For a Git hook copied from `git-pre-push.example`, run `chmod 755 ~/.config/git/hooks/pre-push`
    and then test it against one repo that should match your rule and one that
    should not before you trust it.
-7. Keep responsibilities clean:
+7. For Ghostty overrides, open a new terminal window after copying the example;
+   `ghostty +show-config` should exit successfully and show the effective values.
+8. Keep responsibilities clean:
    - `${XDG_CONFIG_HOME:-$HOME/.config}/oh-my-devenv/env.sh` is for shell-compatible, non-secret exports that Bash, Zsh, and bootstrap should all see.
    - `${XDG_CONFIG_HOME:-$HOME/.config}/oh-my-devenv/Brewfile.local` is for macOS-only Homebrew apps and CLIs that you explicitly opt in to during first bootstrap.
    - `${XDG_CONFIG_HOME:-$HOME/.config}/oh-my-devenv/secrets.sh` is for shell-compatible secrets that interactive Bash and Zsh read automatically; bootstrap and non-interactive shell commands never read it automatically.
@@ -56,12 +59,14 @@ Every file in this directory ends in `.example` on purpose:
    - The managed `~/.gitconfig` keeps your default Git identity; `~/.gitconfig.local` is for user-owned Git preferences and guardrails.
    - `~/.config/git/hooks/pre-push` is a user-owned guardrail, not part of the shared baseline.
    - `~/.npmrc` is the right home for scoped internal npm registry configuration.
+   - `~/.config/ghostty/config.local.ghostty` is for machine-only appearance, sizing, or keybinding overrides on top of the shared Ghostty baseline.
 
 ## macOS Local Homebrew Apps
 
-The shared baseline never installs optional GUI apps by default. On macOS, you
-can opt in before the first `chezmoi init --apply` by creating a local Brewfile
-and pointing bootstrap at it from `env.sh`:
+The selected desktop baseline installs only Ghostty and its configured font.
+Other macOS GUI apps remain local opt-ins. You can add them before the first
+`chezmoi init --apply` by creating a local Brewfile and pointing bootstrap at it
+from `env.sh`:
 
 ```bash
 mkdir -p "${XDG_CONFIG_HOME:-$HOME/.config}/oh-my-devenv"

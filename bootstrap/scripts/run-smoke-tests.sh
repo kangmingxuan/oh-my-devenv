@@ -65,6 +65,21 @@ fail_test() {
   exit 1
 }
 
+assert_desktop_platform_support() {
+  local override_data="$1"
+  local expected="$2"
+  local actual=""
+
+  actual="$(
+    chezmoi --source="$repo_root" \
+      --override-data "$override_data" \
+      execute-template '{{ includeTemplate "desktop-platform-supported" . }}'
+  )"
+  if [[ "$actual" != "$expected" ]]; then
+    fail_test "desktop platform detection returned '$actual'; expected '$expected' for $override_data"
+  fi
+}
+
 assert_file_contains() {
   local file_path="$1"
   local expected="$2"
@@ -156,15 +171,18 @@ trap 'rm -rf "$tmp_dir"' EXIT
 #   - `name` / `email` mirror the shape that `.chezmoi.toml.tmpl` produces
 #     after `chezmoi init`, which normal templates (dot_gitconfig, shell
 #     env, etc.) read via .name / .email.
-#   - `gitName` / `gitEmail` short-circuit the `promptStringOnce` calls in
-#     `.chezmoi.toml.tmpl` itself so render_chezmoi_toml_tmpl can run
-#     non-interactively.
+#   - `gitName` / `gitEmail` and `desktopBaseline` short-circuit the init-only
+#     prompt calls in `.chezmoi.toml.tmpl` so render_chezmoi_toml_tmpl can run
+#     non-interactively. Desktop rendering stays enabled in smoke tests; the
+#     real apply CI explicitly disables it because hosted runners are not
+#     desktop workstations.
 tmp_data_file="$tmp_dir/chezmoi-data.toml"
 cat >"$tmp_data_file" <<EOF
 name = "Smoke Tests"
 email = "smoke@example.com"
 gitName = "Smoke Tests"
 gitEmail = "smoke@example.com"
+desktopBaseline = true
 EOF
 
 # Literal strings asserted against rendered templates.
@@ -248,6 +266,8 @@ assert_file_contains "$tmp_dir/run_once_before_10-bootstrap.sh" "backup_existing
 assert_file_contains "$tmp_dir/run_once_before_10-bootstrap.sh" "chezmoi-first-run-backup"
 assert_file_contains "$tmp_dir/run_once_before_10-bootstrap.sh" ".ssh/config"
 assert_file_contains "$tmp_dir/run_once_before_10-bootstrap.sh" ".config/mise/config.toml"
+assert_file_contains "$tmp_dir/run_once_before_10-bootstrap.sh" ".config/fontconfig/conf.d/99-oh-my-devenv-maple-mono-nf-cn.conf"
+assert_file_contains "$tmp_dir/run_once_before_10-bootstrap.sh" ".config/ghostty/config.ghostty"
 assert_file_contains "$tmp_dir/run_once_before_10-bootstrap.sh" ".zshrc"
 assert_file_contains "$tmp_dir/run_once_before_10-bootstrap.sh" ".gitconfig"
 assert_file_contains "$tmp_dir/run_once_before_10-bootstrap.sh" "cp -Lp \"\$existing_path\" \"\$backup_path\""
@@ -270,6 +290,86 @@ else
   assert_file_not_contains "$tmp_dir/run_onchange_after_20-install-system-packages.sh" "DOTFILES_INSTALL_REPO_OPTIONAL_BREWFILE"
   assert_file_not_contains "$tmp_dir/run_onchange_after_20-install-system-packages.sh" "DOTFILES_EXTRA_BREWFILES"
 fi
+
+render_template .chezmoiscripts/run_onchange_after_22-install-desktop-assets.sh.tmpl "$tmp_dir/run_onchange_after_22-install-desktop-assets.sh"
+syntax_check bash "$tmp_dir/run_onchange_after_22-install-desktop-assets.sh"
+shellcheck_rendered_bash "$tmp_dir/run_onchange_after_22-install-desktop-assets.sh"
+assert_file_contains "$tmp_dir/run_onchange_after_22-install-desktop-assets.sh" "install_error_trap"
+desktop_platform_supported=0
+linux_fontconfig_alias_enabled=0
+if grep -Fq "desktop baseline via Homebrew" "$tmp_dir/run_onchange_after_22-install-desktop-assets.sh"; then
+  desktop_platform_supported=1
+  assert_file_contains "$tmp_dir/run_onchange_after_22-install-desktop-assets.sh" 'manifests_dir/desktop/Brewfile'
+elif grep -Fq "Ubuntu desktop baseline" "$tmp_dir/run_onchange_after_22-install-desktop-assets.sh"; then
+  desktop_platform_supported=1
+  linux_fontconfig_alias_enabled=1
+  assert_file_contains "$tmp_dir/run_onchange_after_22-install-desktop-assets.sh" 'manifests_dir/desktop/apt-packages.txt'
+  assert_file_contains "$tmp_dir/run_onchange_after_22-install-desktop-assets.sh" 'install-maple-mono-font.sh'
+  assert_file_contains "$tmp_dir/run_onchange_after_22-install-desktop-assets.sh" 'maple-mono-nf-cn.env'
+else
+  assert_file_contains "$tmp_dir/run_onchange_after_22-install-desktop-assets.sh" "supported only on macOS and Ubuntu 26.04+ outside WSL"
+fi
+
+unsupported_desktop_hook="$tmp_dir/run_onchange_after_22-install-desktop-assets.unsupported-linux.sh"
+chezmoi --source="$repo_root" \
+  --override-data '{"desktopBaseline":true,"chezmoi":{"os":"linux","osRelease":{"id":"ubuntu","versionID":"24.04"},"kernel":{"osrelease":"linux"}}}' \
+  execute-template \
+  --file "$repo_root/.chezmoiscripts/run_onchange_after_22-install-desktop-assets.sh.tmpl" \
+  >"$unsupported_desktop_hook"
+syntax_check bash "$unsupported_desktop_hook"
+shellcheck_rendered_bash "$unsupported_desktop_hook"
+assert_file_contains "$unsupported_desktop_hook" "supported only on macOS and Ubuntu 26.04+ outside WSL"
+assert_file_not_contains "$unsupported_desktop_hook" 'manifests_dir='
+assert_file_not_contains "$unsupported_desktop_hook" "Desktop baseline installation complete."
+
+render_template dot_config/ghostty/config.ghostty.tmpl "$tmp_dir/config.ghostty"
+if (( desktop_platform_supported == 1 )); then
+  assert_file_contains "$tmp_dir/config.ghostty" "font-family = Maple Mono NF CN"
+  assert_file_contains "$tmp_dir/config.ghostty" "notify-on-command-finish = unfocused"
+  assert_file_contains "$tmp_dir/config.ghostty" "keybind = global:f12=toggle_quick_terminal"
+  assert_file_contains "$tmp_dir/config.ghostty" "config-file = ?config.local.ghostty"
+elif [[ -s "$tmp_dir/config.ghostty" ]]; then
+  fail_test "Ghostty config must render zero bytes on unsupported platforms"
+fi
+
+render_template \
+  dot_config/fontconfig/conf.d/99-oh-my-devenv-maple-mono-nf-cn.conf.tmpl \
+  "$tmp_dir/99-oh-my-devenv-maple-mono-nf-cn.conf"
+assert_file_contains "$tmp_dir/99-oh-my-devenv-maple-mono-nf-cn.conf" '<!DOCTYPE fontconfig SYSTEM "urn:fontconfig:fonts.dtd">'
+assert_file_contains "$tmp_dir/99-oh-my-devenv-maple-mono-nf-cn.conf" "<fontconfig>"
+assert_file_contains "$tmp_dir/99-oh-my-devenv-maple-mono-nf-cn.conf" "</fontconfig>"
+if (( linux_fontconfig_alias_enabled == 1 )); then
+  assert_file_contains "$tmp_dir/99-oh-my-devenv-maple-mono-nf-cn.conf" '<edit name="family" mode="prepend" binding="strong">'
+  assert_file_contains "$tmp_dir/99-oh-my-devenv-maple-mono-nf-cn.conf" "Maple Mono NF CN"
+else
+  assert_file_not_contains "$tmp_dir/99-oh-my-devenv-maple-mono-nf-cn.conf" 'binding="strong"'
+  assert_file_not_contains "$tmp_dir/99-oh-my-devenv-maple-mono-nf-cn.conf" "Maple Mono NF CN"
+fi
+
+disabled_desktop_hook="$tmp_dir/run_onchange_after_22-install-desktop-assets.disabled"
+disabled_ghostty_config="$tmp_dir/config.ghostty.disabled"
+disabled_fontconfig_fragment="$tmp_dir/99-oh-my-devenv-maple-mono-nf-cn.disabled.conf"
+chezmoi --source="$repo_root" \
+  --override-data '{"desktopBaseline":false}' \
+  execute-template \
+  --file "$repo_root/.chezmoiscripts/run_onchange_after_22-install-desktop-assets.sh.tmpl" \
+  >"$disabled_desktop_hook"
+chezmoi --source="$repo_root" \
+  --override-data '{"desktopBaseline":false}' \
+  execute-template \
+  --file "$repo_root/dot_config/ghostty/config.ghostty.tmpl" \
+  >"$disabled_ghostty_config"
+chezmoi --source="$repo_root" \
+  --override-data '{"desktopBaseline":false}' \
+  execute-template \
+  --file "$repo_root/dot_config/fontconfig/conf.d/99-oh-my-devenv-maple-mono-nf-cn.conf.tmpl" \
+  >"$disabled_fontconfig_fragment"
+if [[ -s "$disabled_desktop_hook" || -s "$disabled_ghostty_config" ]]; then
+  fail_test "desktop templates must render zero bytes when desktopBaseline is disabled"
+fi
+assert_file_contains "$disabled_fontconfig_fragment" "<fontconfig>"
+assert_file_not_contains "$disabled_fontconfig_fragment" 'binding="strong"'
+assert_file_not_contains "$disabled_fontconfig_fragment" "Maple Mono NF CN"
 
 render_template .chezmoiscripts/run_onchange_after_25-install-shell-assets.sh.tmpl "$tmp_dir/run_onchange_after_25-install-shell-assets.sh"
 syntax_check bash "$tmp_dir/run_onchange_after_25-install-shell-assets.sh"
@@ -303,6 +403,9 @@ assert_file_contains "$tmp_dir/run_onchange_after_60-check.sh" "Core tools in th
 assert_file_contains "$tmp_dir/run_onchange_after_60-check.sh" "print_version_line chezmoi"
 assert_file_contains "$tmp_dir/run_onchange_after_60-check.sh" "print_version_line git"
 assert_file_contains "$tmp_dir/run_onchange_after_60-check.sh" "print_diagnostic_hints"
+assert_file_contains "$tmp_dir/run_onchange_after_60-check.sh" "Maple Mono NF CN monospace alias"
+assert_file_contains "$tmp_dir/run_onchange_after_60-check.sh" "fc-conflist"
+assert_file_contains "$tmp_dir/run_onchange_after_60-check.sh" "fc-match -f '%{postscriptname}\\n' monospace"
 
 log_step "🤖" "Verifying docs and repo-only files stay undeployed..."
 managed_listing="$(chezmoi managed --source="$repo_root")"
@@ -321,6 +424,33 @@ if grep -Fxq "$undeployed_path" <<<"$managed_listing"; then
   fail_test "chezmoi managed lists ${undeployed_path#"$HOME"/} (repo-only files must stay undeployed)"
 fi
 log_step "🧩" "Running manifest contract checks..."
+assert_desktop_platform_support '{"chezmoi":{"os":"darwin","osRelease":null,"kernel":null}}' true
+assert_desktop_platform_support '{"chezmoi":{"os":"linux","osRelease":{"id":"ubuntu","versionID":"26.04"},"kernel":{"osrelease":"linux"}}}' true
+assert_desktop_platform_support '{"chezmoi":{"os":"linux","osRelease":{"id":"ubuntu","versionID":"24.04"},"kernel":{"osrelease":"linux"}}}' ''
+assert_desktop_platform_support '{"chezmoi":{"os":"linux","osRelease":{"id":"ubuntu","versionID":"26.04"},"kernel":{"osrelease":"microsoft-standard-WSL2"}}}' ''
+assert_desktop_platform_support '{"chezmoi":{"os":"linux","osRelease":{"id":"debian","versionID":"26.04"},"kernel":{"osrelease":"linux"}}}' ''
+synthetic_fontconfig_template="$repo_root/dot_config/fontconfig/conf.d/99-oh-my-devenv-maple-mono-nf-cn.conf.tmpl"
+synthetic_supported_fontconfig="$tmp_dir/fontconfig-supported-linux.conf"
+synthetic_unsupported_fontconfig="$tmp_dir/fontconfig-unsupported-linux.conf"
+synthetic_macos_fontconfig="$tmp_dir/fontconfig-macos.conf"
+chezmoi --source="$repo_root" \
+  --override-data '{"desktopBaseline":true,"chezmoi":{"os":"linux","osRelease":{"id":"ubuntu","versionID":"26.04"},"kernel":{"osrelease":"linux"}}}' \
+  execute-template --file "$synthetic_fontconfig_template" \
+  >"$synthetic_supported_fontconfig"
+chezmoi --source="$repo_root" \
+  --override-data '{"desktopBaseline":true,"chezmoi":{"os":"linux","osRelease":{"id":"ubuntu","versionID":"24.04"},"kernel":{"osrelease":"linux"}}}' \
+  execute-template --file "$synthetic_fontconfig_template" \
+  >"$synthetic_unsupported_fontconfig"
+chezmoi --source="$repo_root" \
+  --override-data '{"desktopBaseline":true,"chezmoi":{"os":"darwin","osRelease":null,"kernel":null}}' \
+  execute-template --file "$synthetic_fontconfig_template" \
+  >"$synthetic_macos_fontconfig"
+assert_file_contains "$synthetic_supported_fontconfig" '<edit name="family" mode="prepend" binding="strong">'
+assert_file_contains "$synthetic_supported_fontconfig" "Maple Mono NF CN"
+assert_file_not_contains "$synthetic_unsupported_fontconfig" 'binding="strong"'
+assert_file_not_contains "$synthetic_unsupported_fontconfig" "Maple Mono NF CN"
+assert_file_not_contains "$synthetic_macos_fontconfig" 'binding="strong"'
+assert_file_not_contains "$synthetic_macos_fontconfig" "Maple Mono NF CN"
 check_tool_manifest_parser "$repo_root/bootstrap/manifests/ecosystem/go-tools.txt" go_tool_binary_name
 check_tool_manifest_parser "$repo_root/bootstrap/manifests/ecosystem/uv-tools.txt" uv_tool_binary_name
 if grep -Eq '@latest([[:space:]]|$)' "$repo_root/bootstrap/manifests/ecosystem/go-tools.txt"; then
@@ -334,6 +464,14 @@ for runtime in go node python; do
   fi
 done
 check_oh_my_zsh_manifest_contract "$repo_root/bootstrap/manifests/shell/oh-my-zsh-plugins.txt" "$tmp_dir/dot_zshrc"
+desktop_font_manifest="$repo_root/bootstrap/manifests/desktop/maple-mono-nf-cn.env"
+desktop_font_sha="$(sed -n 's/^MAPLE_MONO_SHA256=//p' "$desktop_font_manifest")"
+if [[ ! "$desktop_font_sha" =~ ^[0-9a-f]{64}$ ]]; then
+  fail_test "Maple Mono desktop manifest must pin a lowercase SHA-256 digest"
+fi
+assert_file_contains "$desktop_font_manifest" "MAPLE_MONO_VERSION=7.9"
+assert_file_contains "$desktop_font_manifest" "/releases/download/v7.9/MapleMono-NF-CN-unhinted.zip"
+assert_file_contains "$repo_root/bootstrap/manifests/desktop/apt-packages.txt" "fontconfig"
 assert_file_contains "$tmp_dir/run_onchange_after_60-check.sh" "check_manifest_cmds \"\$manifests_dir/ecosystem/go-tools.txt\" go_tool_binary_name"
 assert_file_contains "$tmp_dir/run_onchange_after_60-check.sh" "check_manifest_cmds \"\$manifests_dir/ecosystem/uv-tools.txt\" uv_tool_binary_name"
 assert_file_contains "$tmp_dir/run_onchange_after_60-check.sh" "check_oh_my_zsh_plugins \"\$manifests_dir/shell/oh-my-zsh-plugins.txt\" \"\${ZSH_CUSTOM:-\$HOME/.oh-my-zsh/custom}\""
@@ -486,6 +624,7 @@ assert_file_contains "$tmp_chezmoi_toml" "[diff]"
 assert_toml_section_contains "$tmp_chezmoi_toml" "diff" 'exclude = ["scripts"]'
 assert_file_contains "$tmp_chezmoi_toml" 'name = "Smoke Tests"'
 assert_file_contains "$tmp_chezmoi_toml" 'email = "smoke@example.com"'
+assert_file_contains "$tmp_chezmoi_toml" 'desktopBaseline = true'
 assert_file_contains "$repo_root/dot_config/mise/config.toml.tmpl" "[settings]"
 assert_file_contains "$repo_root/dot_config/mise/config.toml.tmpl" "github_attestations = false"
 assert_file_contains "$repo_root/dot_config/mise/config.toml.tmpl" "[settings.aqua]"
@@ -496,6 +635,7 @@ shellcheck "$repo_root/bootstrap/scripts/common.sh" \
   "$repo_root/bootstrap/scripts/install-apt-packages.sh" \
   "$repo_root/bootstrap/scripts/install-brew-packages.sh" \
   "$repo_root/bootstrap/scripts/install-go-tools.sh" \
+  "$repo_root/bootstrap/scripts/install-maple-mono-font.sh" \
   "$repo_root/bootstrap/scripts/install-oh-my-zsh-assets.sh" \
   "$repo_root/bootstrap/scripts/install-uv-tools.sh" \
   "$repo_root/bootstrap/scripts/mirrors.sh" \

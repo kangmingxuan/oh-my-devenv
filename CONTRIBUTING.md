@@ -7,6 +7,7 @@ This repository is a shared development environment baseline managed by [chezmoi
 Changes that belong in this repository:
 
 - Baseline system packages that most engineers benefit from (editors, `git`, `curl`, formatting and diagnostic tools).
+- The explicitly selected Ghostty desktop baseline on supported workstation platforms.
 - Baseline shell, Git, SSH, and runtime templates that work on macOS, Ubuntu/Debian, and WSL.
 - Source-only bootstrap scripts and their smoke-test coverage.
 - Documentation describing the baseline and its maintenance.
@@ -27,6 +28,7 @@ Use the documented local extension points for machine-specific or team-specific 
 - Extra Git configuration: `~/.gitconfig.local`
 - Optional local Git guardrails: `~/.config/git/hooks/`
 - Optional scoped npm registry config: `~/.npmrc`
+- Optional Ghostty overrides: `~/.config/ghostty/config.local.ghostty`
 
 ## Development Workflow
 
@@ -55,7 +57,7 @@ Use the documented local extension points for machine-specific or team-specific 
 
 ## Templates And Rendering
 
-- Shell templates (`dot_*.tmpl`, `dot_*/env.*.tmpl`) must render on macOS and Linux/WSL, with and without optional integrations.
+- Shell and application templates (`dot_*.tmpl`, `dot_*/env.*.tmpl`, `dot_config/ghostty/*.tmpl`, and `dot_config/fontconfig/**/*.tmpl`) must render on macOS and Linux/WSL, with and without optional integrations.
 - The templates are smoke-tested by rendering them with `chezmoi execute-template` and syntax-checking the output with the corresponding shell.
 - When you add a new template, add it to `bootstrap/scripts/run-smoke-tests.sh` so rendering and syntax checks are enforced on every change.
 
@@ -66,6 +68,9 @@ The following source manifests are consumed by both the installer scripts and th
 - `bootstrap/manifests/shell/oh-my-zsh-plugins.txt`
 - `bootstrap/manifests/system/apt-packages.txt`
 - `bootstrap/manifests/system/Brewfile`
+- `bootstrap/manifests/desktop/apt-packages.txt`
+- `bootstrap/manifests/desktop/Brewfile`
+- `bootstrap/manifests/desktop/maple-mono-nf-cn.env`
 - `bootstrap/manifests/ecosystem/go-tools.txt`
 - `bootstrap/manifests/ecosystem/uv-tools.txt`
 

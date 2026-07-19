@@ -1,0 +1,16 @@
+{{- if eq .chezmoi.os "darwin" -}}
+true
+{{- else if eq .chezmoi.os "linux" -}}
+{{- $osReleaseID := get .chezmoi.osRelease "id" | default "" -}}
+{{- $osReleaseVersion := get .chezmoi.osRelease "versionID" | default "" -}}
+{{- $kernelRelease := get .chezmoi.kernel "osrelease" | default "" -}}
+{{- $isWSL := contains "microsoft" (lower $kernelRelease) -}}
+{{- if and
+    (eq $osReleaseID "ubuntu")
+    (not $isWSL)
+    (ne $osReleaseVersion "")
+    (semverCompare ">=26.4.0" (printf "%s.0" $osReleaseVersion))
+-}}
+true
+{{- end -}}
+{{- end -}}
