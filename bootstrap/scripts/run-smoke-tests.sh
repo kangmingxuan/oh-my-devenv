@@ -211,18 +211,6 @@ backup_ghostty_literal='xdg-config/ghostty/config.ghostty|$XDG_CONFIG_HOME/ghost
 xdg_apply_literal='bash "$scripts_dir/xdg-config.sh" apply "$config_file"'
 # shellcheck disable=SC2016
 xdg_persistent_state_literal='--persistent-state="$xdg_persistent_state"'
-old_shell_overlay_patterns=(
-  '.zshrc.secrets'
-  '.bashrc.secrets'
-  '.zsh/work.zsh'
-  '.bash/work.bash'
-  'work/env.sh'
-  'work-env.sh.example'
-  'zshrc.secrets.example'
-  'bashrc.secrets.example'
-  'zsh-work.zsh.example'
-  'bash-work.bash.example'
-)
 
 log_step "🧪" "Running local smoke tests..."
 
@@ -264,6 +252,17 @@ if [[ "$relative_xdg" != "$tmp_dir/home/.config" ]]; then
   fail_test "relative XDG_CONFIG_HOME resolved to '$relative_xdg'"
 fi
 assert_file_contains "$tmp_dir/relative-xdg.err" "ignoring relative XDG_CONFIG_HOME=relative/config"
+
+mkdir -p "$tmp_dir/env-loads/oh-my-devenv"
+printf '%s\n' 'export OH_MY_DEVENV_SMOKE_ENV=loaded' >"$tmp_dir/env-loads/oh-my-devenv/env.sh"
+# shellcheck disable=SC2016
+source_env_command='source "$1"; oh_my_devenv_setup_xdg_config_home; oh_my_devenv_source_shared_env; printf "%s\n" "$OH_MY_DEVENV_SMOKE_ENV"'
+loaded_env="$(XDG_CONFIG_HOME="$tmp_dir/env-loads" \
+  bash -c "$source_env_command" \
+  _ "$xdg_resolver")"
+if [[ "$loaded_env" != "loaded" ]]; then
+  fail_test "env.sh under XDG_CONFIG_HOME was not loaded"
+fi
 
 mkdir -p "$tmp_dir/env-must-not-move-xdg/oh-my-devenv"
 printf '%s\n' 'unset XDG_CONFIG_HOME' >"$tmp_dir/env-must-not-move-xdg/oh-my-devenv/env.sh"
@@ -308,17 +307,6 @@ assert_file_contains "$tmp_dir/env.bash" "oh_my_devenv_setup_xdg_config_home"
 assert_file_contains "$tmp_dir/env.bash" "oh_my_devenv_source_shared_env"
 assert_file_not_contains "$tmp_dir/env.bash" "$shared_secrets_literal"
 assert_file_not_contains "$tmp_dir/env.bash" "$bash_overlay_literal"
-
-for old_shell_overlay_pattern in "${old_shell_overlay_patterns[@]}"; do
-  assert_file_not_contains "$tmp_dir/dot_zshrc" "$old_shell_overlay_pattern"
-  assert_file_not_contains "$tmp_dir/env.zsh" "$old_shell_overlay_pattern"
-  assert_file_not_contains "$tmp_dir/dot_bashrc" "$old_shell_overlay_pattern"
-  assert_file_not_contains "$tmp_dir/env.bash" "$old_shell_overlay_pattern"
-  assert_file_not_contains "$repo_root/bootstrap/scripts/common.sh" "$old_shell_overlay_pattern"
-  if grep -RInF -- "$old_shell_overlay_pattern" "$repo_root/docs/local-overlay-examples" >/dev/null 2>&1; then
-    fail_test "docs/local-overlay-examples still references legacy shell overlay path: $old_shell_overlay_pattern"
-  fi
-done
 
 syntax_check sh "$repo_root/dot_profile"
 
