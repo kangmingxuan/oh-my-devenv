@@ -710,6 +710,18 @@ assert_file_not_contains "$synthetic_unsupported_fontconfig" 'binding="strong"'
 assert_file_not_contains "$synthetic_unsupported_fontconfig" "Maple Mono NF CN"
 assert_file_not_contains "$synthetic_macos_fontconfig" 'binding="strong"'
 assert_file_not_contains "$synthetic_macos_fontconfig" "Maple Mono NF CN"
+synthetic_macos_ghostty="$tmp_dir/ghostty-macos.conf"
+synthetic_linux_ghostty="$tmp_dir/ghostty-linux.conf"
+chezmoi --source="$repo_root" \
+  --override-data '{"desktopBaseline":true,"desktopPlatformSupported":true,"chezmoi":{"os":"darwin","osRelease":null,"kernel":null}}' \
+  execute-template --file "$repo_root/xdg_config/ghostty/config.ghostty.tmpl" \
+  >"$synthetic_macos_ghostty"
+chezmoi --source="$repo_root" \
+  --override-data '{"desktopBaseline":true,"desktopPlatformSupported":true,"chezmoi":{"os":"linux","osRelease":{"id":"ubuntu","versionID":"26.04"},"kernel":{"osrelease":"linux"}}}' \
+  execute-template --file "$repo_root/xdg_config/ghostty/config.ghostty.tmpl" \
+  >"$synthetic_linux_ghostty"
+assert_file_contains "$synthetic_macos_ghostty" "macos-titlebar-style = native"
+assert_file_not_contains "$synthetic_linux_ghostty" "macos-titlebar-style"
 check_tool_manifest_parser "$repo_root/bootstrap/manifests/ecosystem/go-tools.txt" go_tool_binary_name
 check_tool_manifest_parser "$repo_root/bootstrap/manifests/ecosystem/uv-tools.txt" uv_tool_binary_name
 if grep -Eq '@latest([[:space:]]|$)' "$repo_root/bootstrap/manifests/ecosystem/go-tools.txt"; then
