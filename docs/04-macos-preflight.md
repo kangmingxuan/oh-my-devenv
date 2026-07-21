@@ -50,7 +50,7 @@ This is the same command every macOS contributor runs for a fresh bootstrap. The
 chezmoi init --prompt --apply --source="$(pwd)"
 ```
 
-Answer the three `chezmoi init` prompts (Git author name, email address, and the desktop-baseline choice) with the values you actually use on this machine. Select the desktop baseline so this checklist exercises Ghostty and Maple Mono. The explicit `--prompt` makes this preflight re-exercise all three choices even on an existing setup; normal first-run and update commands keep reusing the persisted answers.
+Answer the three `chezmoi init` prompts (Git author name, email address, and the desktop-baseline choice) with the values you actually use on this machine. Select the desktop baseline so this checklist exercises the complete macOS bundle: Ghostty, Maple Mono NF CN, and OrbStack. The explicit `--prompt` makes this preflight re-exercise all three choices even on an existing setup; normal first-run and update commands keep reusing the persisted answers.
 
 Expected outcome: `.chezmoiscripts/run_onchange_after_60-check.sh` runs last and reports `All checks passed.` If it exits non-zero, capture the failing line, attach it to the review, and stop — the change is not ready to merge.
 
@@ -69,16 +69,18 @@ Expected outcome: both commands report `The Brewfile's dependencies are satisfie
 ## 4. Hand-Validate The Desktop Baseline
 
 ```bash
-brew list --cask ghostty font-maple-mono-nf-cn
+brew list --cask ghostty font-maple-mono-nf-cn orbstack
 ghostty_cli="$(command -v ghostty || true)"
 : "${ghostty_cli:=/Applications/Ghostty.app/Contents/MacOS/Ghostty}"
 test -x "$ghostty_cli"
 "$ghostty_cli" +validate-config
 ```
 
-Expected outcome: both casks are installed and Ghostty accepts the effective
-managed configuration, including any machine-local
-`$XDG_CONFIG_HOME/ghostty/config.local.ghostty` overrides.
+Expected outcome: all three casks are installed and Ghostty accepts the
+effective managed configuration, including any machine-local
+`$XDG_CONFIG_HOME/ghostty/config.local.ghostty` overrides. This check does not
+launch OrbStack or assert Docker daemon, context, socket, or license readiness;
+first-launch setup remains a user action.
 
 ## 5. Hand-Validate mise Runtime State
 
@@ -127,7 +129,7 @@ Copy the template below verbatim into the review description (append to the exis
 - [ ] Hardware / OS: `<arm64 | x86_64>` — macOS `<version>`
 - [ ] `chezmoi init --apply` completed; `60-check.sh` reported `All checks passed.`
 - [ ] Both `brew bundle check` commands reported `The Brewfile's dependencies are satisfied.`
-- [ ] Ghostty and Maple Mono casks are installed; `ghostty +validate-config` succeeds
+- [ ] Ghostty, Maple Mono, and OrbStack casks are installed; `ghostty +validate-config` succeeds
 - [ ] `mise current` agrees with `xdg_config/mise/config.toml.tmpl`
 - [ ] `gopls`, `dlv`, `ruff`, `basedpyright`, `pre-commit` all print versions
 - [ ] `bash bootstrap/scripts/run-smoke-tests.sh` passed

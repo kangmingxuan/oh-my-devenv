@@ -13,7 +13,7 @@
 - 使用 `chezmoi` 统一管理 dotfiles
 - 新机器上可自动安装所需工具
 - 明确区分“系统工具”“语言运行时”“生态工具”的管理职责
-- 在受支持的工作站上提供一套显式选择、可移植的桌面终端基线，同时不影响服务器、WSL 或 CI 安装
+- 在受支持的工作站上提供一套显式选择、全有或全无的平台桌面基线，同时不影响服务器、WSL 或 CI 安装
 
 ## 2. 设计结论
 
@@ -23,7 +23,7 @@
 2. **系统包管理器**：
    - macOS 使用 `Homebrew`
    - Ubuntu / Debian / WSL 使用 `apt`
-3. **桌面资产安装器**：用户选择后，从独立的平台清单安装 Ghostty 与 Maple Mono NF CN
+3. **桌面资产安装器**：用户选择后，从独立清单安装完整的平台包：所有受支持平台包含 Ghostty 与 Maple Mono NF CN，macOS 额外包含 OrbStack
 4. **mise**：负责语言运行时与二进制分发工具的版本管理，如 Go / Node / Python / `golangci-lint` / `uv`
 5. **生态工具安装器**：负责语言生态内工具
    - Go：`go install`（如 `gopls`、`dlv`）
@@ -51,6 +51,7 @@
 - 构建工具
 - 常用 Unix 工具
 - 受支持桌面平台上的 Ghostty
+- 已选择的 macOS 桌面基线中的 OrbStack
 
 示例：
 
@@ -183,9 +184,9 @@
 - 系统工具使用 Homebrew
 - 通过 `Brewfile` 管理包清单
 - 使用 `brew bundle` 安装
-- 选择 `desktopBaseline` 后，从独立的桌面 `Brewfile` 安装 Ghostty 与 Maple Mono NF CN
-- OrbStack 保持为 `Brewfile.optional` 中的可选本地集成；仅当用户设置 `DOTFILES_INSTALL_REPO_OPTIONAL_BREWFILE=1` 时安装，不由 baseline 默认安装
-- 支持通过 `DOTFILES_EXTRA_BREWFILES` 在首次 bootstrap 时安装用户本机 Brewfile；首次之后的本地清单变更用 `brew bundle install --file=...` 手动同步
+- 选择 `desktopBaseline` 后，从独立的桌面 `Brewfile` 一起安装 Ghostty、Maple Mono NF CN 与 OrbStack
+- 系统包 hook 运行时，若固定路径 `$XDG_CONFIG_HOME/oh-my-devenv/Brewfile.local` 存在则读取它；首次之后的本地清单变更用 `brew bundle install --file=...` 手动同步
+- 安装 OrbStack cask，但不声称首次启动设置、Docker runtime 状态或许可证已经就绪
 - shell 框架和插件不走 Homebrew，改由独立 shell 资产脚本通过 `git clone` 管理
 
 ### Ubuntu / Debian / WSL
@@ -297,8 +298,8 @@ uv = "0.11.28"
 - 仅在 macOS 中运行
 - 校验 `brew` 存在
 - 从 `bootstrap/manifests/` 中的 source-only `Brewfile` 执行 `brew bundle`
-- baseline CLI 工具保留在系统 `Brewfile`；已选择的 Ghostty/字体组合保留在桌面 `Brewfile`；OrbStack 等无关 GUI 应用 cask 保留在 `Brewfile.optional`
-- baseline Brewfile 之后，仅在显式 macOS opt-in 环境变量存在时安装 repo optional 或用户本机 Brewfile
+- baseline CLI 工具保留在系统 `Brewfile`；已选择的 Ghostty/字体/OrbStack 组合保留在桌面 `Brewfile`；其他 GUI 应用放入用户自己的 `Brewfile.local`
+- 系统 Brewfile 之后，仅在固定路径的本地 Brewfile 存在时安装它
 
 ### `install-maple-mono-font`
 

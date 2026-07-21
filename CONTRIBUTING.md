@@ -7,7 +7,7 @@ This repository is a shared development environment baseline managed by [chezmoi
 Changes that belong in this repository:
 
 - Baseline system packages that most engineers benefit from (editors, `git`, `curl`, formatting and diagnostic tools).
-- The explicitly selected Ghostty desktop baseline on supported workstation platforms.
+- The explicitly selected, platform-specific desktop baseline on supported workstations, including OrbStack on macOS.
 - Baseline shell, Git, SSH, and runtime templates that work on macOS, Ubuntu/Debian, and WSL.
 - Source-only bootstrap scripts and their smoke-test coverage.
 - Documentation describing the baseline and its maintenance.

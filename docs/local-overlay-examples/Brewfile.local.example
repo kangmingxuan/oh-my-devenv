@@ -3,18 +3,12 @@
 # macOS-only Homebrew apps and CLIs that are useful on this machine but do not
 # belong in the shared baseline.
 #
-# To install this during first bootstrap, add this to
-# $XDG_CONFIG_HOME/oh-my-devenv/bootstrap.env before
-# `chezmoi init --apply`:
-#
-#   export DOTFILES_EXTRA_BREWFILES="$XDG_CONFIG_HOME/oh-my-devenv/Brewfile.local"
+# When this file exists before the system-package hook runs, the macOS
+# bootstrap installs it automatically.
 #
 # After first bootstrap, re-sync local changes explicitly:
 #
 #   brew bundle install --file="$XDG_CONFIG_HOME/oh-my-devenv/Brewfile.local"
-
-# Container runtime for local container workflows.
-# cask "orbstack"
 
 # Personal editor / app choices. Uncomment only what you actually want.
 # cask "visual-studio-code"

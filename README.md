@@ -10,7 +10,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 ![Platforms](https://img.shields.io/badge/platforms-macOS%20%7C%20Ubuntu%2FDebian%20%7C%20WSL-informational)
 
-oh-my-devenv is a shared, reproducible development-environment baseline. Point `chezmoi` at it on a fresh machine and minutes later you have managed shells, language runtimes, and a curated CLI toolchain — all on `PATH`, all from a single source of truth. Supported workstations can also opt into the shared Ghostty desktop baseline. Machine- and team-specific tweaks stay in local overlays, so the baseline stays clean and portable.
+oh-my-devenv is a shared, reproducible development-environment baseline. Point `chezmoi` at it on a fresh machine and minutes later you have managed shells, language runtimes, and a curated CLI toolchain — all on `PATH`, all from a single source of truth. Supported workstations can also opt into a platform-specific desktop baseline. Machine- and team-specific tweaks stay in local overlays, so the baseline stays clean and portable.
 
 ## What you get
 
@@ -20,7 +20,7 @@ oh-my-devenv is a shared, reproducible development-environment baseline. Point `
 - **Managed shells** — `zsh` with [oh-my-zsh](https://ohmyz.sh/) plugins (autosuggestions, completions, syntax highlighting) plus a matching `bash` setup.
 - **Pinned runtimes** — Go, Node, Python, and golangci-lint via mise, plus ecosystem tools such as `gopls`, `dlv`, `ruff`, `basedpyright`, and `pre-commit`.
 - **Modern CLI toolkit** — ripgrep, fd, bat, fzf, jq, direnv, tmux, shellcheck, shfmt, and more.
-- **Opt-in desktop baseline** — Ghostty, Maple Mono NF CN, and matching managed configuration on macOS and Ubuntu 26.04+ desktop machines, including the required Linux Fontconfig alias.
+- **Opt-in desktop baseline** — one all-or-nothing platform bundle: Ghostty and Maple Mono NF CN on supported workstations, OrbStack on macOS, and the required Linux Fontconfig alias on Ubuntu 26.04+.
 - **Safe first run** — backs up any existing managed dotfiles and prompts once for your Git identity and desktop-baseline choice.
 - **Local overlays, not forks** — keep machine, team, and secret settings under `$XDG_CONFIG_HOME/oh-my-devenv/` and `*.local` files; never edit the shared baseline. The default config root is `~/.config`.
 - **Team-ready** — one reproducible baseline the whole team can track, with machine- and team-specific values kept in local overlays.
@@ -31,7 +31,7 @@ oh-my-devenv is a shared, reproducible development-environment baseline. Point `
 flowchart TD
     A["chezmoi init --apply"] --> B["Render dotfiles<br/>+ run ordered hooks"]
     B --> C["System packages<br/>Homebrew / apt"]
-    B --> D["Optional desktop assets<br/>Ghostty + Maple Mono"]
+    B --> D["Optional desktop baseline<br/>macOS also includes OrbStack"]
     B --> E["Shell assets<br/>oh-my-zsh + plugins"]
     B --> X["Managed config<br/>$XDG_CONFIG_HOME"]
     B --> F["Runtimes via mise<br/>Go · Node · Python"]
@@ -105,25 +105,22 @@ chezmoi init --apply git@github.com:kangmingxuan/oh-my-devenv.git
 chezmoi init --apply https://github.com/kangmingxuan/oh-my-devenv.git
 ```
 
-The first apply backs up any pre-existing managed files, prompts once for your Git author name, email, and desktop-baseline choice, deploys the dotfiles, runs the ordered bootstrap hooks, and ends with an environment check. The desktop choice defaults to yes on macOS and graphical Ubuntu 26.04+ hosts, and to no on non-graphical or unsupported Linux hosts and WSL; the repository's apply-CI fixture disables it explicitly. On success you will see **`All checks passed.`** and a list of core tool versions.
+The first apply backs up any pre-existing managed files, prompts once for your Git author name, email, and desktop-baseline choice, deploys the dotfiles, runs the ordered bootstrap hooks, and ends with an environment check. The desktop choice defaults to yes on macOS and graphical Ubuntu 26.04+ hosts, and to no on non-graphical or unsupported Linux hosts and WSL; the repository's apply-CI fixture disables it explicitly. On macOS, accepting the choice installs Ghostty, Maple Mono NF CN, and OrbStack together. Homebrew installs the OrbStack application, but you must launch it once to finish setup; using OrbStack for freelance, business, or professional work requires a paid [OrbStack license](https://docs.orbstack.dev/licensing). On success you will see **`All checks passed.`** and a list of core tool versions.
 
 <details>
-<summary><b>macOS:</b> opt in to OrbStack or other optional casks before the first apply</summary>
+<summary><b>macOS:</b> add machine-local Homebrew packages before the first apply</summary>
 
-The default macOS bootstrap installs only the shared baseline. To include local Homebrew apps such as OrbStack during the first apply, declare them first:
+OrbStack belongs to the selected macOS desktop baseline. To include other machine-local Homebrew packages during the first apply, create the fixed local Brewfile before bootstrap runs:
 
 ```bash
 export XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
 mkdir -p "$XDG_CONFIG_HOME/oh-my-devenv"
 cat > "$XDG_CONFIG_HOME/oh-my-devenv/Brewfile.local" <<'EOF'
-cask "orbstack"
-EOF
-cat >> "$XDG_CONFIG_HOME/oh-my-devenv/bootstrap.env" <<'EOF'
-export DOTFILES_EXTRA_BREWFILES="$XDG_CONFIG_HOME/oh-my-devenv/Brewfile.local"
+cask "visual-studio-code"
 EOF
 ```
 
-To install this repo's optional catalog instead, set `DOTFILES_INSTALL_REPO_OPTIONAL_BREWFILE=1` in `bootstrap.env`. After the first bootstrap, sync local Brewfile changes explicitly with `brew bundle install --file="$XDG_CONFIG_HOME/oh-my-devenv/Brewfile.local"`.
+The system-package hook installs this file when it exists. After the first bootstrap, sync local Brewfile changes explicitly with `brew bundle install --file="$XDG_CONFIG_HOME/oh-my-devenv/Brewfile.local"`.
 
 </details>
 
@@ -150,7 +147,7 @@ For prompts, hook order, success signals, and troubleshooting, see [docs/01-onbo
 
 ## Scope and expectations
 
-This repository is maintained on a **best-effort** basis by a single maintainer. Treat it as a shared baseline for laptops, VMs, and disposable notebook environments: it gets a clean machine to a working shell, runtime, and CLI toolchain quickly — it is not a platform-grade product with hard guarantees for every runner or network path. Defaults stay intentionally conservative, and machine- or team-specific settings belong in local overlays, not the shared baseline. The desktop baseline is an explicit machine choice and currently installs only on macOS and non-WSL Ubuntu 26.04+; OrbStack remains a separate optional local add-on.
+This repository is maintained on a **best-effort** basis by a single maintainer. Treat it as a shared baseline for laptops, VMs, and disposable notebook environments: it gets a clean machine to a working shell, runtime, and CLI toolchain quickly — it is not a platform-grade product with hard guarantees for every runner or network path. Defaults stay intentionally conservative, and machine- or team-specific settings belong in local overlays, not the shared baseline. The desktop baseline is an explicit, all-or-nothing machine choice and currently installs only on macOS and non-WSL Ubuntu 26.04+; its contents are platform-specific, with OrbStack included on macOS.
 
 ## Documentation
 

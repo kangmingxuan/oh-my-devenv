@@ -12,7 +12,7 @@ After a successful first `chezmoi apply`, you should have:
 - **Runtimes**: `go`, `node`, `python`, and [mise](https://mise.jdx.dev/) as the version manager.
 - **Tooling**: `git`, `curl`, `uv`, `golangci-lint`, `shellcheck`, `shfmt`, plus the Go and Python CLI tools declared in `bootstrap/manifests/ecosystem/`.
 - **Dotfiles**: managed copies of `~/.zshrc`, `~/.bashrc`, `~/.gitconfig`, mise config, and related files — tuned for a shared baseline, not for one person’s taste.
-- **Optional desktop baseline**: Ghostty, Maple Mono NF CN, and managed terminal/font configuration on macOS or non-WSL Ubuntu 26.04+.
+- **Optional desktop baseline**: an all-or-nothing platform bundle with Ghostty and Maple Mono NF CN on supported workstations, plus OrbStack on macOS.
 - **Python workflow**: `uv` as the only documented package / auth / publish path; no pip-era machine-global config in the baseline.
 
 Exact versions move with `main`; the final check script prints what you actually got on this machine.
@@ -27,15 +27,21 @@ You still need **SSH or HTTPS access** to the Git host that holds this repositor
 
 The shared baseline does not hard-code host-specific Git rewrites. If your environment needs private-host rewrites, SSH aliases, or host-specific guardrails, keep them in local overlays such as `~/.gitconfig.local` or the examples under `docs/local-overlay-examples/`.
 
-Ghostty and its configured font form one explicit shared desktop choice. Other
-macOS Homebrew apps such as OrbStack remain local opt-ins. If
-you want them installed during the first `chezmoi init --apply`, create a local
-Brewfile before running bootstrap and expose it through
-`$XDG_CONFIG_HOME/oh-my-devenv/bootstrap.env` with
-`DOTFILES_EXTRA_BREWFILES`. The default baseline still does not install
-OrbStack or other optional casks.
-If you install it, keep its shell and SSH initialization in the documented
+The desktop choice is one platform-specific bundle rather than a set of
+component switches. On macOS it installs Ghostty, Maple Mono NF CN, and
+OrbStack together; on supported Ubuntu machines it installs the terminal,
+font, and required Fontconfig rule. Homebrew only installs the OrbStack app:
+launch it once to finish setup. Using OrbStack for freelance, business, or
+professional work requires a paid [OrbStack license](https://docs.orbstack.dev/licensing).
+OrbStack shell and SSH
+initialization remains in the documented
 [local vendor integration overlays](local-overlay-examples/README.md#optional-vendor-integrations).
+
+Other macOS Homebrew apps remain machine-local. To install them during the
+first `chezmoi init --apply`, create
+`$XDG_CONFIG_HOME/oh-my-devenv/Brewfile.local` before bootstrap runs. The
+system-package hook reads that one fixed path when present; later edits are
+synced explicitly with `brew bundle install --file=...`.
 
 ---
 
@@ -78,8 +84,8 @@ Bootstrap is split into ordered hooks under `.chezmoiscripts/`:
 
 0. **`run_before_00-*`** — prints the startup banner (hide it with `NO_LOGO=1`).
 1. **`run_once_before_10-*`** — one-time prerequisites and, if needed, **backup** of any pre-existing managed files before they are overwritten.
-2. **`run_onchange_after_20-*`** — system packages (`apt` on Linux / WSL, Homebrew on macOS), plus explicit macOS Homebrew opt-ins from `DOTFILES_INSTALL_REPO_OPTIONAL_BREWFILE` or `DOTFILES_EXTRA_BREWFILES`.
-3. **`run_onchange_after_22-*`** — when selected, installs Ghostty and Maple Mono NF CN from the platform-specific desktop manifests.
+2. **`run_onchange_after_20-*`** — system packages (`apt` on Linux / WSL, Homebrew on macOS), plus the fixed machine-local macOS `Brewfile.local` when it exists.
+3. **`run_onchange_after_22-*`** — when selected, installs the platform desktop bundle: Ghostty and Maple Mono NF CN everywhere supported, plus OrbStack on macOS.
 4. **`run_onchange_after_25-*`** — shell assets (oh-my-zsh and plugins from the manifest).
 5. **`run_onchange_after_30-*`** — install mise itself.
 6. **`run_after_35-*`** — apply the dedicated `xdg_config/` chezmoi source directly under `$XDG_CONFIG_HOME`.
