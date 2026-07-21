@@ -15,7 +15,7 @@ esac
 
 # Load local secrets that are intentionally not tracked.
 # shellcheck disable=SC1091
-[[ -f "${XDG_CONFIG_HOME:-$HOME/.config}/oh-my-devenv/secrets.sh" ]] && source "${XDG_CONFIG_HOME:-$HOME/.config}/oh-my-devenv/secrets.sh"
+[[ -f "$XDG_CONFIG_HOME/oh-my-devenv/secrets.sh" ]] && source "$XDG_CONFIG_HOME/oh-my-devenv/secrets.sh"
 
 # --- History Settings ---
 # Do not store duplicate lines or lines starting with spaces in history.
@@ -123,6 +123,6 @@ fi
 
 # Load local interactive overlay last so it can intentionally override
 # baseline aliases, prompt, functions, and key bindings. Put shared non-secret
-# environment variables in ~/.config/oh-my-devenv/env.sh instead.
+# environment variables in $XDG_CONFIG_HOME/oh-my-devenv/env.sh instead.
 # shellcheck disable=SC1091
-[[ -f "${XDG_CONFIG_HOME:-$HOME/.config}/oh-my-devenv/bashrc.bash" ]] && source "${XDG_CONFIG_HOME:-$HOME/.config}/oh-my-devenv/bashrc.bash"
+[[ -f "$XDG_CONFIG_HOME/oh-my-devenv/bashrc.bash" ]] && source "$XDG_CONFIG_HOME/oh-my-devenv/bashrc.bash"

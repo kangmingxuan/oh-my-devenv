@@ -78,13 +78,13 @@ is_overlay_path() {
   local p="$1"
 
   case "$p" in
-    "${XDG_CONFIG_HOME:-$HOME/.config}/oh-my-devenv/env.sh" | \
-      "${XDG_CONFIG_HOME:-$HOME/.config}/oh-my-devenv/secrets.sh" | \
-      "${XDG_CONFIG_HOME:-$HOME/.config}/oh-my-devenv/zshrc.zsh" | \
-      "${XDG_CONFIG_HOME:-$HOME/.config}/oh-my-devenv/bashrc.bash" | \
-      "${XDG_CONFIG_HOME:-$HOME/.config}/ghostty/config.local.ghostty" | \
+    "$XDG_CONFIG_HOME/oh-my-devenv/env.sh" | \
+      "$XDG_CONFIG_HOME/oh-my-devenv/secrets.sh" | \
+      "$XDG_CONFIG_HOME/oh-my-devenv/zshrc.zsh" | \
+      "$XDG_CONFIG_HOME/oh-my-devenv/bashrc.bash" | \
+      "$XDG_CONFIG_HOME/ghostty/config.local.ghostty" | \
       "$HOME/.gitconfig.local" | \
-      "$HOME/.config/git/hooks/pre-push" | \
+      "$XDG_CONFIG_HOME/git/hooks/pre-push" | \
       "$HOME/.npmrc")
       return 0
       ;;
@@ -198,11 +198,16 @@ for item in data:
   rm -f "$cap"
 }
 
+read_xdg_managed_paths() {
+  bash "$script_dir/xdg-config.sh" managed
+}
+
 # --- Build candidate list -------------------------------------------------
 
 mapfile -t managed_lines < <(read_managed_paths)
+mapfile -t xdg_managed_lines < <(read_xdg_managed_paths)
 
-for line in "${managed_lines[@]}"; do
+for line in "${managed_lines[@]}" "${xdg_managed_lines[@]}"; do
   add_candidate "$line"
 done
 
@@ -266,13 +271,13 @@ emit_standalone_overlay_slots() {
   local f
 
   for f in \
-    "${XDG_CONFIG_HOME:-$HOME/.config}/oh-my-devenv/env.sh" \
-    "${XDG_CONFIG_HOME:-$HOME/.config}/oh-my-devenv/secrets.sh" \
-    "${XDG_CONFIG_HOME:-$HOME/.config}/oh-my-devenv/zshrc.zsh" \
-    "${XDG_CONFIG_HOME:-$HOME/.config}/oh-my-devenv/bashrc.bash" \
-    "${XDG_CONFIG_HOME:-$HOME/.config}/ghostty/config.local.ghostty" \
+    "$XDG_CONFIG_HOME/oh-my-devenv/env.sh" \
+    "$XDG_CONFIG_HOME/oh-my-devenv/secrets.sh" \
+    "$XDG_CONFIG_HOME/oh-my-devenv/zshrc.zsh" \
+    "$XDG_CONFIG_HOME/oh-my-devenv/bashrc.bash" \
+    "$XDG_CONFIG_HOME/ghostty/config.local.ghostty" \
     "$HOME/.gitconfig.local" \
-    "$HOME/.config/git/hooks/pre-push" \
+    "$XDG_CONFIG_HOME/git/hooks/pre-push" \
     "$HOME/.npmrc"; do
     [[ -e "$f" ]] || continue
     [[ -n "${overlay_logged[$f]:-}" ]] && continue

@@ -19,7 +19,10 @@ docs/**
 .codex
 .codex/**
 
-# Source-only bootstrap assets. Hooks read these from the source checkout.
+# Source-only assets. Hooks read bootstrap directly and apply xdg_config as a
+# separate chezmoi source with XDG_CONFIG_HOME as its destination.
 bootstrap
 bootstrap/**
+xdg_config
+xdg_config/**
 .ci-chezmoi-data.toml

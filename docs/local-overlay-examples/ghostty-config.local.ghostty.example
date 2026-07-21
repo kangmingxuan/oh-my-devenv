@@ -1,4 +1,4 @@
-# Copy this file to ~/.config/ghostty/config.local.ghostty.
+# Copy this file to $XDG_CONFIG_HOME/ghostty/config.local.ghostty.
 # The managed Ghostty baseline loads it last, so values here override shared
 # defaults without becoming part of the repository.
 

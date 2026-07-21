@@ -2,8 +2,11 @@
 {{- if hasKey . "desktopBaseline" -}}
 {{- $desktopBaseline = .desktopBaseline -}}
 {{- end -}}
-{{- $isSupportedDesktop := eq (includeTemplate "desktop-platform-supported" .) "true" -}}
-{{- $enableMapleMonoAlias := and (eq .chezmoi.os "linux") $desktopBaseline $isSupportedDesktop -}}
+{{- $desktopPlatformSupported := false -}}
+{{- if hasKey . "desktopPlatformSupported" -}}
+{{- $desktopPlatformSupported = .desktopPlatformSupported -}}
+{{- end -}}
+{{- $enableMapleMonoAlias := and (eq .chezmoi.os "linux") $desktopBaseline $desktopPlatformSupported -}}
 <?xml version="1.0"?>
 <!DOCTYPE fontconfig SYSTEM "urn:fontconfig:fonts.dtd">
 <fontconfig>{{ if $enableMapleMonoAlias }}

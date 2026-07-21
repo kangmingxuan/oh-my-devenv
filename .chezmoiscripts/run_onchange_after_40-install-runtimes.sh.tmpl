@@ -1,5 +1,5 @@
 #!/bin/bash
-# mise config hash: {{ includeTemplate "dot_config/mise/config.toml.tmpl" | sha256sum }}
+# mise config hash: {{ include "xdg_config/mise/config.toml.tmpl" | sha256sum }}
 
 set -euo pipefail
 

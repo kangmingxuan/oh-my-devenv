@@ -97,6 +97,7 @@ Recommended structure:
 │   ├── run_onchange_after_22-install-desktop-assets.sh.tmpl
 │   ├── run_onchange_after_25-install-shell-assets.sh.tmpl
 │   ├── run_onchange_after_30-install-mise.sh.tmpl
+│   ├── run_after_35-apply-xdg-config.sh.tmpl
 │   ├── run_onchange_after_40-install-runtimes.sh.tmpl
 │   ├── run_onchange_after_50-sync-ecosystem-tools.sh.tmpl
 │   └── run_onchange_after_60-check.sh.tmpl
@@ -122,13 +123,15 @@ Recommended structure:
 │       ├── install-maple-mono-font.sh
 │       ├── install-go-tools.sh
 │       ├── install-oh-my-zsh-assets.sh
-│       └── install-uv-tools.sh
-└── dot_config/
-    ├── fontconfig/
-    │   └── conf.d/
-    │       └── 99-oh-my-devenv-maple-mono-nf-cn.conf.tmpl
-    ├── ghostty/
-    │   └── config.ghostty.tmpl
+│       ├── install-uv-tools.sh
+│       └── xdg-config.sh
+├── dot_local/share/oh-my-devenv/
+│   └── xdg.sh
+└── xdg_config/
+    ├── fontconfig/conf.d/
+    │   └── 99-oh-my-devenv-maple-mono-nf-cn.conf.tmpl
+    ├── ghostty/
+    │   └── config.ghostty.tmpl
     └── mise/
         └── config.toml.tmpl
 ```
@@ -159,9 +162,10 @@ Recommended execution order:
 3. `run_onchange_after_22-install-desktop-assets.sh.tmpl`
 4. `run_onchange_after_25-install-shell-assets.sh.tmpl`
 5. `run_onchange_after_30-install-mise.sh.tmpl`
-6. `run_onchange_after_40-install-runtimes.sh.tmpl`
-7. `run_onchange_after_50-sync-ecosystem-tools.sh.tmpl`
-8. `run_onchange_after_60-check.sh.tmpl`
+6. `run_after_35-apply-xdg-config.sh.tmpl`
+7. `run_onchange_after_40-install-runtimes.sh.tmpl`
+8. `run_onchange_after_50-sync-ecosystem-tools.sh.tmpl`
+9. `run_onchange_after_60-check.sh.tmpl`
 
 Requirements:
 
@@ -383,7 +387,7 @@ Implement in this order:
 5. Implement `install-uv-tools`
 6. Implement `.chezmoiscripts/*`
 7. Implement `bootstrap/manifests/system/*.txt` and `bootstrap/manifests/ecosystem/*.txt`
-8. Implement `dot_config/mise/config.toml.tmpl`
+8. Implement the independent `xdg_config/` source and `xdg_config/mise/config.toml.tmpl`
 9. Add bootstrap usage instructions to `README.md`
 
 ## 15. Final Summary
@@ -391,6 +395,7 @@ Implement in this order:
 The final chosen approach is:
 
 - `chezmoi` manages configuration and orchestration
+- A nested chezmoi source manages configuration files directly under the absolute `XDG_CONFIG_HOME`, which defaults to `$HOME/.config`
 - macOS uses Homebrew for system tools
 - OrbStack is optional on macOS; if installed through the opt-in Homebrew path, initialization is handled by the login-shell layer
 - Ubuntu / Debian / WSL use `apt` for system tools

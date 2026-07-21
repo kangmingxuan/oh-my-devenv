@@ -5,7 +5,7 @@
 - Scope:
   - [ ] Shell assets or templates (`dot_*`, `dot_*/*.tmpl`)
   - [ ] Bootstrap scripts (`.chezmoiscripts/*`, `bootstrap/scripts/*`)
-  - [ ] Runtime / ecosystem manifests (`bootstrap/manifests/ecosystem/*`, `dot_config/mise/*`)
+  - [ ] Runtime / ecosystem manifests (`bootstrap/manifests/ecosystem/*`, `xdg_config/mise/*`)
   - [ ] Documentation (`README.md`, `docs/*`, `CHANGELOG.md`)
   - [ ] GitHub workflow / repository metadata (`.github/*`, `.pre-commit-config.yaml`)
   - [ ] Other (describe below)

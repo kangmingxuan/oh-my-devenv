@@ -31,7 +31,7 @@ Ghostty and its configured font form one explicit shared desktop choice. Other
 macOS Homebrew apps such as OrbStack remain local opt-ins. If
 you want them installed during the first `chezmoi init --apply`, create a local
 Brewfile before running bootstrap and expose it through
-`${XDG_CONFIG_HOME:-$HOME/.config}/oh-my-devenv/env.sh` with
+`$XDG_CONFIG_HOME/oh-my-devenv/env.sh` with
 `DOTFILES_EXTRA_BREWFILES`. The default baseline still does not install
 OrbStack or other optional casks.
 
@@ -61,14 +61,14 @@ you later need a different identity for a specific repository, prefer repo-local
 instead of duplicating the machine-wide default in a shared overlay.
 
 On an existing Ghostty machine, check for the pre-1.2.3 filename
-`~/.config/ghostty/config`. Ghostty still loads that file after the managed
+`$XDG_CONFIG_HOME/ghostty/config`. Ghostty still loads that file after the managed
 `config.ghostty`, so it can shadow shared values. Move any intentional
 machine-only differences to `config.local.ghostty`, validate them with
 `ghostty +validate-config`, and archive the old file instead of deleting it
 blindly. See Ghostty's [configuration-file order](https://ghostty.org/docs/config#file-location).
 
 On supported Ubuntu machines, the desktop baseline also manages
-`~/.config/fontconfig/conf.d/99-oh-my-devenv-maple-mono-nf-cn.conf`. This rule
+`$XDG_CONFIG_HOME/fontconfig/conf.d/99-oh-my-devenv-maple-mono-nf-cn.conf`. This rule
 prepends Maple Mono NF CN with a strong binding when an application requests
 the generic `monospace` family. It is the Linux compatibility path used by
 Ghostty, and it intentionally affects every Fontconfig client that requests
@@ -87,9 +87,10 @@ Bootstrap is split into ordered hooks under `.chezmoiscripts/`:
 3. **`run_onchange_after_22-*`** — when selected, installs Ghostty and Maple Mono NF CN from the platform-specific desktop manifests.
 4. **`run_onchange_after_25-*`** — shell assets (oh-my-zsh and plugins from the manifest).
 5. **`run_onchange_after_30-*`** — install mise itself.
-6. **`run_onchange_after_40-*`** — install language runtimes via mise.
-7. **`run_onchange_after_50-*`** — sync ecosystem tools (`go install`, `uv tool`, etc.).
-8. **`run_onchange_after_60-*`** — final environment check and a short “welcome” summary.
+6. **`run_after_35-*`** — apply the dedicated `xdg_config/` chezmoi source directly under `$XDG_CONFIG_HOME`.
+7. **`run_onchange_after_40-*`** — install language runtimes via mise.
+8. **`run_onchange_after_50-*`** — sync ecosystem tools (`go install`, `uv tool`, etc.).
+9. **`run_onchange_after_60-*`** — final environment check and a short “welcome” summary.
 
 The generated chezmoi config excludes scripts from `chezmoi status`, so routine hook runs do not make a clean setup look locally modified.
 
@@ -113,7 +114,7 @@ If anything fails, the script exits non-zero and prints diagnostic hints — see
 
 If you are on a corporate or otherwise restricted network, public registries may be slow or blocked. Keep those overrides local to your machine rather than baking them into the shared baseline. Start from [**Local overlay examples**](local-overlay-examples/README.md) before your first apply:
 
-- Put non-secret Go and mirror settings in `${XDG_CONFIG_HOME:-$HOME/.config}/oh-my-devenv/env.sh`
+- Put non-secret Go and mirror settings in `$XDG_CONFIG_HOME/oh-my-devenv/env.sh`
 - Keep internal npm scopes in `~/.npmrc`, not in shell startup files
 - Keep Python internal indexes project-local and `uv`-only
 - Set **`DOTFILES_MIRROR_MODE`** before `chezmoi init --apply` when bootstrap itself needs mirror endpoints
@@ -123,7 +124,7 @@ If you are on a corporate or otherwise restricted network, public registries may
 
 ## What to do next
 
-1. **Reload your shell** (or `source` your `~/.zshrc` / `~/.bashrc`) so `PATH`, completions, and any optional `${XDG_CONFIG_HOME:-$HOME/.config}/oh-my-devenv/env.sh` exports pick up the new tools.
+1. **Reload your shell** (or `source` your `~/.zshrc` / `~/.bashrc`) so `PATH`, completions, and any optional `$XDG_CONFIG_HOME/oh-my-devenv/env.sh` exports pick up the new tools.
 2. If you need machine-only tweaks, start from the templates under [`docs/local-overlay-examples/`](local-overlay-examples/README.md) — they are **not** deployed by default.
 3. Keep [`02-reference.md`](02-reference.md) handy for day-to-day commands and every environment variable / flag, or jump to [`docs/README.md`](README.md) for the full docs map.
 

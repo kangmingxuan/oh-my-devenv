@@ -78,11 +78,11 @@ test -x "$ghostty_cli"
 
 Expected outcome: both casks are installed and Ghostty accepts the effective
 managed configuration, including any machine-local
-`~/.config/ghostty/config.local.ghostty` overrides.
+`$XDG_CONFIG_HOME/ghostty/config.local.ghostty` overrides.
 
 ## 5. Hand-Validate mise Runtime State
 
-`60-check.sh` checks that each runtime binary is on PATH. It does not verify that the runtime version mise actually installed matches `dot_config/mise/config.toml.tmpl`. On a Mac, mise is installed via Homebrew rather than `https://mise.run`, so this is the single place where the runtime install path diverges from Linux — worth a direct inspection:
+`60-check.sh` checks that each runtime binary is on PATH. It does not verify that the runtime version mise actually installed matches `xdg_config/mise/config.toml.tmpl`. On a Mac, mise is installed via Homebrew rather than `https://mise.run`, so this is the single place where the runtime install path diverges from Linux — worth a direct inspection:
 
 ```bash
 mise current     # pinned runtimes for the current project
@@ -91,7 +91,7 @@ mise doctor      # mise's own self-check; warnings are usually cosmetic, errors 
 ```
 
 Expected outcome: `mise current` agrees exactly with
-[`dot_config/mise/config.toml.tmpl`](../dot_config/mise/config.toml.tmpl). Any
+[`xdg_config/mise/config.toml.tmpl`](../xdg_config/mise/config.toml.tmpl). Any
 mismatch goes into the signoff.
 
 ## 6. Hand-Validate go / uv Tool State
@@ -128,7 +128,7 @@ Copy the template below verbatim into the review description (append to the exis
 - [ ] `chezmoi init --apply` completed; `60-check.sh` reported `All checks passed.`
 - [ ] Both `brew bundle check` commands reported `The Brewfile's dependencies are satisfied.`
 - [ ] Ghostty and Maple Mono casks are installed; `ghostty +validate-config` succeeds
-- [ ] `mise current` agrees with `dot_config/mise/config.toml.tmpl`
+- [ ] `mise current` agrees with `xdg_config/mise/config.toml.tmpl`
 - [ ] `gopls`, `dlv`, `ruff`, `basedpyright`, `pre-commit` all print versions
 - [ ] `bash bootstrap/scripts/run-smoke-tests.sh` passed
 - Deviations / notes: `<free-form, or "none">`

@@ -21,14 +21,14 @@ Changes that do **not** belong in this repository:
 
 Use the documented local extension points for machine-specific or team-specific values:
 
-- Shared non-secret local env: `${XDG_CONFIG_HOME:-$HOME/.config}/oh-my-devenv/env.sh`
-- Shell secrets: `${XDG_CONFIG_HOME:-$HOME/.config}/oh-my-devenv/secrets.sh`
-- Optional interactive shell overlays: `${XDG_CONFIG_HOME:-$HOME/.config}/oh-my-devenv/zshrc.zsh`, `${XDG_CONFIG_HOME:-$HOME/.config}/oh-my-devenv/bashrc.bash`
+- Shared non-secret local env: `$XDG_CONFIG_HOME/oh-my-devenv/env.sh`
+- Shell secrets: `$XDG_CONFIG_HOME/oh-my-devenv/secrets.sh`
+- Optional interactive shell overlays: `$XDG_CONFIG_HOME/oh-my-devenv/zshrc.zsh`, `$XDG_CONFIG_HOME/oh-my-devenv/bashrc.bash`
 - Extra SSH hosts: `~/.ssh/config.d/*.conf`
 - Extra Git configuration: `~/.gitconfig.local`
-- Optional local Git guardrails: `~/.config/git/hooks/`
+- Optional local Git guardrails: `$XDG_CONFIG_HOME/git/hooks/`
 - Optional scoped npm registry config: `~/.npmrc`
-- Optional Ghostty overrides: `~/.config/ghostty/config.local.ghostty`
+- Optional Ghostty overrides: `$XDG_CONFIG_HOME/ghostty/config.local.ghostty`
 
 ## Development Workflow
 
@@ -57,7 +57,7 @@ Use the documented local extension points for machine-specific or team-specific 
 
 ## Templates And Rendering
 
-- Shell and application templates (`dot_*.tmpl`, `dot_*/env.*.tmpl`, `dot_config/ghostty/*.tmpl`, and `dot_config/fontconfig/**/*.tmpl`) must render on macOS and Linux/WSL, with and without optional integrations.
+- Shell and application templates (`dot_*.tmpl`, `dot_*/env.*.tmpl`, and `xdg_config/**/*.tmpl`) must render on macOS and Linux/WSL, with and without optional integrations.
 - The templates are smoke-tested by rendering them with `chezmoi execute-template` and syntax-checking the output with the corresponding shell.
 - When you add a new template, add it to `bootstrap/scripts/run-smoke-tests.sh` so rendering and syntax checks are enforced on every change.
 

@@ -30,6 +30,7 @@ This repository versions the baseline with [Semantic Versioning 2.0](https://sem
 
 ### Changed
 
+- Made `XDG_CONFIG_HOME` the single config root for managed mise, Ghostty, and Fontconfig files and for local config overlays. It defaults to `$HOME/.config`; custom absolute roots are applied through a dedicated chezmoi subsource.
 - Upgraded uv from 0.10.9 to 0.11.28, adopting the 0.11 networking and certificate-verification changes while keeping uv pinned to a reproducible patch release.
 - Pinned Go, Node, and Python to complete patch versions; refreshed the Go, Python, lint, hook, and secret-scanning tools to current compatible releases; and made related low-risk dependency maintenance a single reviewable change.
 - Reworked the root `README.md` into a more scannable landing page: added status and platform badges, a "What you get" feature summary, and a Mermaid bootstrap-flow diagram; relocated the verbose first-run details to `docs/01-onboarding.md`; and moved the best-effort scope note into its own section. The Quick Start steps and the `#quick-start` anchor are unchanged.

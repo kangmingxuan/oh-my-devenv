@@ -1,4 +1,4 @@
-# ~/.config/oh-my-devenv/zshrc.zsh
+# $XDG_CONFIG_HOME/oh-my-devenv/zshrc.zsh
 #
 # Zsh-only local customizations that should not live in the shared baseline.
 # The baseline sources this file as a late interactive hook, after its own

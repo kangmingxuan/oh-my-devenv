@@ -10,19 +10,19 @@
 # Brewfile hash: {{ include "bootstrap/manifests/system/Brewfile" | sha256sum }}
 {{ end -}}
 {{ if and $desktopBaseline $isSupportedDesktop -}}
-# Ghostty config hash: {{ includeTemplate "dot_config/ghostty/config.ghostty.tmpl" . | sha256sum }}
+# Ghostty config hash: {{ include "xdg_config/ghostty/config.ghostty.tmpl" | sha256sum }}
 {{ if eq .chezmoi.os "darwin" -}}
 # Desktop Brewfile hash: {{ include "bootstrap/manifests/desktop/Brewfile" | sha256sum }}
 {{ else -}}
 # Desktop apt manifest hash: {{ include "bootstrap/manifests/desktop/apt-packages.txt" | sha256sum }}
 # Maple Mono manifest hash: {{ include "bootstrap/manifests/desktop/maple-mono-nf-cn.env" | sha256sum }}
-# Maple Mono Fontconfig hash: {{ includeTemplate "dot_config/fontconfig/conf.d/99-oh-my-devenv-maple-mono-nf-cn.conf.tmpl" . | sha256sum }}
+# Maple Mono Fontconfig hash: {{ include "xdg_config/fontconfig/conf.d/99-oh-my-devenv-maple-mono-nf-cn.conf.tmpl" | sha256sum }}
 {{ end -}}
 {{ end -}}
 # go-tools.txt hash: {{ include "bootstrap/manifests/ecosystem/go-tools.txt" | sha256sum }}
 # uv-tools.txt hash: {{ include "bootstrap/manifests/ecosystem/uv-tools.txt" | sha256sum }}
 # oh-my-zsh-plugins.txt hash: {{ include "bootstrap/manifests/shell/oh-my-zsh-plugins.txt" | sha256sum }}
-# mise config hash: {{ includeTemplate "dot_config/mise/config.toml.tmpl" | sha256sum }}
+# mise config hash: {{ include "xdg_config/mise/config.toml.tmpl" | sha256sum }}
 
 set -euo pipefail
 
@@ -106,7 +106,7 @@ check_ghostty_config() {
 
 check_maple_mono_fontconfig() {
   local active_configs=""
-  local config_path="${XDG_CONFIG_HOME:-$HOME/.config}/fontconfig/conf.d/99-oh-my-devenv-maple-mono-nf-cn.conf"
+  local config_path="$XDG_CONFIG_HOME/fontconfig/conf.d/99-oh-my-devenv-maple-mono-nf-cn.conf"
   local installed_names=""
   local matched_postscript_name=""
   local postscript_name=""
@@ -237,6 +237,7 @@ check_cmd git
 check_cmd curl
 check_cmd zsh
 check_cmd mise
+check_path "$XDG_CONFIG_HOME/mise/config.toml" "mise config"
 
 # Runtimes
 check_cmd go
@@ -258,6 +259,7 @@ check_oh_my_zsh_plugins "$manifests_dir/shell/oh-my-zsh-plugins.txt" "${ZSH_CUST
 
 {{ if and $desktopBaseline $isSupportedDesktop -}}
 # Desktop baseline
+check_path "$XDG_CONFIG_HOME/ghostty/config.ghostty" "ghostty config file"
 ghostty_bin="$(resolve_ghostty_bin || true)"
 check_ghostty_config "$ghostty_bin"
 {{ if eq .chezmoi.os "darwin" -}}
