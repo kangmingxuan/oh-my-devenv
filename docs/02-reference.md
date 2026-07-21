@@ -102,16 +102,18 @@ bash bootstrap/scripts/uninstall.sh
 
 ## Environment variables and flags
 
-Except for `XDG_CONFIG_HOME` itself, set these in the shell before `chezmoi
-apply`, or persist them in `$XDG_CONFIG_HOME/oh-my-devenv/env.sh` (see
-[`env.sh.example`](local-overlay-examples/env.sh.example)) so every new shell and
-the bootstrap all agree.
+Persistent tool environment belongs in `$XDG_CONFIG_HOME/oh-my-devenv/env.sh`
+and is read by Bash and Zsh. Bootstrap-only `DOTFILES_*` settings belong in
+`$XDG_CONFIG_HOME/oh-my-devenv/bootstrap.env` and are read only by bootstrap
+scripts. See the matching examples under [`local-overlay-examples/`](local-overlay-examples/).
+For a one-off setting not persisted in `bootstrap.env`, export it before
+`chezmoi apply`.
 
 ### Configuration root
 
 | Variable | Default | Effect |
 |----------|---------|--------|
-| `XDG_CONFIG_HOME` | `$HOME/.config` | Absolute destination for managed mise, Ghostty, and Fontconfig files and all config overlays. Export a custom value before starting the shell or running `chezmoi`; `env.sh` must not set or change it. Relative values are ignored with a warning. |
+| `XDG_CONFIG_HOME` | `$HOME/.config` | Absolute destination for managed mise, Ghostty, and Fontconfig files plus the `oh-my-devenv`, Git hook, and Ghostty overlays. Export a custom value before starting the shell or running `chezmoi`; local env files must not change it. Relative values are ignored with a warning. |
 
 ### Output
 
@@ -182,17 +184,12 @@ table — real location, what reads it, and a copyable `.example` — is in
 [`local-overlay-examples/README.md`](local-overlay-examples/README.md). The most
 common slots:
 
-- `$XDG_CONFIG_HOME/oh-my-devenv/env.sh` — non-secret exports shared by Bash, Zsh, and bootstrap.
+- `$XDG_CONFIG_HOME/oh-my-devenv/env.sh` — persistent non-secret exports read by Bash and Zsh.
+- `$XDG_CONFIG_HOME/oh-my-devenv/bootstrap.env` — non-secret settings read only by bootstrap scripts.
 - `$XDG_CONFIG_HOME/oh-my-devenv/secrets.sh` — secrets read by interactive shells only.
 - `~/.gitconfig.local` — user-owned Git preferences on top of the managed identity.
 - `~/.ssh/config.d/*.conf` — extra SSH hosts.
 - `$XDG_CONFIG_HOME/ghostty/config.local.ghostty` — machine-only Ghostty overrides loaded after the managed baseline.
-
-Ghostty still recognizes the pre-1.2.3 `config` filename. On an existing
-machine, migrate intentional overrides from that file into
-`config.local.ghostty` and archive the old file; otherwise its later load order
-can shadow shared values. The canonical order is documented in Ghostty's
-[configuration reference](https://ghostty.org/docs/config#file-location).
 
 ## Related documents
 

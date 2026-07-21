@@ -4,7 +4,7 @@
 # belong in the shared baseline.
 #
 # To install this during first bootstrap, add this to
-# $XDG_CONFIG_HOME/oh-my-devenv/env.sh before
+# $XDG_CONFIG_HOME/oh-my-devenv/bootstrap.env before
 # `chezmoi init --apply`:
 #
 #   export DOTFILES_EXTRA_BREWFILES="$XDG_CONFIG_HOME/oh-my-devenv/Brewfile.local"

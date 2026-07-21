@@ -50,7 +50,11 @@ done
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "$script_dir/../.." && pwd)"
 # shellcheck disable=SC1091
-source "$script_dir/common.sh"
+source "$repo_root/dot_local/share/oh-my-devenv/xdg.sh"
+oh_my_devenv_setup_xdg_config_home
+# shellcheck disable=SC1091
+source "$script_dir/local-overlays.sh"
+local_overlay_load
 
 if ! command -v chezmoi >/dev/null 2>&1; then
   printf 'ERROR: chezmoi is not on PATH; cannot enumerate managed files.\n' >&2
@@ -77,24 +81,7 @@ backed_up() {
 is_overlay_path() {
   local p="$1"
 
-  case "$p" in
-    "$XDG_CONFIG_HOME/oh-my-devenv/env.sh" | \
-      "$XDG_CONFIG_HOME/oh-my-devenv/secrets.sh" | \
-      "$XDG_CONFIG_HOME/oh-my-devenv/zshrc.zsh" | \
-      "$XDG_CONFIG_HOME/oh-my-devenv/bashrc.bash" | \
-      "$XDG_CONFIG_HOME/ghostty/config.local.ghostty" | \
-      "$HOME/.gitconfig.local" | \
-      "$XDG_CONFIG_HOME/git/hooks/pre-push" | \
-      "$HOME/.npmrc")
-      return 0
-      ;;
-  esac
-
-  if [[ "$p" == "$HOME/.ssh/config.d/"*.conf ]]; then
-    return 0
-  fi
-
-  return 1
+  local_overlay_matches_path "$p"
 }
 
 # Only auto-delete the chezmoi source tree when it lives under the
@@ -281,27 +268,10 @@ done
 emit_standalone_overlay_slots() {
   local f
 
-  for f in \
-    "$XDG_CONFIG_HOME/oh-my-devenv/env.sh" \
-    "$XDG_CONFIG_HOME/oh-my-devenv/secrets.sh" \
-    "$XDG_CONFIG_HOME/oh-my-devenv/zshrc.zsh" \
-    "$XDG_CONFIG_HOME/oh-my-devenv/bashrc.bash" \
-    "$XDG_CONFIG_HOME/ghostty/config.local.ghostty" \
-    "$HOME/.gitconfig.local" \
-    "$XDG_CONFIG_HOME/git/hooks/pre-push" \
-    "$HOME/.npmrc"; do
-    [[ -e "$f" ]] || continue
+  while IFS= read -r f; do
     [[ -n "${overlay_logged[$f]:-}" ]] && continue
     would_skip "overlay-protected: $f"
-  done
-
-  if [[ -d "$HOME/.ssh/config.d" ]]; then
-    for f in "$HOME/.ssh/config.d/"*.conf; do
-      [[ -e "$f" ]] || continue
-      [[ -n "${overlay_logged[$f]:-}" ]] && continue
-      would_skip "overlay-protected: $f"
-    done
-  fi
+  done < <(local_overlay_existing_paths)
 }
 
 emit_standalone_overlay_slots

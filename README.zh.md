@@ -84,7 +84,7 @@ command -v git curl chezmoi
 
 使用下面的仓库 URL。
 
-基线通过 `XDG_CONFIG_HOME` 定位受管理的 mise、Ghostty、Fontconfig 配置以及所有配置 overlay；默认值是 `$HOME/.config`。如需使用其他配置根目录，请在运行 `chezmoi` 前导出绝对路径，不要在 `env.sh` 中设置或修改它：
+基线通过 `XDG_CONFIG_HOME` 定位受管理的 mise、Ghostty、Fontconfig 配置，以及 `oh-my-devenv`、Git hook 和 Ghostty overlay；默认值是 `$HOME/.config`。如需使用其他配置根目录，请在运行 `chezmoi` 前导出绝对路径；本地环境文件不得设置或修改它：
 
 ```bash
 export XDG_CONFIG_HOME="$HOME/.config-work"
@@ -115,12 +115,12 @@ mkdir -p "$XDG_CONFIG_HOME/oh-my-devenv"
 cat > "$XDG_CONFIG_HOME/oh-my-devenv/Brewfile.local" <<'EOF'
 cask "orbstack"
 EOF
-cat >> "$XDG_CONFIG_HOME/oh-my-devenv/env.sh" <<'EOF'
+cat >> "$XDG_CONFIG_HOME/oh-my-devenv/bootstrap.env" <<'EOF'
 export DOTFILES_EXTRA_BREWFILES="$XDG_CONFIG_HOME/oh-my-devenv/Brewfile.local"
 EOF
 ```
 
-若想改为安装本仓库的可选清单，设置 `DOTFILES_INSTALL_REPO_OPTIONAL_BREWFILE=1`。首次引导之后，本地 Brewfile 的变更需用 `brew bundle install --file="$XDG_CONFIG_HOME/oh-my-devenv/Brewfile.local"` 显式同步。
+若想改为安装本仓库的可选清单，请在 `bootstrap.env` 中设置 `DOTFILES_INSTALL_REPO_OPTIONAL_BREWFILE=1`。首次引导之后，本地 Brewfile 的变更需用 `brew bundle install --file="$XDG_CONFIG_HOME/oh-my-devenv/Brewfile.local"` 显式同步。
 
 </details>
 

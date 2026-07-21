@@ -19,16 +19,11 @@ Changes that do **not** belong in this repository:
 - Team- or project-specific tooling that only a subset of users need.
 - Anything that requires a private credential or private network to validate.
 
-Use the documented local extension points for machine-specific or team-specific values:
-
-- Shared non-secret local env: `$XDG_CONFIG_HOME/oh-my-devenv/env.sh`
-- Shell secrets: `$XDG_CONFIG_HOME/oh-my-devenv/secrets.sh`
-- Optional interactive shell overlays: `$XDG_CONFIG_HOME/oh-my-devenv/zshrc.zsh`, `$XDG_CONFIG_HOME/oh-my-devenv/bashrc.bash`
-- Extra SSH hosts: `~/.ssh/config.d/*.conf`
-- Extra Git configuration: `~/.gitconfig.local`
-- Optional local Git guardrails: `$XDG_CONFIG_HOME/git/hooks/`
-- Optional scoped npm registry config: `~/.npmrc`
-- Optional Ghostty overrides: `$XDG_CONFIG_HOME/ghostty/config.local.ghostty`
+Use the documented local extension points for machine-specific or team-specific
+values. The complete paths, consumers, lifecycles, and copyable examples live
+in [`docs/local-overlay-examples/README.md`](docs/local-overlay-examples/README.md);
+[`bootstrap/manifests/local-overlays.tsv`](bootstrap/manifests/local-overlays.tsv)
+is the canonical inventory enforced by smoke tests and uninstall protection.
 
 ## Development Workflow
 

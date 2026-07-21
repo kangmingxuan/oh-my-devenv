@@ -31,7 +31,7 @@ Ghostty and its configured font form one explicit shared desktop choice. Other
 macOS Homebrew apps such as OrbStack remain local opt-ins. If
 you want them installed during the first `chezmoi init --apply`, create a local
 Brewfile before running bootstrap and expose it through
-`$XDG_CONFIG_HOME/oh-my-devenv/env.sh` with
+`$XDG_CONFIG_HOME/oh-my-devenv/bootstrap.env` with
 `DOTFILES_EXTRA_BREWFILES`. The default baseline still does not install
 OrbStack or other optional casks.
 
@@ -59,13 +59,6 @@ The Git values become the default identity in the managed `~/.gitconfig`. If
 you later need a different identity for a specific repository, prefer repo-local
 `git config user.name ...` / `git config user.email ...` in that repository
 instead of duplicating the machine-wide default in a shared overlay.
-
-On an existing Ghostty machine, check for the pre-1.2.3 filename
-`$XDG_CONFIG_HOME/ghostty/config`. Ghostty still loads that file after the managed
-`config.ghostty`, so it can shadow shared values. Move any intentional
-machine-only differences to `config.local.ghostty`, validate them with
-`ghostty +validate-config`, and archive the old file instead of deleting it
-blindly. See Ghostty's [configuration-file order](https://ghostty.org/docs/config#file-location).
 
 On supported Ubuntu machines, the desktop baseline also manages
 `$XDG_CONFIG_HOME/fontconfig/conf.d/99-oh-my-devenv-maple-mono-nf-cn.conf`. This rule
@@ -114,10 +107,11 @@ If anything fails, the script exits non-zero and prints diagnostic hints — see
 
 If you are on a corporate or otherwise restricted network, public registries may be slow or blocked. Keep those overrides local to your machine rather than baking them into the shared baseline. Start from [**Local overlay examples**](local-overlay-examples/README.md) before your first apply:
 
-- Put non-secret Go and mirror settings in `$XDG_CONFIG_HOME/oh-my-devenv/env.sh`
+- Put persistent Go settings in `$XDG_CONFIG_HOME/oh-my-devenv/env.sh`
+- Put bootstrap mirror settings in `$XDG_CONFIG_HOME/oh-my-devenv/bootstrap.env`
 - Keep internal npm scopes in `~/.npmrc`, not in shell startup files
 - Keep Python internal indexes project-local and `uv`-only
-- Set **`DOTFILES_MIRROR_MODE`** before `chezmoi init --apply` when bootstrap itself needs mirror endpoints
+- Set **`DOTFILES_MIRROR_MODE`** in `bootstrap.env` or export it before `chezmoi init --apply` when bootstrap itself needs mirror endpoints
 - On Ubuntu, the pinned Maple Mono archive uses a resumable download and SHA-256 verification. If GitHub Releases is unavailable, set **`DOTFILES_MAPLE_MONO_URL`** to an alternate URL serving the exact same archive.
 
 ---

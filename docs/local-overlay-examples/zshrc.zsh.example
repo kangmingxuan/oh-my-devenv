@@ -9,9 +9,9 @@
 #     - Functions that wrap local workflows without encoding secrets.
 #     - Prompt augmentations for local directories.
 #
-# Keep this file free of secrets. Secrets belong in secrets.sh. Non-secret
-# environment variables that Bash, Zsh, and bootstrap should all see belong in
-# env.sh, not here.
+# Keep this file free of secrets. Secrets belong in secrets.sh. Persistent
+# environment variables shared by Bash and Zsh belong in env.sh; settings used
+# only by bootstrap tooling belong in bootstrap.env.
 
 # --------------------------------------------------------------------------
 # Example: short aliases for common local commands.

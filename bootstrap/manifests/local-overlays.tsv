@@ -1,0 +1,14 @@
+# Canonical inventory of user-owned local overlays.
+# Every row is preserved and reported by uninstall.sh.
+# id	example	location	match	consumers	lifecycle
+env	env.sh.example	$XDG_CONFIG_HOME/oh-my-devenv/env.sh	exact	Bash and Zsh	persistent environment
+bootstrap_env	bootstrap.env.example	$XDG_CONFIG_HOME/oh-my-devenv/bootstrap.env	exact	bootstrap scripts	bootstrap settings
+secrets	secrets.sh.example	$XDG_CONFIG_HOME/oh-my-devenv/secrets.sh	exact	interactive Bash and Zsh	interactive secrets
+zshrc	zshrc.zsh.example	$XDG_CONFIG_HOME/oh-my-devenv/zshrc.zsh	exact	Zsh	interactive shell
+bashrc	bashrc.bash.example	$XDG_CONFIG_HOME/oh-my-devenv/bashrc.bash	exact	Bash	interactive shell
+gitconfig	gitconfig.local.example	$HOME/.gitconfig.local	exact	Git include	tool-native configuration
+git_hooks	git-pre-push.example	$XDG_CONFIG_HOME/git/hooks/*	glob	Git core.hooksPath	tool-native configuration
+ssh_config	ssh-config.d.corp.conf.example	$HOME/.ssh/config.d/*.conf	glob	OpenSSH Include	tool-native configuration
+npmrc	npmrc.example	$HOME/.npmrc	exact	npm	tool-native configuration
+brewfile	Brewfile.local.example	$XDG_CONFIG_HOME/oh-my-devenv/Brewfile.local	exact	macOS bootstrap	bootstrap package input
+ghostty	ghostty-config.local.ghostty.example	$XDG_CONFIG_HOME/ghostty/config.local.ghostty	exact	Ghostty	tool-native configuration
