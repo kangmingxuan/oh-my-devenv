@@ -28,7 +28,7 @@ jobs:
           tmp_config_file="$RUNNER_TEMP/chezmoi.toml"
 
           mkdir -p "$HOME/.config/mise"
-          printf '%s\n' 'unmanaged-sentinel' >"$HOME/.config/mise/config.toml"
+          printf '%s\n' 'unmanaged_sentinel = true' >"$HOME/.config/mise/config.toml"
 
           cat >"$tmp_data_file" <<'EOF'
           gitName = "CI Runner"
@@ -48,4 +48,4 @@ jobs:
           grep -Fq "All checks passed." "$HOME/apply.log"
           test -f "$XDG_CONFIG_HOME/mise/config.toml"
           test -f "$XDG_CONFIG_HOME/fontconfig/conf.d/99-oh-my-devenv-maple-mono-nf-cn.conf"
-          grep -Fxq "unmanaged-sentinel" "$HOME/.config/mise/config.toml"
+          grep -Fxq "unmanaged_sentinel = true" "$HOME/.config/mise/config.toml"

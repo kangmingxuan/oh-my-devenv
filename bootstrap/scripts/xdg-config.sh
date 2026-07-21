@@ -29,11 +29,15 @@ if ! command -v chezmoi >/dev/null 2>&1; then
 fi
 
 xdg_source="$repo_root/xdg_config"
+xdg_state_dir="${XDG_STATE_HOME:-$HOME/.local/state}/chezmoi"
+xdg_persistent_state="$xdg_state_dir/oh-my-devenv-xdg.boltdb"
 
 if [[ ! -d "$xdg_source" ]]; then
   printf 'ERROR: XDG chezmoi source not found: %s\n' "$xdg_source" >&2
   exit 1
 fi
+
+mkdir -p "$xdg_state_dir"
 
 if [[ "$action" == "apply" ]]; then
   if [[ -e "$XDG_CONFIG_HOME" && ! -d "$XDG_CONFIG_HOME" ]]; then
@@ -66,6 +70,7 @@ fi
 xdg_chezmoi=(
   chezmoi
   "${chezmoi_config_args[@]}"
+  --persistent-state="$xdg_persistent_state"
   --source="$xdg_source"
   --destination="$XDG_CONFIG_HOME"
   --override-data="$override_data"

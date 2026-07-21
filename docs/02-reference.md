@@ -28,6 +28,9 @@ manifest changes (chezmoi tracks a content hash), so routine re-applies are chea
 
 The first-run backups land under
 `${XDG_STATE_HOME:-$HOME/.local/state}/chezmoi-first-run-backup/<timestamp>/`.
+The nested XDG source uses an independent chezmoi state file at
+`${XDG_STATE_HOME:-$HOME/.local/state}/chezmoi/oh-my-devenv-xdg.boltdb`, so it
+can run safely from inside the parent apply hook.
 
 ## What gets installed
 

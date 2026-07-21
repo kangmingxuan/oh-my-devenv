@@ -211,6 +211,8 @@ for line in "${managed_lines[@]}" "${xdg_managed_lines[@]}"; do
   add_candidate "$line"
 done
 
+add_candidate "${XDG_STATE_HOME:-$HOME/.local/state}/chezmoi/oh-my-devenv-xdg.boltdb"
+
 if [[ -d "$HOME/.oh-my-zsh" ]]; then
   add_candidate "$HOME/.oh-my-zsh"
 fi

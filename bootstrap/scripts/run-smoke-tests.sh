@@ -84,7 +84,7 @@ assert_file_contains() {
   local file_path="$1"
   local expected="$2"
 
-  if ! grep -Fq "$expected" "$file_path"; then
+  if ! grep -Fq -- "$expected" "$file_path"; then
     fail_test "$file_path is missing expected content: $expected"
   fi
 }
@@ -93,7 +93,7 @@ assert_file_not_contains() {
   local file_path="$1"
   local unexpected="$2"
 
-  if grep -Fq "$unexpected" "$file_path"; then
+  if grep -Fq -- "$unexpected" "$file_path"; then
     fail_test "$file_path contains unexpected content: $unexpected"
   fi
 }
@@ -209,6 +209,8 @@ backup_fontconfig_literal='xdg-config/fontconfig/conf.d/99-oh-my-devenv-maple-mo
 backup_ghostty_literal='xdg-config/ghostty/config.ghostty|$XDG_CONFIG_HOME/ghostty/config.ghostty'
 # shellcheck disable=SC2016
 xdg_apply_literal='bash "$scripts_dir/xdg-config.sh" apply "$config_file"'
+# shellcheck disable=SC2016
+xdg_persistent_state_literal='--persistent-state="$xdg_persistent_state"'
 old_shell_overlay_patterns=(
   '.zshrc.secrets'
   '.bashrc.secrets'
@@ -345,6 +347,7 @@ render_template .chezmoiscripts/run_after_35-apply-xdg-config.sh.tmpl "$tmp_dir/
 syntax_check bash "$tmp_dir/run_after_35-apply-xdg-config.sh"
 shellcheck_rendered_bash "$tmp_dir/run_after_35-apply-xdg-config.sh"
 assert_file_contains "$tmp_dir/run_after_35-apply-xdg-config.sh" "$xdg_apply_literal"
+assert_file_contains "$repo_root/bootstrap/scripts/xdg-config.sh" "$xdg_persistent_state_literal"
 
 render_template .chezmoiscripts/run_onchange_after_20-install-system-packages.sh.tmpl "$tmp_dir/run_onchange_after_20-install-system-packages.sh"
 syntax_check bash "$tmp_dir/run_onchange_after_20-install-system-packages.sh"
@@ -510,6 +513,7 @@ fi
 
 log_step "📁" "Applying the nested XDG chezmoi source..."
 xdg_test_home="$tmp_dir/xdg-config-home"
+xdg_test_state="$tmp_dir/xdg-state-home"
 xdg_test_config="$tmp_dir/xdg-chezmoi.toml"
 cat >"$xdg_test_config" <<'EOF'
 [data]
@@ -518,11 +522,12 @@ EOF
 chezmoi --config="$xdg_test_config" --source="$repo_root" execute-template \
   --file "$repo_root/.chezmoiscripts/run_after_35-apply-xdg-config.sh.tmpl" \
   >"$tmp_dir/run_after_35-custom-xdg.sh"
-XDG_CONFIG_HOME="$xdg_test_home" bash "$tmp_dir/run_after_35-custom-xdg.sh"
+XDG_CONFIG_HOME="$xdg_test_home" XDG_STATE_HOME="$xdg_test_state" \
+  bash "$tmp_dir/run_after_35-custom-xdg.sh"
 assert_file_contains "$xdg_test_home/mise/config.toml" "[tools]"
 assert_file_contains "$xdg_test_home/fontconfig/conf.d/99-oh-my-devenv-maple-mono-nf-cn.conf" "<fontconfig>"
 
-xdg_managed_listing="$(XDG_CONFIG_HOME="$xdg_test_home" \
+xdg_managed_listing="$(XDG_CONFIG_HOME="$xdg_test_home" XDG_STATE_HOME="$xdg_test_state" \
   bash "$repo_root/bootstrap/scripts/xdg-config.sh" managed "$xdg_test_config")"
 if ! grep -Fxq "$xdg_test_home/mise/config.toml" <<<"$xdg_managed_listing"; then
   fail_test "nested XDG source does not manage mise/config.toml under XDG_CONFIG_HOME"
@@ -531,7 +536,7 @@ if ! grep -Fxq "$xdg_test_home/fontconfig/conf.d/99-oh-my-devenv-maple-mono-nf-c
   fail_test "nested XDG source does not manage the Fontconfig fragment under XDG_CONFIG_HOME"
 fi
 
-xdg_status="$(XDG_CONFIG_HOME="$xdg_test_home" \
+xdg_status="$(XDG_CONFIG_HOME="$xdg_test_home" XDG_STATE_HOME="$xdg_test_state" \
   bash "$repo_root/bootstrap/scripts/xdg-config.sh" status "$xdg_test_config")"
 if [[ -n "$xdg_status" ]]; then
   fail_test "nested XDG source is not clean after apply: $xdg_status"
@@ -552,6 +557,9 @@ if (( BASH_VERSINFO[0] >= 4 )); then
   fi
   if grep -Fq "$tmp_dir/uninstall-home/.config/mise/config.toml" <<<"$uninstall_preview"; then
     fail_test "uninstall preview fell back to HOME/.config instead of custom XDG_CONFIG_HOME"
+  fi
+  if ! grep -Fq "$tmp_dir/uninstall-home/.local/state/chezmoi/oh-my-devenv-xdg.boltdb" <<<"$uninstall_preview"; then
+    fail_test "uninstall preview does not include the nested chezmoi state file"
   fi
 fi
 

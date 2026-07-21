@@ -184,7 +184,7 @@ If a change needs heavier confidence than the smoke jobs provide, validate it ma
 
 ## Disposable environment reset
 
-Use `bootstrap/scripts/uninstall.sh` when you need to tear down **only** what this baseline's `chezmoi apply` put on disk — for example a throwaway Linux container, a CI scratch image, or a VM you are about to re-image. The script is intentionally narrow: it does **not** remove apt/Homebrew packages, mise shims, or language runtimes the bootstrap installed; it only reverses chezmoi-managed destination files plus a short whitelist of bootstrap-owned directories (`~/.oh-my-zsh`, `~/.local/state/chezmoi-first-run-backup/`, the marker-owned Maple Mono user-font directory, and the chezmoi source tree under `~/.local/share/` when that is the canonical data path).
+Use `bootstrap/scripts/uninstall.sh` when you need to tear down **only** what this baseline's `chezmoi apply` put on disk — for example a throwaway Linux container, a CI scratch image, or a VM you are about to re-image. The script is intentionally narrow: it does **not** remove apt/Homebrew packages, mise shims, or language runtimes the bootstrap installed; it only reverses chezmoi-managed destination files, the nested source's dedicated state file, plus a short whitelist of bootstrap-owned directories (`~/.oh-my-zsh`, `~/.local/state/chezmoi-first-run-backup/`, the marker-owned Maple Mono user-font directory, and the chezmoi source tree under `~/.local/share/` when that is the canonical data path).
 
 **Defaults and flags**
 
