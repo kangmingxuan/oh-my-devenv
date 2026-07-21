@@ -1,11 +1,3 @@
-{{- if eq .chezmoi.os "darwin" -}}
-# ============================================================================
-# OrbStack Integration - macOS only
-# ============================================================================
-Include ~/.orbstack/ssh/conf*
-
-
-{{ end -}}
 # ============================================================================
 # Local (per-machine) SSH drop-ins - not managed by chezmoi
 # The managed top-level config loads ~/.ssh/config.d/*.conf in lexical order.

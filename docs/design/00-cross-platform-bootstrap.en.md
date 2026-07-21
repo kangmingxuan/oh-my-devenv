@@ -397,7 +397,7 @@ The final chosen approach is:
 - `chezmoi` manages configuration and orchestration
 - A nested chezmoi source manages configuration files directly under the absolute `XDG_CONFIG_HOME`, which defaults to `$HOME/.config`
 - macOS uses Homebrew for system tools
-- OrbStack is optional on macOS; if installed through the opt-in Homebrew path, initialization is handled by the login-shell layer
+- Optional vendor applications keep their shell and SSH initialization in user-owned local overlays
 - Ubuntu / Debian / WSL use `apt` for system tools
 - `mise` manages language runtimes
 - Language ecosystem tools are installed through native ecosystem methods

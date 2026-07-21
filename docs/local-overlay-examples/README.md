@@ -99,6 +99,48 @@ silently skipped. If you edit `Brewfile.local` later, sync it explicitly:
 brew bundle install --file="$XDG_CONFIG_HOME/oh-my-devenv/Brewfile.local"
 ```
 
+## Optional Vendor Integrations
+
+Vendor-specific shell and SSH integration stays in local overlays. Existing
+JetBrains Toolbox or OrbStack users should create these overlays before their
+next `chezmoi apply`; the shared templates do not detect or initialize either
+application.
+
+To expose JetBrains Toolbox launchers, add the path for your platform to
+`$XDG_CONFIG_HOME/oh-my-devenv/env.sh`:
+
+```bash
+# macOS:
+toolbox_scripts="$HOME/Library/Application Support/JetBrains/Toolbox/scripts"
+# Linux (use this assignment instead on Linux):
+# toolbox_scripts="$HOME/.local/share/JetBrains/Toolbox/scripts"
+
+if [[ -d "$toolbox_scripts" && ":$PATH:" != *":$toolbox_scripts:"* ]]; then
+  export PATH="${PATH:+$PATH:}$toolbox_scripts"
+fi
+unset toolbox_scripts
+```
+
+For OrbStack PATH and completion initialization, add this guarded Zsh source to
+the same `env.sh`. It runs before oh-my-zsh initializes completions and remains
+safe when Bash reads the file:
+
+```bash
+if [[ -n "${ZSH_VERSION:-}" && -f "$HOME/.orbstack/shell/init.zsh" ]]; then
+  source "$HOME/.orbstack/shell/init.zsh"
+fi
+```
+
+Keep its SSH integration in a user-owned drop-in such as
+`~/.ssh/config.d/orbstack.conf`:
+
+```sshconfig
+Include ~/.orbstack/ssh/conf*
+```
+
+These files are protected by the canonical overlay inventory and remain outside
+chezmoi ownership.
+
 ## Automation Tokens
 
 Some local automation needs tokens, including coding agents such as Codex or

@@ -4,9 +4,3 @@
 
 # shellcheck disable=SC1091
 [[ -f "$HOME/.zsh/env.zsh" ]] && source "$HOME/.zsh/env.zsh"
-
-{{ if eq .chezmoi.os "darwin" -}}
-# OrbStack command-line tools and shell integration.
-# Keep this managed here so chezmoi does not overwrite OrbStack's local injection.
-[[ -f "$HOME/.orbstack/shell/init.zsh" ]] && source "$HOME/.orbstack/shell/init.zsh"
-{{- end }}

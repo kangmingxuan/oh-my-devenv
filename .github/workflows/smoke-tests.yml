@@ -29,7 +29,6 @@ jobs:
       - name: Install smoke dependencies
         run: brew install chezmoi shellcheck
       - name: Run smoke tests
-        # Running on macOS renders the `darwin` template arms (brew shellenv,
-        # mac PATH wiring, OrbStack SSH include) that the Linux job never
-        # exercises, so a Darwin-only syntax error can no longer pass CI.
+        # Running on macOS renders the `darwin` template arms that the Linux job
+        # never exercises, so a Darwin-only syntax error can no longer pass CI.
         run: bash bootstrap/scripts/run-smoke-tests.sh
