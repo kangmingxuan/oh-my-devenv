@@ -1,4 +1,4 @@
-# ~/.config/oh-my-devenv/bashrc.bash
+# $XDG_CONFIG_HOME/oh-my-devenv/bashrc.bash
 #
 # Bash-only local customizations for interactive Bash sessions. The baseline
 # sources this file as a late interactive hook, after its own aliases, prompt,

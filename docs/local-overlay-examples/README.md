@@ -7,16 +7,16 @@ the baseline leaves to each user's home directory or user-owned tool config:
 
 | Example file                            | Real overlay location              | Sourced / read by                                   |
 | --------------------------------------- | ---------------------------------- | --------------------------------------------------- |
-| `env.sh.example`                        | `${XDG_CONFIG_HOME:-$HOME/.config}/oh-my-devenv/env.sh` | `~/.zsh/env.zsh`, `~/.bash/env.bash`, `bootstrap/scripts/common.sh` |
-| `secrets.sh.example`                    | `${XDG_CONFIG_HOME:-$HOME/.config}/oh-my-devenv/secrets.sh` | `~/.zshrc`, `~/.bashrc` |
-| `zshrc.zsh.example`                     | `${XDG_CONFIG_HOME:-$HOME/.config}/oh-my-devenv/zshrc.zsh` | Baseline `dot_zshrc.tmpl` via a guarded `source`    |
-| `bashrc.bash.example`                   | `${XDG_CONFIG_HOME:-$HOME/.config}/oh-my-devenv/bashrc.bash` | Baseline `dot_bashrc.tmpl` via a guarded `source`   |
+| `env.sh.example`                        | `$XDG_CONFIG_HOME/oh-my-devenv/env.sh` | `~/.zsh/env.zsh`, `~/.bash/env.bash`, `bootstrap/scripts/common.sh` |
+| `secrets.sh.example`                    | `$XDG_CONFIG_HOME/oh-my-devenv/secrets.sh` | `~/.zshrc`, `~/.bashrc` |
+| `zshrc.zsh.example`                     | `$XDG_CONFIG_HOME/oh-my-devenv/zshrc.zsh` | Baseline `dot_zshrc.tmpl` via a guarded `source`    |
+| `bashrc.bash.example`                   | `$XDG_CONFIG_HOME/oh-my-devenv/bashrc.bash` | Baseline `dot_bashrc.tmpl` via a guarded `source`   |
 | `gitconfig.local.example`               | `~/.gitconfig.local`               | Baseline `dot_gitconfig.tmpl` via `[include]`       |
-| `git-pre-push.example`                  | `~/.config/git/hooks/pre-push`     | Git via `core.hooksPath`                            |
+| `git-pre-push.example`                  | `$XDG_CONFIG_HOME/git/hooks/pre-push` | Git via `core.hooksPath`                         |
 | `ssh-config.d.corp.conf.example`        | `~/.ssh/config.d/<your-alias>.conf` | `~/.ssh/config` via its `Include ~/.ssh/config.d/*.conf` directive |
 | `npmrc.example`                         | `~/.npmrc`                         | `npm`                                               |
-| `Brewfile.local.example`                | `${XDG_CONFIG_HOME:-$HOME/.config}/oh-my-devenv/Brewfile.local` | macOS bootstrap when `DOTFILES_EXTRA_BREWFILES` points to it |
-| `ghostty-config.local.ghostty.example`  | `${XDG_CONFIG_HOME:-$HOME/.config}/ghostty/config.local.ghostty` | Managed Ghostty `config.ghostty` via `config-file` |
+| `Brewfile.local.example`                | `$XDG_CONFIG_HOME/oh-my-devenv/Brewfile.local` | macOS bootstrap when `DOTFILES_EXTRA_BREWFILES` points to it |
+| `ghostty-config.local.ghostty.example`  | `$XDG_CONFIG_HOME/ghostty/config.local.ghostty` | Managed Ghostty `config.ghostty` via `config-file` |
 
 ## Why `.example`?
 
@@ -31,6 +31,12 @@ Every file in this directory ends in `.example` on purpose:
 
 ## Workflow
 
+The managed shells export `XDG_CONFIG_HOME`, defaulting to `$HOME/.config`. If
+you are setting up an overlay before the first apply, initialize it in the
+current shell first: `export XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"`.
+Custom values must be absolute and must be exported before running `chezmoi`;
+do not set or change `XDG_CONFIG_HOME` from `env.sh`.
+
 1. Pick the example file that matches the extension point you want to use.
 2. Copy it to the real overlay location shown in the table above, **dropping the
    `.example` suffix**. For `~/.ssh/config.d/*.conf`, also rename it to something
@@ -43,23 +49,23 @@ Every file in this directory ends in `.example` on purpose:
    examples outside this baseline or keep a hand-managed top-level config, add
    that `Include` line before any `Host *` block.
 5. For shell overlays, open a new shell to verify. The files under
-   `${XDG_CONFIG_HOME:-$HOME/.config}/oh-my-devenv/` are all guarded by
+   `$XDG_CONFIG_HOME/oh-my-devenv/` are all guarded by
    `[[ -f ... ]]` sources in the baseline, so a missing file is silently ignored
    and a present file is loaded on next shell start.
-6. For a Git hook copied from `git-pre-push.example`, run `chmod 755 ~/.config/git/hooks/pre-push`
+6. For a Git hook copied from `git-pre-push.example`, run `chmod 755 "$XDG_CONFIG_HOME/git/hooks/pre-push"`
    and then test it against one repo that should match your rule and one that
    should not before you trust it.
 7. For Ghostty overrides, open a new terminal window after copying the example;
    `ghostty +show-config` should exit successfully and show the effective values.
 8. Keep responsibilities clean:
-   - `${XDG_CONFIG_HOME:-$HOME/.config}/oh-my-devenv/env.sh` is for shell-compatible, non-secret exports that Bash, Zsh, and bootstrap should all see.
-   - `${XDG_CONFIG_HOME:-$HOME/.config}/oh-my-devenv/Brewfile.local` is for macOS-only Homebrew apps and CLIs that you explicitly opt in to during first bootstrap.
-   - `${XDG_CONFIG_HOME:-$HOME/.config}/oh-my-devenv/secrets.sh` is for shell-compatible secrets that interactive Bash and Zsh read automatically; bootstrap and non-interactive shell commands never read it automatically.
-   - `${XDG_CONFIG_HOME:-$HOME/.config}/oh-my-devenv/zshrc.zsh` and `${XDG_CONFIG_HOME:-$HOME/.config}/oh-my-devenv/bashrc.bash` are late interactive-only overlays for aliases, functions, and prompt tweaks.
+   - `$XDG_CONFIG_HOME/oh-my-devenv/env.sh` is for shell-compatible, non-secret exports that Bash, Zsh, and bootstrap should all see.
+   - `$XDG_CONFIG_HOME/oh-my-devenv/Brewfile.local` is for macOS-only Homebrew apps and CLIs that you explicitly opt in to during first bootstrap.
+   - `$XDG_CONFIG_HOME/oh-my-devenv/secrets.sh` is for shell-compatible secrets that interactive Bash and Zsh read automatically; bootstrap and non-interactive shell commands never read it automatically.
+   - `$XDG_CONFIG_HOME/oh-my-devenv/zshrc.zsh` and `$XDG_CONFIG_HOME/oh-my-devenv/bashrc.bash` are late interactive-only overlays for aliases, functions, and prompt tweaks.
    - The managed `~/.gitconfig` keeps your default Git identity; `~/.gitconfig.local` is for user-owned Git preferences and guardrails.
-   - `~/.config/git/hooks/pre-push` is a user-owned guardrail, not part of the shared baseline.
+   - `$XDG_CONFIG_HOME/git/hooks/pre-push` is a user-owned guardrail, not part of the shared baseline.
    - `~/.npmrc` is the right home for scoped internal npm registry configuration.
-   - `~/.config/ghostty/config.local.ghostty` is for machine-only appearance, sizing, or keybinding overrides on top of the shared Ghostty baseline.
+   - `$XDG_CONFIG_HOME/ghostty/config.local.ghostty` is for machine-only appearance, sizing, or keybinding overrides on top of the shared Ghostty baseline.
 
 ## macOS Local Homebrew Apps
 
@@ -69,12 +75,13 @@ Other macOS GUI apps remain local opt-ins. You can add them before the first
 from `env.sh`:
 
 ```bash
-mkdir -p "${XDG_CONFIG_HOME:-$HOME/.config}/oh-my-devenv"
+export XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
+mkdir -p "$XDG_CONFIG_HOME/oh-my-devenv"
 cp docs/local-overlay-examples/Brewfile.local.example \
-  "${XDG_CONFIG_HOME:-$HOME/.config}/oh-my-devenv/Brewfile.local"
+  "$XDG_CONFIG_HOME/oh-my-devenv/Brewfile.local"
 printf '%s\n' \
-  'export DOTFILES_EXTRA_BREWFILES="${XDG_CONFIG_HOME:-$HOME/.config}/oh-my-devenv/Brewfile.local"' \
-  >> "${XDG_CONFIG_HOME:-$HOME/.config}/oh-my-devenv/env.sh"
+  'export DOTFILES_EXTRA_BREWFILES="$XDG_CONFIG_HOME/oh-my-devenv/Brewfile.local"' \
+  >> "$XDG_CONFIG_HOME/oh-my-devenv/env.sh"
 ```
 
 To install the repo-maintained optional catalog instead, set
@@ -84,7 +91,7 @@ must expand to absolute paths, and missing files fail bootstrap instead of being
 silently skipped. If you edit `Brewfile.local` later, sync it explicitly:
 
 ```bash
-brew bundle install --file="${XDG_CONFIG_HOME:-$HOME/.config}/oh-my-devenv/Brewfile.local"
+brew bundle install --file="$XDG_CONFIG_HOME/oh-my-devenv/Brewfile.local"
 ```
 
 ## Automation Tokens
@@ -94,7 +101,7 @@ Claude Code. Keep those tokens in `secrets.sh`, not `env.sh`, and inject them
 deliberately by starting the tool from an environment that sourced the file:
 
 ```bash
-source "${XDG_CONFIG_HOME:-$HOME/.config}/oh-my-devenv/secrets.sh"
+source "$XDG_CONFIG_HOME/oh-my-devenv/secrets.sh"
 codex
 ```
 

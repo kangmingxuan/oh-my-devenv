@@ -2,8 +2,11 @@
 {{- if hasKey . "desktopBaseline" -}}
 {{- $desktopBaseline = .desktopBaseline -}}
 {{- end -}}
-{{- $isSupportedDesktop := eq (includeTemplate "desktop-platform-supported" .) "true" -}}
-{{- if and $desktopBaseline $isSupportedDesktop -}}
+{{- $desktopPlatformSupported := false -}}
+{{- if hasKey . "desktopPlatformSupported" -}}
+{{- $desktopPlatformSupported = .desktopPlatformSupported -}}
+{{- end -}}
+{{- if and $desktopBaseline $desktopPlatformSupported -}}
 # Shared Ghostty desktop baseline. Machine-specific overrides belong in
 # config.local.ghostty, which is loaded last when present.
 

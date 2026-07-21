@@ -15,25 +15,28 @@ backup_existing_managed_configs() {
   local backup_dir=""
   local backup_path=""
   local backup_timestamp=""
+  local backup_entry=""
   local existing_path=""
   local relative_path=""
   local backed_up=0
 
-  for relative_path in \
-    ".bash/env.bash" \
-    ".bashrc" \
-    ".config/fontconfig/conf.d/99-oh-my-devenv-maple-mono-nf-cn.conf" \
-    ".config/ghostty/config.ghostty" \
-    ".config/mise/config.toml" \
-    ".gitconfig" \
-    ".profile" \
-    ".ssh/config" \
-    ".zprofile" \
-    ".zsh/env.zsh" \
-    ".zshenv" \
-    ".zshrc"
+  for backup_entry in \
+    ".bash/env.bash|$HOME/.bash/env.bash" \
+    ".bashrc|$HOME/.bashrc" \
+    ".gitconfig|$HOME/.gitconfig" \
+    ".local/share/oh-my-devenv/xdg.sh|$HOME/.local/share/oh-my-devenv/xdg.sh" \
+    ".profile|$HOME/.profile" \
+    ".ssh/config|$HOME/.ssh/config" \
+    ".zprofile|$HOME/.zprofile" \
+    ".zsh/env.zsh|$HOME/.zsh/env.zsh" \
+    ".zshenv|$HOME/.zshenv" \
+    ".zshrc|$HOME/.zshrc" \
+    "xdg-config/fontconfig/conf.d/99-oh-my-devenv-maple-mono-nf-cn.conf|$XDG_CONFIG_HOME/fontconfig/conf.d/99-oh-my-devenv-maple-mono-nf-cn.conf" \
+    "xdg-config/ghostty/config.ghostty|$XDG_CONFIG_HOME/ghostty/config.ghostty" \
+    "xdg-config/mise/config.toml|$XDG_CONFIG_HOME/mise/config.toml"
   do
-    existing_path="$HOME/$relative_path"
+    relative_path="${backup_entry%%|*}"
+    existing_path="${backup_entry#*|}"
 
     if [[ ! -e "$existing_path" ]]; then
       continue

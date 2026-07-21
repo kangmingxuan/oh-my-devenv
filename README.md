@@ -22,7 +22,7 @@ oh-my-devenv is a shared, reproducible development-environment baseline. Point `
 - **Modern CLI toolkit** — ripgrep, fd, bat, fzf, jq, direnv, tmux, shellcheck, shfmt, and more.
 - **Opt-in desktop baseline** — Ghostty, Maple Mono NF CN, and matching managed configuration on macOS and Ubuntu 26.04+ desktop machines, including the required Linux Fontconfig alias.
 - **Safe first run** — backs up any existing managed dotfiles and prompts once for your Git identity and desktop-baseline choice.
-- **Local overlays, not forks** — keep machine, team, and secret settings under `~/.config/oh-my-devenv/` and `*.local` files; never edit the shared baseline.
+- **Local overlays, not forks** — keep machine, team, and secret settings under `$XDG_CONFIG_HOME/oh-my-devenv/` and `*.local` files; never edit the shared baseline. The default config root is `~/.config`.
 - **Team-ready** — one reproducible baseline the whole team can track, with machine- and team-specific values kept in local overlays.
 
 ## How it works
@@ -33,11 +33,13 @@ flowchart TD
     B --> C["System packages<br/>Homebrew / apt"]
     B --> D["Optional desktop assets<br/>Ghostty + Maple Mono"]
     B --> E["Shell assets<br/>oh-my-zsh + plugins"]
+    B --> X["Managed config<br/>$XDG_CONFIG_HOME"]
     B --> F["Runtimes via mise<br/>Go · Node · Python"]
     B --> G["Ecosystem tools<br/>go install · uv tool"]
     C --> H["Environment check"]
     D --> H
     E --> H
+    X --> H
     F --> H
     G --> H
     H --> I["All checks passed"]
@@ -82,6 +84,15 @@ command -v git curl chezmoi
 
 Use the repository URL below.
 
+The baseline honors `XDG_CONFIG_HOME` for managed mise, Ghostty, and Fontconfig
+files and for all config overlays. It defaults to `$HOME/.config`. To use a
+different config root, export an absolute path before running `chezmoi`; do not
+set or change it from `env.sh`:
+
+```bash
+export XDG_CONFIG_HOME="$HOME/.config-work"
+```
+
 **SSH**
 
 ```bash
@@ -102,16 +113,17 @@ The first apply backs up any pre-existing managed files, prompts once for your G
 The default macOS bootstrap installs only the shared baseline. To include local Homebrew apps such as OrbStack during the first apply, declare them first:
 
 ```bash
-mkdir -p "${XDG_CONFIG_HOME:-$HOME/.config}/oh-my-devenv"
-cat > "${XDG_CONFIG_HOME:-$HOME/.config}/oh-my-devenv/Brewfile.local" <<'EOF'
+export XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
+mkdir -p "$XDG_CONFIG_HOME/oh-my-devenv"
+cat > "$XDG_CONFIG_HOME/oh-my-devenv/Brewfile.local" <<'EOF'
 cask "orbstack"
 EOF
-cat >> "${XDG_CONFIG_HOME:-$HOME/.config}/oh-my-devenv/env.sh" <<'EOF'
-export DOTFILES_EXTRA_BREWFILES="${XDG_CONFIG_HOME:-$HOME/.config}/oh-my-devenv/Brewfile.local"
+cat >> "$XDG_CONFIG_HOME/oh-my-devenv/env.sh" <<'EOF'
+export DOTFILES_EXTRA_BREWFILES="$XDG_CONFIG_HOME/oh-my-devenv/Brewfile.local"
 EOF
 ```
 
-To install this repo's optional catalog instead, set `DOTFILES_INSTALL_REPO_OPTIONAL_BREWFILE=1`. After the first bootstrap, sync local Brewfile changes explicitly with `brew bundle install --file="${XDG_CONFIG_HOME:-$HOME/.config}/oh-my-devenv/Brewfile.local"`.
+To install this repo's optional catalog instead, set `DOTFILES_INSTALL_REPO_OPTIONAL_BREWFILE=1`. After the first bootstrap, sync local Brewfile changes explicitly with `brew bundle install --file="$XDG_CONFIG_HOME/oh-my-devenv/Brewfile.local"`.
 
 </details>
 

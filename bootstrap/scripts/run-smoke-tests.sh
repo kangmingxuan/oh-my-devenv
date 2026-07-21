@@ -84,7 +84,7 @@ assert_file_contains() {
   local file_path="$1"
   local expected="$2"
 
-  if ! grep -Fq "$expected" "$file_path"; then
+  if ! grep -Fq -- "$expected" "$file_path"; then
     fail_test "$file_path is missing expected content: $expected"
   fi
 }
@@ -93,7 +93,7 @@ assert_file_not_contains() {
   local file_path="$1"
   local unexpected="$2"
 
-  if grep -Fq "$unexpected" "$file_path"; then
+  if grep -Fq -- "$unexpected" "$file_path"; then
     fail_test "$file_path contains unexpected content: $unexpected"
   fi
 }
@@ -166,6 +166,12 @@ require_command sh
 tmp_dir="$(mktemp -d)"
 trap 'rm -rf "$tmp_dir"' EXIT
 
+desktop_platform_supported_data=false
+if [[ "$(chezmoi --source="$repo_root" execute-template \
+  '{{ includeTemplate "desktop-platform-supported" . }}')" == "true" ]]; then
+  desktop_platform_supported_data=true
+fi
+
 # Stand-in chezmoi data for template rendering. Carries two concerns at
 # once:
 #   - `name` / `email` mirror the shape that `.chezmoi.toml.tmpl` produces
@@ -183,17 +189,28 @@ email = "smoke@example.com"
 gitName = "Smoke Tests"
 gitEmail = "smoke@example.com"
 desktopBaseline = true
+desktopPlatformSupported = $desktop_platform_supported_data
 EOF
 
 # Literal strings asserted against rendered templates.
 # shellcheck disable=SC2016
-shared_env_literal='${XDG_CONFIG_HOME:-$HOME/.config}/oh-my-devenv/env.sh'
+shared_secrets_literal='$XDG_CONFIG_HOME/oh-my-devenv/secrets.sh'
 # shellcheck disable=SC2016
-shared_secrets_literal='${XDG_CONFIG_HOME:-$HOME/.config}/oh-my-devenv/secrets.sh'
+zsh_overlay_literal='$XDG_CONFIG_HOME/oh-my-devenv/zshrc.zsh'
 # shellcheck disable=SC2016
-zsh_overlay_literal='${XDG_CONFIG_HOME:-$HOME/.config}/oh-my-devenv/zshrc.zsh'
+bash_overlay_literal='$XDG_CONFIG_HOME/oh-my-devenv/bashrc.bash'
 # shellcheck disable=SC2016
-bash_overlay_literal='${XDG_CONFIG_HOME:-$HOME/.config}/oh-my-devenv/bashrc.bash'
+xdg_source_literal='source "$HOME/.local/share/oh-my-devenv/xdg.sh"'
+# shellcheck disable=SC2016
+backup_mise_literal='xdg-config/mise/config.toml|$XDG_CONFIG_HOME/mise/config.toml'
+# shellcheck disable=SC2016
+backup_fontconfig_literal='xdg-config/fontconfig/conf.d/99-oh-my-devenv-maple-mono-nf-cn.conf|$XDG_CONFIG_HOME/fontconfig/conf.d/99-oh-my-devenv-maple-mono-nf-cn.conf'
+# shellcheck disable=SC2016
+backup_ghostty_literal='xdg-config/ghostty/config.ghostty|$XDG_CONFIG_HOME/ghostty/config.ghostty'
+# shellcheck disable=SC2016
+xdg_apply_literal='bash "$scripts_dir/xdg-config.sh" apply "$config_file"'
+# shellcheck disable=SC2016
+xdg_persistent_state_literal='--persistent-state="$xdg_persistent_state"'
 old_shell_overlay_patterns=(
   '.zshrc.secrets'
   '.bashrc.secrets'
@@ -209,6 +226,57 @@ old_shell_overlay_patterns=(
 
 log_step "🧪" "Running local smoke tests..."
 
+log_step "📂" "Checking XDG_CONFIG_HOME resolution..."
+xdg_resolver="$repo_root/dot_local/share/oh-my-devenv/xdg.sh"
+syntax_check bash "$xdg_resolver"
+syntax_check zsh "$xdg_resolver"
+shellcheck -s bash "$xdg_resolver"
+# shellcheck disable=SC2016
+resolve_xdg_command='source "$1"; oh_my_devenv_setup_xdg_config_home; printf "%s\n" "$XDG_CONFIG_HOME"'
+
+default_xdg="$(env -i PATH="/usr/bin:/bin" HOME="$tmp_dir/home" \
+  bash -c "$resolve_xdg_command" \
+  _ "$xdg_resolver")"
+if [[ "$default_xdg" != "$tmp_dir/home/.config" ]]; then
+  fail_test "unset XDG_CONFIG_HOME resolved to '$default_xdg'"
+fi
+
+empty_xdg="$(env -i PATH="/usr/bin:/bin" HOME="$tmp_dir/home" XDG_CONFIG_HOME="" \
+  bash -c "$resolve_xdg_command" \
+  _ "$xdg_resolver")"
+if [[ "$empty_xdg" != "$tmp_dir/home/.config" ]]; then
+  fail_test "empty XDG_CONFIG_HOME resolved to '$empty_xdg'"
+fi
+
+custom_xdg="$(env -i PATH="/usr/bin:/bin" HOME="$tmp_dir/home" \
+  XDG_CONFIG_HOME="$tmp_dir/custom-config" \
+  bash -c "$resolve_xdg_command" \
+  _ "$xdg_resolver")"
+if [[ "$custom_xdg" != "$tmp_dir/custom-config" ]]; then
+  fail_test "absolute XDG_CONFIG_HOME resolved to '$custom_xdg'"
+fi
+
+relative_xdg="$(env -i PATH="/usr/bin:/bin" HOME="$tmp_dir/home" \
+  XDG_CONFIG_HOME="relative/config" \
+  bash -c "$resolve_xdg_command" \
+  _ "$xdg_resolver" 2>"$tmp_dir/relative-xdg.err")"
+if [[ "$relative_xdg" != "$tmp_dir/home/.config" ]]; then
+  fail_test "relative XDG_CONFIG_HOME resolved to '$relative_xdg'"
+fi
+assert_file_contains "$tmp_dir/relative-xdg.err" "ignoring relative XDG_CONFIG_HOME=relative/config"
+
+mkdir -p "$tmp_dir/env-must-not-move-xdg/oh-my-devenv"
+printf '%s\n' 'unset XDG_CONFIG_HOME' >"$tmp_dir/env-must-not-move-xdg/oh-my-devenv/env.sh"
+# shellcheck disable=SC2016
+source_moving_env_command='source "$1"; oh_my_devenv_setup_xdg_config_home; if oh_my_devenv_source_shared_env; then exit 1; fi; printf "%s\n" "$XDG_CONFIG_HOME"'
+restored_xdg="$(XDG_CONFIG_HOME="$tmp_dir/env-must-not-move-xdg" \
+  bash -c "$source_moving_env_command" \
+  _ "$xdg_resolver" 2>"$tmp_dir/env-moved-xdg.err")"
+if [[ "$restored_xdg" != "$tmp_dir/env-must-not-move-xdg" ]]; then
+  fail_test "env.sh changed XDG_CONFIG_HOME to '$restored_xdg' despite the guard"
+fi
+assert_file_contains "$tmp_dir/env-moved-xdg.err" "must not change XDG_CONFIG_HOME"
+
 log_step "📝" "Rendering and checking shell templates..."
 render_template dot_zshrc.tmpl "$tmp_dir/dot_zshrc"
 syntax_check zsh "$tmp_dir/dot_zshrc"
@@ -220,7 +288,9 @@ syntax_check zsh "$tmp_dir/dot_zprofile"
 
 render_template dot_zsh/env.zsh.tmpl "$tmp_dir/env.zsh"
 syntax_check zsh "$tmp_dir/env.zsh"
-assert_file_contains "$tmp_dir/env.zsh" "$shared_env_literal"
+assert_file_contains "$tmp_dir/env.zsh" "$xdg_source_literal"
+assert_file_contains "$tmp_dir/env.zsh" "oh_my_devenv_setup_xdg_config_home"
+assert_file_contains "$tmp_dir/env.zsh" "oh_my_devenv_source_shared_env"
 assert_file_not_contains "$tmp_dir/env.zsh" "$shared_secrets_literal"
 assert_file_not_contains "$tmp_dir/env.zsh" "$zsh_overlay_literal"
 
@@ -233,7 +303,9 @@ assert_file_contains "$tmp_dir/dot_bashrc" "$bash_overlay_literal"
 render_template dot_bash/env.bash.tmpl "$tmp_dir/env.bash"
 syntax_check bash "$tmp_dir/env.bash"
 shellcheck_rendered_bash "$tmp_dir/env.bash"
-assert_file_contains "$tmp_dir/env.bash" "$shared_env_literal"
+assert_file_contains "$tmp_dir/env.bash" "$xdg_source_literal"
+assert_file_contains "$tmp_dir/env.bash" "oh_my_devenv_setup_xdg_config_home"
+assert_file_contains "$tmp_dir/env.bash" "oh_my_devenv_source_shared_env"
 assert_file_not_contains "$tmp_dir/env.bash" "$shared_secrets_literal"
 assert_file_not_contains "$tmp_dir/env.bash" "$bash_overlay_literal"
 
@@ -255,7 +327,8 @@ assert_file_contains "$tmp_dir/dot_gitconfig" "path = ~/.gitconfig.local"
 # The managed gitconfig must stay host-neutral: no hard-coded URL rewrites, so
 # the baseline carries no organization-specific Git routing.
 assert_file_not_contains "$tmp_dir/dot_gitconfig" 'insteadOf'
-assert_file_contains "$repo_root/bootstrap/scripts/common.sh" "$shared_env_literal"
+assert_file_contains "$repo_root/bootstrap/scripts/common.sh" "oh_my_devenv_setup_xdg_config_home"
+assert_file_contains "$repo_root/bootstrap/scripts/common.sh" "oh_my_devenv_source_shared_env"
 assert_file_not_contains "$repo_root/bootstrap/scripts/common.sh" "$shared_secrets_literal"
 
 log_step "📜" "Rendering and checking chezmoi bootstrap scripts..."
@@ -265,13 +338,19 @@ shellcheck_rendered_bash "$tmp_dir/run_once_before_10-bootstrap.sh"
 assert_file_contains "$tmp_dir/run_once_before_10-bootstrap.sh" "backup_existing_managed_configs()"
 assert_file_contains "$tmp_dir/run_once_before_10-bootstrap.sh" "chezmoi-first-run-backup"
 assert_file_contains "$tmp_dir/run_once_before_10-bootstrap.sh" ".ssh/config"
-assert_file_contains "$tmp_dir/run_once_before_10-bootstrap.sh" ".config/mise/config.toml"
-assert_file_contains "$tmp_dir/run_once_before_10-bootstrap.sh" ".config/fontconfig/conf.d/99-oh-my-devenv-maple-mono-nf-cn.conf"
-assert_file_contains "$tmp_dir/run_once_before_10-bootstrap.sh" ".config/ghostty/config.ghostty"
+assert_file_contains "$tmp_dir/run_once_before_10-bootstrap.sh" "$backup_mise_literal"
+assert_file_contains "$tmp_dir/run_once_before_10-bootstrap.sh" "$backup_fontconfig_literal"
+assert_file_contains "$tmp_dir/run_once_before_10-bootstrap.sh" "$backup_ghostty_literal"
 assert_file_contains "$tmp_dir/run_once_before_10-bootstrap.sh" ".zshrc"
 assert_file_contains "$tmp_dir/run_once_before_10-bootstrap.sh" ".gitconfig"
 assert_file_contains "$tmp_dir/run_once_before_10-bootstrap.sh" "cp -Lp \"\$existing_path\" \"\$backup_path\""
 assert_file_contains "$tmp_dir/run_once_before_10-bootstrap.sh" "install_error_trap"
+
+render_template .chezmoiscripts/run_after_35-apply-xdg-config.sh.tmpl "$tmp_dir/run_after_35-apply-xdg-config.sh"
+syntax_check bash "$tmp_dir/run_after_35-apply-xdg-config.sh"
+shellcheck_rendered_bash "$tmp_dir/run_after_35-apply-xdg-config.sh"
+assert_file_contains "$tmp_dir/run_after_35-apply-xdg-config.sh" "$xdg_apply_literal"
+assert_file_contains "$repo_root/bootstrap/scripts/xdg-config.sh" "$xdg_persistent_state_literal"
 
 render_template .chezmoiscripts/run_onchange_after_20-install-system-packages.sh.tmpl "$tmp_dir/run_onchange_after_20-install-system-packages.sh"
 syntax_check bash "$tmp_dir/run_onchange_after_20-install-system-packages.sh"
@@ -322,7 +401,7 @@ assert_file_contains "$unsupported_desktop_hook" "supported only on macOS and Ub
 assert_file_not_contains "$unsupported_desktop_hook" 'manifests_dir='
 assert_file_not_contains "$unsupported_desktop_hook" "Desktop baseline installation complete."
 
-render_template dot_config/ghostty/config.ghostty.tmpl "$tmp_dir/config.ghostty"
+render_template xdg_config/ghostty/config.ghostty.tmpl "$tmp_dir/config.ghostty"
 if (( desktop_platform_supported == 1 )); then
   assert_file_contains "$tmp_dir/config.ghostty" "font-family = Maple Mono NF CN"
   assert_file_contains "$tmp_dir/config.ghostty" "notify-on-command-finish = unfocused"
@@ -333,7 +412,7 @@ elif [[ -s "$tmp_dir/config.ghostty" ]]; then
 fi
 
 render_template \
-  dot_config/fontconfig/conf.d/99-oh-my-devenv-maple-mono-nf-cn.conf.tmpl \
+  xdg_config/fontconfig/conf.d/99-oh-my-devenv-maple-mono-nf-cn.conf.tmpl \
   "$tmp_dir/99-oh-my-devenv-maple-mono-nf-cn.conf"
 assert_file_contains "$tmp_dir/99-oh-my-devenv-maple-mono-nf-cn.conf" '<!DOCTYPE fontconfig SYSTEM "urn:fontconfig:fonts.dtd">'
 assert_file_contains "$tmp_dir/99-oh-my-devenv-maple-mono-nf-cn.conf" "<fontconfig>"
@@ -357,12 +436,12 @@ chezmoi --source="$repo_root" \
 chezmoi --source="$repo_root" \
   --override-data '{"desktopBaseline":false}' \
   execute-template \
-  --file "$repo_root/dot_config/ghostty/config.ghostty.tmpl" \
+  --file "$repo_root/xdg_config/ghostty/config.ghostty.tmpl" \
   >"$disabled_ghostty_config"
 chezmoi --source="$repo_root" \
   --override-data '{"desktopBaseline":false}' \
   execute-template \
-  --file "$repo_root/dot_config/fontconfig/conf.d/99-oh-my-devenv-maple-mono-nf-cn.conf.tmpl" \
+  --file "$repo_root/xdg_config/fontconfig/conf.d/99-oh-my-devenv-maple-mono-nf-cn.conf.tmpl" \
   >"$disabled_fontconfig_fragment"
 if [[ -s "$disabled_desktop_hook" || -s "$disabled_ghostty_config" ]]; then
   fail_test "desktop templates must render zero bytes when desktopBaseline is disabled"
@@ -408,7 +487,18 @@ assert_file_contains "$tmp_dir/run_onchange_after_60-check.sh" "fc-conflist"
 assert_file_contains "$tmp_dir/run_onchange_after_60-check.sh" "fc-match -f '%{postscriptname}\\n' monospace"
 
 log_step "🤖" "Verifying docs and repo-only files stay undeployed..."
-managed_listing="$(chezmoi managed --source="$repo_root")"
+managed_listing="$(chezmoi managed --source="$repo_root" --path-style=absolute)"
+if grep -Fq "$HOME/xdg_config" <<<"$managed_listing"; then
+  fail_test "main chezmoi source must not deploy the nested xdg_config source under HOME"
+fi
+for nested_target in \
+  "$HOME/.config/mise/config.toml" \
+  "$HOME/.config/ghostty/config.ghostty" \
+  "$HOME/.config/fontconfig/conf.d/99-oh-my-devenv-maple-mono-nf-cn.conf"; do
+  if grep -Fxq "$nested_target" <<<"$managed_listing"; then
+    fail_test "main chezmoi source must not manage nested XDG target: $nested_target"
+  fi
+done
 if grep -Fq 'local-overlay-examples' <<<"$managed_listing"; then
   fail_test "chezmoi managed lists something under docs/local-overlay-examples/ (examples must stay undeployed)"
 fi
@@ -423,26 +513,79 @@ undeployed_path="$HOME/LICENSE"
 if grep -Fxq "$undeployed_path" <<<"$managed_listing"; then
   fail_test "chezmoi managed lists ${undeployed_path#"$HOME"/} (repo-only files must stay undeployed)"
 fi
+
+log_step "📁" "Applying the nested XDG chezmoi source..."
+xdg_test_home="$tmp_dir/xdg-config-home"
+xdg_test_state="$tmp_dir/xdg-state-home"
+xdg_test_config="$tmp_dir/xdg-chezmoi.toml"
+cat >"$xdg_test_config" <<'EOF'
+[data]
+desktopBaseline = false
+EOF
+chezmoi --config="$xdg_test_config" --source="$repo_root" execute-template \
+  --file "$repo_root/.chezmoiscripts/run_after_35-apply-xdg-config.sh.tmpl" \
+  >"$tmp_dir/run_after_35-custom-xdg.sh"
+XDG_CONFIG_HOME="$xdg_test_home" XDG_STATE_HOME="$xdg_test_state" \
+  bash "$tmp_dir/run_after_35-custom-xdg.sh"
+assert_file_contains "$xdg_test_home/mise/config.toml" "[tools]"
+assert_file_contains "$xdg_test_home/fontconfig/conf.d/99-oh-my-devenv-maple-mono-nf-cn.conf" "<fontconfig>"
+
+xdg_managed_listing="$(XDG_CONFIG_HOME="$xdg_test_home" XDG_STATE_HOME="$xdg_test_state" \
+  bash "$repo_root/bootstrap/scripts/xdg-config.sh" managed "$xdg_test_config")"
+if ! grep -Fxq "$xdg_test_home/mise/config.toml" <<<"$xdg_managed_listing"; then
+  fail_test "nested XDG source does not manage mise/config.toml under XDG_CONFIG_HOME"
+fi
+if ! grep -Fxq "$xdg_test_home/fontconfig/conf.d/99-oh-my-devenv-maple-mono-nf-cn.conf" <<<"$xdg_managed_listing"; then
+  fail_test "nested XDG source does not manage the Fontconfig fragment under XDG_CONFIG_HOME"
+fi
+
+xdg_status="$(XDG_CONFIG_HOME="$xdg_test_home" XDG_STATE_HOME="$xdg_test_state" \
+  bash "$repo_root/bootstrap/scripts/xdg-config.sh" status "$xdg_test_config")"
+if [[ -n "$xdg_status" ]]; then
+  fail_test "nested XDG source is not clean after apply: $xdg_status"
+fi
+
+# uninstall.sh already relies on Bash 4 features (mapfile and associative
+# arrays), so execute its dynamic preview where that existing requirement holds.
+if (( BASH_VERSINFO[0] >= 4 )); then
+  mkdir -p "$xdg_test_home/oh-my-devenv"
+  touch "$xdg_test_home/oh-my-devenv/secrets.sh"
+  uninstall_preview="$(HOME="$tmp_dir/uninstall-home" XDG_CONFIG_HOME="$xdg_test_home" \
+    bash "$repo_root/bootstrap/scripts/uninstall.sh")"
+  if ! grep -Fq "[would-remove] file: $xdg_test_home/mise/config.toml" <<<"$uninstall_preview"; then
+    fail_test "uninstall preview does not include the custom-XDG mise config"
+  fi
+  if ! grep -Fq "[would-skip] overlay-protected: $xdg_test_home/oh-my-devenv/secrets.sh" <<<"$uninstall_preview"; then
+    fail_test "uninstall preview does not protect the custom-XDG secrets overlay"
+  fi
+  if grep -Fq "$tmp_dir/uninstall-home/.config/mise/config.toml" <<<"$uninstall_preview"; then
+    fail_test "uninstall preview fell back to HOME/.config instead of custom XDG_CONFIG_HOME"
+  fi
+  if ! grep -Fq "$tmp_dir/uninstall-home/.local/state/chezmoi/oh-my-devenv-xdg.boltdb" <<<"$uninstall_preview"; then
+    fail_test "uninstall preview does not include the nested chezmoi state file"
+  fi
+fi
+
 log_step "🧩" "Running manifest contract checks..."
 assert_desktop_platform_support '{"chezmoi":{"os":"darwin","osRelease":null,"kernel":null}}' true
 assert_desktop_platform_support '{"chezmoi":{"os":"linux","osRelease":{"id":"ubuntu","versionID":"26.04"},"kernel":{"osrelease":"linux"}}}' true
 assert_desktop_platform_support '{"chezmoi":{"os":"linux","osRelease":{"id":"ubuntu","versionID":"24.04"},"kernel":{"osrelease":"linux"}}}' ''
 assert_desktop_platform_support '{"chezmoi":{"os":"linux","osRelease":{"id":"ubuntu","versionID":"26.04"},"kernel":{"osrelease":"microsoft-standard-WSL2"}}}' ''
 assert_desktop_platform_support '{"chezmoi":{"os":"linux","osRelease":{"id":"debian","versionID":"26.04"},"kernel":{"osrelease":"linux"}}}' ''
-synthetic_fontconfig_template="$repo_root/dot_config/fontconfig/conf.d/99-oh-my-devenv-maple-mono-nf-cn.conf.tmpl"
+synthetic_fontconfig_template="$repo_root/xdg_config/fontconfig/conf.d/99-oh-my-devenv-maple-mono-nf-cn.conf.tmpl"
 synthetic_supported_fontconfig="$tmp_dir/fontconfig-supported-linux.conf"
 synthetic_unsupported_fontconfig="$tmp_dir/fontconfig-unsupported-linux.conf"
 synthetic_macos_fontconfig="$tmp_dir/fontconfig-macos.conf"
 chezmoi --source="$repo_root" \
-  --override-data '{"desktopBaseline":true,"chezmoi":{"os":"linux","osRelease":{"id":"ubuntu","versionID":"26.04"},"kernel":{"osrelease":"linux"}}}' \
+  --override-data '{"desktopBaseline":true,"desktopPlatformSupported":true,"chezmoi":{"os":"linux","osRelease":{"id":"ubuntu","versionID":"26.04"},"kernel":{"osrelease":"linux"}}}' \
   execute-template --file "$synthetic_fontconfig_template" \
   >"$synthetic_supported_fontconfig"
 chezmoi --source="$repo_root" \
-  --override-data '{"desktopBaseline":true,"chezmoi":{"os":"linux","osRelease":{"id":"ubuntu","versionID":"24.04"},"kernel":{"osrelease":"linux"}}}' \
+  --override-data '{"desktopBaseline":true,"desktopPlatformSupported":false,"chezmoi":{"os":"linux","osRelease":{"id":"ubuntu","versionID":"24.04"},"kernel":{"osrelease":"linux"}}}' \
   execute-template --file "$synthetic_fontconfig_template" \
   >"$synthetic_unsupported_fontconfig"
 chezmoi --source="$repo_root" \
-  --override-data '{"desktopBaseline":true,"chezmoi":{"os":"darwin","osRelease":null,"kernel":null}}' \
+  --override-data '{"desktopBaseline":true,"desktopPlatformSupported":true,"chezmoi":{"os":"darwin","osRelease":null,"kernel":null}}' \
   execute-template --file "$synthetic_fontconfig_template" \
   >"$synthetic_macos_fontconfig"
 assert_file_contains "$synthetic_supported_fontconfig" '<edit name="family" mode="prepend" binding="strong">'
@@ -457,7 +600,7 @@ if grep -Eq '@latest([[:space:]]|$)' "$repo_root/bootstrap/manifests/ecosystem/g
   fail_test "go-tools.txt must pin exact versions instead of @latest"
 fi
 
-mise_config="$repo_root/dot_config/mise/config.toml.tmpl"
+mise_config="$repo_root/xdg_config/mise/config.toml.tmpl"
 for runtime in go node python; do
   if ! grep -Eq "^${runtime} = \"v?[0-9]+\.[0-9]+\.[0-9]+\"$" "$mise_config"; then
     fail_test "mise config must pin $runtime to a complete major.minor.patch version"
@@ -625,9 +768,9 @@ assert_toml_section_contains "$tmp_chezmoi_toml" "diff" 'exclude = ["scripts"]'
 assert_file_contains "$tmp_chezmoi_toml" 'name = "Smoke Tests"'
 assert_file_contains "$tmp_chezmoi_toml" 'email = "smoke@example.com"'
 assert_file_contains "$tmp_chezmoi_toml" 'desktopBaseline = true'
-assert_file_contains "$repo_root/dot_config/mise/config.toml.tmpl" "[settings]"
-assert_file_contains "$repo_root/dot_config/mise/config.toml.tmpl" "github_attestations = false"
-assert_file_contains "$repo_root/dot_config/mise/config.toml.tmpl" "[settings.aqua]"
+assert_file_contains "$repo_root/xdg_config/mise/config.toml.tmpl" "[settings]"
+assert_file_contains "$repo_root/xdg_config/mise/config.toml.tmpl" "github_attestations = false"
+assert_file_contains "$repo_root/xdg_config/mise/config.toml.tmpl" "[settings.aqua]"
 
 log_step "🔍" "Running shellcheck on bootstrap scripts..."
 shellcheck "$repo_root/bootstrap/scripts/common.sh" \
@@ -640,6 +783,7 @@ shellcheck "$repo_root/bootstrap/scripts/common.sh" \
   "$repo_root/bootstrap/scripts/install-uv-tools.sh" \
   "$repo_root/bootstrap/scripts/mirrors.sh" \
   "$repo_root/bootstrap/scripts/uninstall.sh" \
+  "$repo_root/bootstrap/scripts/xdg-config.sh" \
   "$repo_root/bootstrap/scripts/run-smoke-tests.sh"
 
 log_step "✅" "Smoke tests passed."

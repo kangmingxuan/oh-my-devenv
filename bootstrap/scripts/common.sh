@@ -246,12 +246,16 @@ uv_tool_binary_name() {
   printf '%s\n' "$tool"
 }
 
-# Load the shared non-secret local environment if present so bootstrap sees the
-# same Go / mirror / registry-related exports as interactive shells.
-# shellcheck disable=SC1090,SC1091
-if [[ -f "${XDG_CONFIG_HOME:-$HOME/.config}/oh-my-devenv/env.sh" ]]; then
-  source "${XDG_CONFIG_HOME:-$HOME/.config}/oh-my-devenv/env.sh"
-fi
+common_script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+common_repo_root="$(cd "$common_script_dir/../.." && pwd)"
+
+# Resolve XDG_CONFIG_HOME before bootstrap reads any local configuration.
+# shellcheck disable=SC1091
+source "$common_repo_root/dot_local/share/oh-my-devenv/xdg.sh"
+oh_my_devenv_setup_xdg_config_home
+oh_my_devenv_source_shared_env
 
 # shellcheck disable=SC1091
-source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/mirrors.sh"
+source "$common_script_dir/mirrors.sh"
+
+unset common_script_dir common_repo_root

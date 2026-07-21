@@ -97,6 +97,7 @@
 │   ├── run_onchange_after_22-install-desktop-assets.sh.tmpl
 │   ├── run_onchange_after_25-install-shell-assets.sh.tmpl
 │   ├── run_onchange_after_30-install-mise.sh.tmpl
+│   ├── run_after_35-apply-xdg-config.sh.tmpl
 │   ├── run_onchange_after_40-install-runtimes.sh.tmpl
 │   ├── run_onchange_after_50-sync-ecosystem-tools.sh.tmpl
 │   └── run_onchange_after_60-check.sh.tmpl
@@ -122,13 +123,15 @@
 │       ├── install-maple-mono-font.sh
 │       ├── install-go-tools.sh
 │       ├── install-oh-my-zsh-assets.sh
-│       └── install-uv-tools.sh
-└── dot_config/
-    ├── fontconfig/
-    │   └── conf.d/
-    │       └── 99-oh-my-devenv-maple-mono-nf-cn.conf.tmpl
-    ├── ghostty/
-    │   └── config.ghostty.tmpl
+│       ├── install-uv-tools.sh
+│       └── xdg-config.sh
+├── dot_local/share/oh-my-devenv/
+│   └── xdg.sh
+└── xdg_config/
+    ├── fontconfig/conf.d/
+    │   └── 99-oh-my-devenv-maple-mono-nf-cn.conf.tmpl
+    ├── ghostty/
+    │   └── config.ghostty.tmpl
     └── mise/
         └── config.toml.tmpl
 ```
@@ -159,9 +162,10 @@
 3. `run_onchange_after_22-install-desktop-assets.sh.tmpl`
 4. `run_onchange_after_25-install-shell-assets.sh.tmpl`
 5. `run_onchange_after_30-install-mise.sh.tmpl`
-6. `run_onchange_after_40-install-runtimes.sh.tmpl`
-7. `run_onchange_after_50-sync-ecosystem-tools.sh.tmpl`
-8. `run_onchange_after_60-check.sh.tmpl`
+6. `run_after_35-apply-xdg-config.sh.tmpl`
+7. `run_onchange_after_40-install-runtimes.sh.tmpl`
+8. `run_onchange_after_50-sync-ecosystem-tools.sh.tmpl`
+9. `run_onchange_after_60-check.sh.tmpl`
 
 要求：
 
@@ -383,7 +387,7 @@ dotfiles 需要保证：
 5. 编写 `install-uv-tools`
 6. 编写 `.chezmoiscripts/*`
 7. 编写 `bootstrap/manifests/system/*.txt` 与 `bootstrap/manifests/ecosystem/*.txt`
-8. 编写 `dot_config/mise/config.toml.tmpl`
+8. 编写独立的 `xdg_config/` source 与 `xdg_config/mise/config.toml.tmpl`
 9. 编写 `README.md` 中的 bootstrap 使用说明
 
 ## 15. 最终方案摘要
@@ -391,6 +395,7 @@ dotfiles 需要保证：
 最终采用的方案是：
 
 - `chezmoi` 负责配置和编排
+- 独立的 chezmoi 子 source 将配置文件直接管理到绝对路径 `XDG_CONFIG_HOME` 下，默认值为 `$HOME/.config`
 - macOS 用 Homebrew 管系统工具
 - OrbStack 在 macOS 中是可选项；如通过 opt-in Homebrew 路径安装，则由 shell 登录层接管初始化
 - Ubuntu / Debian / WSL 用 `apt` 管系统工具

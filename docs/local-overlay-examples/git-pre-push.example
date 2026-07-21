@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Copy this file to ~/.config/git/hooks/pre-push and make it executable:
-#   install -d ~/.config/git/hooks
-#   cp docs/local-overlay-examples/git-pre-push.example ~/.config/git/hooks/pre-push
-#   chmod 755 ~/.config/git/hooks/pre-push
+# Copy this file to $XDG_CONFIG_HOME/git/hooks/pre-push and make it executable:
+#   install -d "$XDG_CONFIG_HOME/git/hooks"
+#   cp docs/local-overlay-examples/git-pre-push.example "$XDG_CONFIG_HOME/git/hooks/pre-push"
+#   chmod 755 "$XDG_CONFIG_HOME/git/hooks/pre-push"
 #
 # Replace the placeholders below before you rely on this guardrail.
 # Leaving them untouched turns the hook into a no-op.

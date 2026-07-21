@@ -15,6 +15,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+      - name: Configure a custom XDG config root
+        run: echo "XDG_CONFIG_HOME=$RUNNER_TEMP/xdg-config" >> "$GITHUB_ENV"
       - name: Install chezmoi
         run: |
           mkdir -p "$HOME/.local/bin"
@@ -24,6 +26,9 @@ jobs:
         run: |
           tmp_data_file="$RUNNER_TEMP/chezmoi-data.toml"
           tmp_config_file="$RUNNER_TEMP/chezmoi.toml"
+
+          mkdir -p "$HOME/.config/mise"
+          printf '%s\n' 'unmanaged_sentinel = true' >"$HOME/.config/mise/config.toml"
 
           cat >"$tmp_data_file" <<'EOF'
           gitName = "CI Runner"
@@ -39,4 +44,8 @@ jobs:
           chezmoi apply --source="$PWD" --config "$tmp_config_file" \
             2>&1 | tee "$HOME/apply.log"
       - name: Assert the environment check passed
-        run: grep -Fq "All checks passed." "$HOME/apply.log"
+        run: |
+          grep -Fq "All checks passed." "$HOME/apply.log"
+          test -f "$XDG_CONFIG_HOME/mise/config.toml"
+          test -f "$XDG_CONFIG_HOME/fontconfig/conf.d/99-oh-my-devenv-maple-mono-nf-cn.conf"
+          grep -Fxq "unmanaged_sentinel = true" "$HOME/.config/mise/config.toml"
