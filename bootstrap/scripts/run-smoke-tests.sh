@@ -551,6 +551,19 @@ if local_overlay_inventory "$invalid_overlay_manifest" >/dev/null 2>&1; then
   fail_test "invalid local overlay inventory must fail validation"
 fi
 
+duplicate_overlay_manifest="$tmp_dir/duplicate-local-overlays.tsv"
+duplicate_overlay_errors="$tmp_dir/duplicate-local-overlays.err"
+printf '%s\n' \
+  $'first\tfirst.example\t$HOME/.first\texact\ttest\ttest' \
+  $'second\tfirst.example\t$HOME/.second\texact\ttest\ttest' \
+  $'third\tthird.example\t$HOME/.second\texact\ttest\ttest' \
+  >"$duplicate_overlay_manifest"
+if local_overlay_inventory "$duplicate_overlay_manifest" >/dev/null 2>"$duplicate_overlay_errors"; then
+  fail_test "duplicate local overlay inventory must fail validation"
+fi
+assert_file_contains "$duplicate_overlay_errors" "duplicate local overlay example"
+assert_file_contains "$duplicate_overlay_errors" "duplicate local overlay location"
+
 trailing_xdg="$tmp_dir/trailing-xdg/"
 trailing_env_path="${trailing_xdg%/}/oh-my-devenv/env.sh"
 resolved_trailing_env="$(XDG_CONFIG_HOME="$trailing_xdg" local_overlay_resolve_location "$env_overlay_literal")"

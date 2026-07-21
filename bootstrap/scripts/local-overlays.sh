@@ -72,9 +72,19 @@ local_overlay_load() {
       printf "ERROR: missing local overlay metadata on row %d\n", NR > "/dev/stderr"
       invalid = 1
     }
-    seen_id[id]++ || seen_example[example]++ || seen_location[location]++ {
-      printf "ERROR: duplicate local overlay field on row %d\n", NR > "/dev/stderr"
-      invalid = 1
+    {
+      if (seen_id[id]++) {
+        printf "ERROR: duplicate local overlay id on row %d: %s\n", NR, id > "/dev/stderr"
+        invalid = 1
+      }
+      if (seen_example[example]++) {
+        printf "ERROR: duplicate local overlay example on row %d: %s\n", NR, example > "/dev/stderr"
+        invalid = 1
+      }
+      if (seen_location[location]++) {
+        printf "ERROR: duplicate local overlay location on row %d: %s\n", NR, location > "/dev/stderr"
+        invalid = 1
+      }
     }
     { print }
     END {
