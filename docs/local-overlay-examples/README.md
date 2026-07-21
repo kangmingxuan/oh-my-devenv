@@ -5,18 +5,23 @@ Need the broader docs map first? Start at [`docs/README.md`](../README.md).
 This directory ships **starter templates** for the local extension points that
 the baseline leaves to each user's home directory or user-owned tool config:
 
-| Example file                            | Real overlay location              | Sourced / read by                                   |
-| --------------------------------------- | ---------------------------------- | --------------------------------------------------- |
-| `env.sh.example`                        | `$XDG_CONFIG_HOME/oh-my-devenv/env.sh` | `~/.zsh/env.zsh`, `~/.bash/env.bash`, `bootstrap/scripts/common.sh` |
-| `secrets.sh.example`                    | `$XDG_CONFIG_HOME/oh-my-devenv/secrets.sh` | `~/.zshrc`, `~/.bashrc` |
-| `zshrc.zsh.example`                     | `$XDG_CONFIG_HOME/oh-my-devenv/zshrc.zsh` | Baseline `dot_zshrc.tmpl` via a guarded `source`    |
-| `bashrc.bash.example`                   | `$XDG_CONFIG_HOME/oh-my-devenv/bashrc.bash` | Baseline `dot_bashrc.tmpl` via a guarded `source`   |
-| `gitconfig.local.example`               | `~/.gitconfig.local`               | Baseline `dot_gitconfig.tmpl` via `[include]`       |
-| `git-pre-push.example`                  | `$XDG_CONFIG_HOME/git/hooks/pre-push` | Git via `core.hooksPath`                         |
-| `ssh-config.d.corp.conf.example`        | `~/.ssh/config.d/<your-alias>.conf` | `~/.ssh/config` via its `Include ~/.ssh/config.d/*.conf` directive |
-| `npmrc.example`                         | `~/.npmrc`                         | `npm`                                               |
-| `Brewfile.local.example`                | `$XDG_CONFIG_HOME/oh-my-devenv/Brewfile.local` | macOS bootstrap when `DOTFILES_EXTRA_BREWFILES` points to it |
-| `ghostty-config.local.ghostty.example`  | `$XDG_CONFIG_HOME/ghostty/config.local.ghostty` | Managed Ghostty `config.ghostty` via `config-file` |
+| Example | Location pattern | Consumers | Lifecycle |
+| --- | --- | --- | --- |
+| `env.sh.example` | `$XDG_CONFIG_HOME/oh-my-devenv/env.sh` | Bash and Zsh | persistent environment |
+| `bootstrap.env.example` | `$XDG_CONFIG_HOME/oh-my-devenv/bootstrap.env` | bootstrap scripts | bootstrap settings |
+| `secrets.sh.example` | `$XDG_CONFIG_HOME/oh-my-devenv/secrets.sh` | interactive Bash and Zsh | interactive secrets |
+| `zshrc.zsh.example` | `$XDG_CONFIG_HOME/oh-my-devenv/zshrc.zsh` | Zsh | interactive shell |
+| `bashrc.bash.example` | `$XDG_CONFIG_HOME/oh-my-devenv/bashrc.bash` | Bash | interactive shell |
+| `gitconfig.local.example` | `$HOME/.gitconfig.local` | Git include | tool-native configuration |
+| `git-pre-push.example` | `$XDG_CONFIG_HOME/git/hooks/*` | Git core.hooksPath | tool-native configuration |
+| `ssh-config.d.corp.conf.example` | `$HOME/.ssh/config.d/*.conf` | OpenSSH Include | tool-native configuration |
+| `npmrc.example` | `$HOME/.npmrc` | npm | tool-native configuration |
+| `Brewfile.local.example` | `$XDG_CONFIG_HOME/oh-my-devenv/Brewfile.local` | macOS bootstrap | bootstrap package input |
+| `ghostty-config.local.ghostty.example` | `$XDG_CONFIG_HOME/ghostty/config.local.ghostty` | Ghostty | tool-native configuration |
+
+The machine-readable source for this table is
+[`bootstrap/manifests/local-overlays.tsv`](../../bootstrap/manifests/local-overlays.tsv).
+Uninstall protection and smoke validation read that inventory directly.
 
 ## Why `.example`?
 
@@ -35,7 +40,7 @@ The managed shells export `XDG_CONFIG_HOME`, defaulting to `$HOME/.config`. If
 you are setting up an overlay before the first apply, initialize it in the
 current shell first: `export XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"`.
 Custom values must be absolute and must be exported before running `chezmoi`;
-do not set or change `XDG_CONFIG_HOME` from `env.sh`.
+local env files must not set or change `XDG_CONFIG_HOME`.
 
 1. Pick the example file that matches the extension point you want to use.
 2. Copy it to the real overlay location shown in the table above, **dropping the
@@ -48,17 +53,17 @@ do not set or change `XDG_CONFIG_HOME` from `env.sh`.
    `~/.ssh/config.d/*.conf` before its `Host *` catch-all. If you adapt these
    examples outside this baseline or keep a hand-managed top-level config, add
    that `Include` line before any `Host *` block.
-5. For shell overlays, open a new shell to verify. The files under
-   `$XDG_CONFIG_HOME/oh-my-devenv/` are all guarded by
-   `[[ -f ... ]]` sources in the baseline, so a missing file is silently ignored
-   and a present file is loaded on next shell start.
+5. For shell overlays, open a new shell to verify. Shell startup reads
+   `env.sh`, `secrets.sh`, and the shell-specific rc overlay when present.
+   Bootstrap reads `bootstrap.env` independently.
 6. For a Git hook copied from `git-pre-push.example`, run `chmod 755 "$XDG_CONFIG_HOME/git/hooks/pre-push"`
    and then test it against one repo that should match your rule and one that
    should not before you trust it.
 7. For Ghostty overrides, open a new terminal window after copying the example;
    `ghostty +show-config` should exit successfully and show the effective values.
 8. Keep responsibilities clean:
-   - `$XDG_CONFIG_HOME/oh-my-devenv/env.sh` is for shell-compatible, non-secret exports that Bash, Zsh, and bootstrap should all see.
+   - `$XDG_CONFIG_HOME/oh-my-devenv/env.sh` is for persistent, non-secret exports that Bash and Zsh should load.
+   - `$XDG_CONFIG_HOME/oh-my-devenv/bootstrap.env` is for non-secret settings consumed only by bootstrap tooling.
    - `$XDG_CONFIG_HOME/oh-my-devenv/Brewfile.local` is for macOS-only Homebrew apps and CLIs that you explicitly opt in to during first bootstrap.
    - `$XDG_CONFIG_HOME/oh-my-devenv/secrets.sh` is for shell-compatible secrets that interactive Bash and Zsh read automatically; bootstrap and non-interactive shell commands never read it automatically.
    - `$XDG_CONFIG_HOME/oh-my-devenv/zshrc.zsh` and `$XDG_CONFIG_HOME/oh-my-devenv/bashrc.bash` are late interactive-only overlays for aliases, functions, and prompt tweaks.
@@ -72,7 +77,7 @@ do not set or change `XDG_CONFIG_HOME` from `env.sh`.
 The selected desktop baseline installs only Ghostty and its configured font.
 Other macOS GUI apps remain local opt-ins. You can add them before the first
 `chezmoi init --apply` by creating a local Brewfile and pointing bootstrap at it
-from `env.sh`:
+from `bootstrap.env`:
 
 ```bash
 export XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
@@ -81,11 +86,11 @@ cp docs/local-overlay-examples/Brewfile.local.example \
   "$XDG_CONFIG_HOME/oh-my-devenv/Brewfile.local"
 printf '%s\n' \
   'export DOTFILES_EXTRA_BREWFILES="$XDG_CONFIG_HOME/oh-my-devenv/Brewfile.local"' \
-  >> "$XDG_CONFIG_HOME/oh-my-devenv/env.sh"
+  >> "$XDG_CONFIG_HOME/oh-my-devenv/bootstrap.env"
 ```
 
 To install the repo-maintained optional catalog instead, set
-`DOTFILES_INSTALL_REPO_OPTIONAL_BREWFILE=1` in the same `env.sh`. These opt-ins
+`DOTFILES_INSTALL_REPO_OPTIONAL_BREWFILE=1` in the same `bootstrap.env`. These opt-ins
 are read by the first system-package hook. Paths in `DOTFILES_EXTRA_BREWFILES`
 must expand to absolute paths, and missing files fail bootstrap instead of being
 silently skipped. If you edit `Brewfile.local` later, sync it explicitly:

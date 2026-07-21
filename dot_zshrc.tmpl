@@ -94,6 +94,6 @@ fi
 unset zsh_user_completion_dir
 
 # Load local interactive overlay last so it can intentionally override
-# baseline aliases, prompt, functions, and key bindings. Put shared non-secret
+# baseline aliases, prompt, functions, and key bindings. Put persistent non-secret
 # environment variables in $XDG_CONFIG_HOME/oh-my-devenv/env.sh instead.
 [[ -f "$XDG_CONFIG_HOME/oh-my-devenv/zshrc.zsh" ]] && source "$XDG_CONFIG_HOME/oh-my-devenv/zshrc.zsh"

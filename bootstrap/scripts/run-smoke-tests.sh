@@ -4,9 +4,16 @@ set -euo pipefail
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 bootstrap_dir="$(cd "$script_dir/.." && pwd)"
 repo_root="$(cd "$bootstrap_dir/.." && pwd)"
+tmp_dir="$(mktemp -d)"
+trap 'rm -rf "$tmp_dir"' EXIT
+
+# Smoke tests must not inherit machine-local bootstrap settings.
+export XDG_CONFIG_HOME="$tmp_dir/xdg-config-home-empty"
 
 # shellcheck disable=SC1091
 source "$script_dir/common.sh"
+# shellcheck disable=SC1091
+source "$script_dir/local-overlays.sh"
 
 require_command() {
   local command_name="$1"
@@ -163,9 +170,6 @@ require_command bash
 require_command zsh
 require_command sh
 
-tmp_dir="$(mktemp -d)"
-trap 'rm -rf "$tmp_dir"' EXIT
-
 desktop_platform_supported_data=false
 if [[ "$(chezmoi --source="$repo_root" execute-template \
   '{{ includeTemplate "desktop-platform-supported" . }}')" == "true" ]]; then
@@ -193,12 +197,17 @@ desktopPlatformSupported = $desktop_platform_supported_data
 EOF
 
 # Literal strings asserted against rendered templates.
-# shellcheck disable=SC2016
-shared_secrets_literal='$XDG_CONFIG_HOME/oh-my-devenv/secrets.sh'
-# shellcheck disable=SC2016
-zsh_overlay_literal='$XDG_CONFIG_HOME/oh-my-devenv/zshrc.zsh'
-# shellcheck disable=SC2016
-bash_overlay_literal='$XDG_CONFIG_HOME/oh-my-devenv/bashrc.bash'
+shared_secrets_literal="$(local_overlay_location secrets)"
+env_overlay_literal="$(local_overlay_location env)"
+bootstrap_overlay_literal="$(local_overlay_location bootstrap_env)"
+zsh_overlay_literal="$(local_overlay_location zshrc)"
+bash_overlay_literal="$(local_overlay_location bashrc)"
+gitconfig_overlay_literal="$(local_overlay_location gitconfig)"
+ssh_overlay_literal="$(local_overlay_location ssh_config)"
+ghostty_overlay_literal="$(local_overlay_location ghostty)"
+gitconfig_include_literal="path = ~/${gitconfig_overlay_literal#\$HOME/}"
+ssh_include_literal="Include ~/${ssh_overlay_literal#\$HOME/}"
+ghostty_include_literal="config-file = ?${ghostty_overlay_literal##*/}"
 # shellcheck disable=SC2016
 xdg_source_literal='source "$HOME/.local/share/oh-my-devenv/xdg.sh"'
 # shellcheck disable=SC2016
@@ -211,18 +220,6 @@ backup_ghostty_literal='xdg-config/ghostty/config.ghostty|$XDG_CONFIG_HOME/ghost
 xdg_apply_literal='bash "$scripts_dir/xdg-config.sh" apply "$config_file"'
 # shellcheck disable=SC2016
 xdg_persistent_state_literal='--persistent-state="$xdg_persistent_state"'
-old_shell_overlay_patterns=(
-  '.zshrc.secrets'
-  '.bashrc.secrets'
-  '.zsh/work.zsh'
-  '.bash/work.bash'
-  'work/env.sh'
-  'work-env.sh.example'
-  'zshrc.secrets.example'
-  'bashrc.secrets.example'
-  'zsh-work.zsh.example'
-  'bash-work.bash.example'
-)
 
 log_step "🧪" "Running local smoke tests..."
 
@@ -265,17 +262,41 @@ if [[ "$relative_xdg" != "$tmp_dir/home/.config" ]]; then
 fi
 assert_file_contains "$tmp_dir/relative-xdg.err" "ignoring relative XDG_CONFIG_HOME=relative/config"
 
-mkdir -p "$tmp_dir/env-must-not-move-xdg/oh-my-devenv"
-printf '%s\n' 'unset XDG_CONFIG_HOME' >"$tmp_dir/env-must-not-move-xdg/oh-my-devenv/env.sh"
+mkdir -p "$tmp_dir/env-boundary/oh-my-devenv"
+printf '%s\n' 'export OH_MY_DEVENV_SMOKE_SHELL=loaded' >"$tmp_dir/env-boundary/oh-my-devenv/env.sh"
+printf '%s\n' 'export OH_MY_DEVENV_SMOKE_BOOTSTRAP=loaded' >"$tmp_dir/env-boundary/oh-my-devenv/bootstrap.env"
 # shellcheck disable=SC2016
-source_moving_env_command='source "$1"; oh_my_devenv_setup_xdg_config_home; if oh_my_devenv_source_shared_env; then exit 1; fi; printf "%s\n" "$XDG_CONFIG_HOME"'
-restored_xdg="$(XDG_CONFIG_HOME="$tmp_dir/env-must-not-move-xdg" \
-  bash -c "$source_moving_env_command" \
-  _ "$xdg_resolver" 2>"$tmp_dir/env-moved-xdg.err")"
-if [[ "$restored_xdg" != "$tmp_dir/env-must-not-move-xdg" ]]; then
-  fail_test "env.sh changed XDG_CONFIG_HOME to '$restored_xdg' despite the guard"
+source_env_command='source "$1"; oh_my_devenv_setup_xdg_config_home; oh_my_devenv_source_env_file "$XDG_CONFIG_HOME/oh-my-devenv/env.sh"; printf "%s:%s\n" "${OH_MY_DEVENV_SMOKE_SHELL:-unset}" "${OH_MY_DEVENV_SMOKE_BOOTSTRAP:-unset}"'
+loaded_env="$(env -i PATH="/usr/bin:/bin" HOME="$tmp_dir/home" XDG_CONFIG_HOME="$tmp_dir/env-boundary" \
+  bash -c "$source_env_command" \
+  _ "$xdg_resolver")"
+if [[ "$loaded_env" != "loaded:unset" ]]; then
+  fail_test "shell env consumer boundary returned '$loaded_env'"
 fi
-assert_file_contains "$tmp_dir/env-moved-xdg.err" "must not change XDG_CONFIG_HOME"
+
+# shellcheck disable=SC2016
+source_bootstrap_command='source "$1"; printf "%s:%s\n" "${OH_MY_DEVENV_SMOKE_SHELL:-unset}" "${OH_MY_DEVENV_SMOKE_BOOTSTRAP:-unset}"'
+loaded_bootstrap="$(env -i PATH="/usr/bin:/bin" HOME="$tmp_dir/home" XDG_CONFIG_HOME="$tmp_dir/env-boundary" \
+  bash -c "$source_bootstrap_command" \
+  _ "$repo_root/bootstrap/scripts/common.sh")"
+if [[ "$loaded_bootstrap" != "unset:loaded" ]]; then
+  fail_test "bootstrap env consumer boundary returned '$loaded_bootstrap'"
+fi
+
+for guarded_env_name in env.sh bootstrap.env; do
+  guarded_env_root="$tmp_dir/$guarded_env_name-must-not-move-xdg"
+  mkdir -p "$guarded_env_root/oh-my-devenv"
+  printf '%s\n' 'unset XDG_CONFIG_HOME' >"$guarded_env_root/oh-my-devenv/$guarded_env_name"
+  # shellcheck disable=SC2016
+  source_moving_env_command='source "$1"; oh_my_devenv_setup_xdg_config_home; if oh_my_devenv_source_env_file "$XDG_CONFIG_HOME/oh-my-devenv/$2"; then exit 1; fi; printf "%s\n" "$XDG_CONFIG_HOME"'
+  restored_xdg="$(XDG_CONFIG_HOME="$guarded_env_root" \
+    bash -c "$source_moving_env_command" \
+    _ "$xdg_resolver" "$guarded_env_name" 2>"$tmp_dir/$guarded_env_name-moved-xdg.err")"
+  if [[ "$restored_xdg" != "$guarded_env_root" ]]; then
+    fail_test "$guarded_env_name changed XDG_CONFIG_HOME to '$restored_xdg' despite the guard"
+  fi
+  assert_file_contains "$tmp_dir/$guarded_env_name-moved-xdg.err" "must not change XDG_CONFIG_HOME"
+done
 
 log_step "📝" "Rendering and checking shell templates..."
 render_template dot_zshrc.tmpl "$tmp_dir/dot_zshrc"
@@ -290,7 +311,9 @@ render_template dot_zsh/env.zsh.tmpl "$tmp_dir/env.zsh"
 syntax_check zsh "$tmp_dir/env.zsh"
 assert_file_contains "$tmp_dir/env.zsh" "$xdg_source_literal"
 assert_file_contains "$tmp_dir/env.zsh" "oh_my_devenv_setup_xdg_config_home"
-assert_file_contains "$tmp_dir/env.zsh" "oh_my_devenv_source_shared_env"
+assert_file_contains "$tmp_dir/env.zsh" "oh_my_devenv_source_env_file"
+assert_file_contains "$tmp_dir/env.zsh" "$env_overlay_literal"
+assert_file_not_contains "$tmp_dir/env.zsh" "$bootstrap_overlay_literal"
 assert_file_not_contains "$tmp_dir/env.zsh" "$shared_secrets_literal"
 assert_file_not_contains "$tmp_dir/env.zsh" "$zsh_overlay_literal"
 
@@ -305,30 +328,26 @@ syntax_check bash "$tmp_dir/env.bash"
 shellcheck_rendered_bash "$tmp_dir/env.bash"
 assert_file_contains "$tmp_dir/env.bash" "$xdg_source_literal"
 assert_file_contains "$tmp_dir/env.bash" "oh_my_devenv_setup_xdg_config_home"
-assert_file_contains "$tmp_dir/env.bash" "oh_my_devenv_source_shared_env"
+assert_file_contains "$tmp_dir/env.bash" "oh_my_devenv_source_env_file"
+assert_file_contains "$tmp_dir/env.bash" "$env_overlay_literal"
+assert_file_not_contains "$tmp_dir/env.bash" "$bootstrap_overlay_literal"
 assert_file_not_contains "$tmp_dir/env.bash" "$shared_secrets_literal"
 assert_file_not_contains "$tmp_dir/env.bash" "$bash_overlay_literal"
-
-for old_shell_overlay_pattern in "${old_shell_overlay_patterns[@]}"; do
-  assert_file_not_contains "$tmp_dir/dot_zshrc" "$old_shell_overlay_pattern"
-  assert_file_not_contains "$tmp_dir/env.zsh" "$old_shell_overlay_pattern"
-  assert_file_not_contains "$tmp_dir/dot_bashrc" "$old_shell_overlay_pattern"
-  assert_file_not_contains "$tmp_dir/env.bash" "$old_shell_overlay_pattern"
-  assert_file_not_contains "$repo_root/bootstrap/scripts/common.sh" "$old_shell_overlay_pattern"
-  if grep -RInF -- "$old_shell_overlay_pattern" "$repo_root/docs/local-overlay-examples" >/dev/null 2>&1; then
-    fail_test "docs/local-overlay-examples still references legacy shell overlay path: $old_shell_overlay_pattern"
-  fi
-done
 
 syntax_check sh "$repo_root/dot_profile"
 
 render_template dot_gitconfig.tmpl "$tmp_dir/dot_gitconfig"
-assert_file_contains "$tmp_dir/dot_gitconfig" "path = ~/.gitconfig.local"
+assert_file_contains "$tmp_dir/dot_gitconfig" "$gitconfig_include_literal"
 # The managed gitconfig must stay host-neutral: no hard-coded URL rewrites, so
 # the baseline carries no organization-specific Git routing.
 assert_file_not_contains "$tmp_dir/dot_gitconfig" 'insteadOf'
+
+render_template private_dot_ssh/private_config.tmpl "$tmp_dir/private_dot_ssh_config"
+assert_file_contains "$tmp_dir/private_dot_ssh_config" "$ssh_include_literal"
 assert_file_contains "$repo_root/bootstrap/scripts/common.sh" "oh_my_devenv_setup_xdg_config_home"
-assert_file_contains "$repo_root/bootstrap/scripts/common.sh" "oh_my_devenv_source_shared_env"
+assert_file_contains "$repo_root/bootstrap/scripts/common.sh" "oh_my_devenv_source_env_file"
+assert_file_contains "$repo_root/bootstrap/scripts/common.sh" "$bootstrap_overlay_literal"
+assert_file_not_contains "$repo_root/bootstrap/scripts/common.sh" "$env_overlay_literal"
 assert_file_not_contains "$repo_root/bootstrap/scripts/common.sh" "$shared_secrets_literal"
 
 log_step "📜" "Rendering and checking chezmoi bootstrap scripts..."
@@ -406,7 +425,7 @@ if (( desktop_platform_supported == 1 )); then
   assert_file_contains "$tmp_dir/config.ghostty" "font-family = Maple Mono NF CN"
   assert_file_contains "$tmp_dir/config.ghostty" "notify-on-command-finish = unfocused"
   assert_file_contains "$tmp_dir/config.ghostty" "keybind = global:f12=toggle_quick_terminal"
-  assert_file_contains "$tmp_dir/config.ghostty" "config-file = ?config.local.ghostty"
+  assert_file_contains "$tmp_dir/config.ghostty" "$ghostty_include_literal"
 elif [[ -s "$tmp_dir/config.ghostty" ]]; then
   fail_test "Ghostty config must render zero bytes on unsupported platforms"
 fi
@@ -514,6 +533,93 @@ if grep -Fxq "$undeployed_path" <<<"$managed_listing"; then
   fail_test "chezmoi managed lists ${undeployed_path#"$HOME"/} (repo-only files must stay undeployed)"
 fi
 
+log_step "📋" "Checking the local overlay inventory..."
+overlay_manifest="$repo_root/bootstrap/manifests/local-overlays.tsv"
+overlay_examples_dir="$repo_root/docs/local-overlay-examples"
+overlay_docs="$overlay_examples_dir/README.md"
+
+if ! local_overlay_load "$overlay_manifest"; then
+  fail_test "local overlay inventory validation failed"
+fi
+
+if local_overlay_inventory "$tmp_dir/missing-local-overlays.tsv" >/dev/null 2>&1; then
+  fail_test "missing local overlay inventory must fail validation"
+fi
+invalid_overlay_manifest="$tmp_dir/invalid-local-overlays.tsv"
+printf '%s\n' $'broken\tbroken.example\t$HOME/.broken\tinvalid\ttest\ttest' >"$invalid_overlay_manifest"
+if local_overlay_inventory "$invalid_overlay_manifest" >/dev/null 2>&1; then
+  fail_test "invalid local overlay inventory must fail validation"
+fi
+
+duplicate_overlay_manifest="$tmp_dir/duplicate-local-overlays.tsv"
+duplicate_overlay_errors="$tmp_dir/duplicate-local-overlays.err"
+printf '%s\n' \
+  $'first\tfirst.example\t$HOME/.first\texact\ttest\ttest' \
+  $'second\tfirst.example\t$HOME/.second\texact\ttest\ttest' \
+  $'third\tthird.example\t$HOME/.second\texact\ttest\ttest' \
+  >"$duplicate_overlay_manifest"
+if local_overlay_inventory "$duplicate_overlay_manifest" >/dev/null 2>"$duplicate_overlay_errors"; then
+  fail_test "duplicate local overlay inventory must fail validation"
+fi
+assert_file_contains "$duplicate_overlay_errors" "duplicate local overlay example"
+assert_file_contains "$duplicate_overlay_errors" "duplicate local overlay location"
+
+trailing_xdg="$tmp_dir/trailing-xdg/"
+trailing_env_path="${trailing_xdg%/}/oh-my-devenv/env.sh"
+resolved_trailing_env="$(XDG_CONFIG_HOME="$trailing_xdg" local_overlay_resolve_location "$env_overlay_literal")"
+if [[ "$resolved_trailing_env" != "$trailing_env_path" ]]; then
+  fail_test "overlay resolution did not normalize a trailing XDG_CONFIG_HOME slash"
+fi
+if ! XDG_CONFIG_HOME="$trailing_xdg" local_overlay_matches_path "$trailing_env_path"; then
+  fail_test "overlay matching failed with a trailing XDG_CONFIG_HOME slash"
+fi
+
+special_home="$tmp_dir/home[smoke]"
+special_xdg="$tmp_dir/xdg[smoke]"
+special_ssh_overlay="$special_home/.ssh/config.d/smoke.conf"
+mkdir -p "$(dirname "$special_ssh_overlay")"
+touch "$special_ssh_overlay"
+if ! HOME="$special_home/" XDG_CONFIG_HOME="$special_xdg/" \
+  local_overlay_matches_path "$special_ssh_overlay"; then
+  fail_test "overlay matching treated HOME metacharacters as a glob"
+fi
+special_existing_overlays="$(HOME="$special_home/" XDG_CONFIG_HOME="$special_xdg/" \
+  local_overlay_existing_paths)"
+if ! grep -Fxq "$special_ssh_overlay" <<<"$special_existing_overlays"; then
+  fail_test "overlay discovery treated HOME metacharacters as a glob"
+fi
+
+overlay_inventory_count=0
+while IFS=$'\t' read -r -a overlay_fields; do
+  overlay_id="${overlay_fields[0]}"
+  overlay_example="${overlay_fields[1]}"
+  overlay_location="${overlay_fields[2]}"
+  overlay_consumers="${overlay_fields[4]}"
+  overlay_lifecycle="${overlay_fields[5]}"
+  overlay_inventory_count=$((overlay_inventory_count + 1))
+  if [[ ! -f "$overlay_examples_dir/$overlay_example" ]]; then
+    fail_test "overlay inventory example is missing: $overlay_example"
+  fi
+  overlay_doc_row="| \`$overlay_example\` | \`$overlay_location\` | $overlay_consumers | $overlay_lifecycle |"
+  if [[ "$(grep -Fxc -- "$overlay_doc_row" "$overlay_docs")" != "1" ]]; then
+    fail_test "overlay documentation row is missing or duplicated for $overlay_id"
+  fi
+done < <(local_overlay_inventory "$overlay_manifest")
+
+# shellcheck disable=SC2016
+overlay_doc_row_count="$(grep -Ec '^\| `[^`]+\.example` \|' "$overlay_docs")"
+if [[ "$overlay_doc_row_count" != "$overlay_inventory_count" ]]; then
+  fail_test "overlay documentation has $overlay_doc_row_count rows; inventory has $overlay_inventory_count"
+fi
+
+for overlay_example_path in "$overlay_examples_dir"/*.example; do
+  overlay_example="$(basename "$overlay_example_path")"
+  overlay_example_count="$(awk -F '\t' -v example="$overlay_example" '$0 !~ /^#/ && $2 == example { count++ } END { print count + 0 }' "$overlay_manifest")"
+  if [[ "$overlay_example_count" != "1" ]]; then
+    fail_test "overlay example must appear exactly once in inventory: $overlay_example"
+  fi
+done
+
 log_step "📁" "Applying the nested XDG chezmoi source..."
 xdg_test_home="$tmp_dir/xdg-config-home"
 xdg_test_state="$tmp_dir/xdg-state-home"
@@ -548,16 +654,29 @@ fi
 # uninstall.sh already relies on Bash 4 features (mapfile and associative
 # arrays), so execute its dynamic preview where that existing requirement holds.
 if (( BASH_VERSINFO[0] >= 4 )); then
-  mkdir -p "$xdg_test_home/oh-my-devenv"
-  touch "$xdg_test_home/oh-my-devenv/secrets.sh"
+  overlay_fixture_listing="$(
+    export HOME="$tmp_dir/uninstall-home"
+    export XDG_CONFIG_HOME="$xdg_test_home"
+    while IFS=$'\t' read -r -a overlay_fields; do
+      overlay_fixture="$(local_overlay_resolve_location "${overlay_fields[2]}")"
+      if [[ "${overlay_fields[3]}" == "glob" ]]; then
+        overlay_fixture="${overlay_fixture/\*/smoke}"
+      fi
+      mkdir -p "$(dirname "$overlay_fixture")"
+      touch "$overlay_fixture"
+      printf '%s\n' "$overlay_fixture"
+    done < <(local_overlay_inventory "$overlay_manifest")
+  )"
   uninstall_preview="$(HOME="$tmp_dir/uninstall-home" XDG_CONFIG_HOME="$xdg_test_home" \
     bash "$repo_root/bootstrap/scripts/uninstall.sh")"
   if ! grep -Fq "[would-remove] file: $xdg_test_home/mise/config.toml" <<<"$uninstall_preview"; then
     fail_test "uninstall preview does not include the custom-XDG mise config"
   fi
-  if ! grep -Fq "[would-skip] overlay-protected: $xdg_test_home/oh-my-devenv/secrets.sh" <<<"$uninstall_preview"; then
-    fail_test "uninstall preview does not protect the custom-XDG secrets overlay"
-  fi
+  while IFS= read -r overlay_fixture; do
+    if ! grep -Fq "[would-skip] overlay-protected: $overlay_fixture" <<<"$uninstall_preview"; then
+      fail_test "uninstall preview does not protect overlay: $overlay_fixture"
+    fi
+  done <<<"$overlay_fixture_listing"
   if grep -Fq "$tmp_dir/uninstall-home/.config/mise/config.toml" <<<"$uninstall_preview"; then
     fail_test "uninstall preview fell back to HOME/.config instead of custom XDG_CONFIG_HOME"
   fi
@@ -781,6 +900,7 @@ shellcheck "$repo_root/bootstrap/scripts/common.sh" \
   "$repo_root/bootstrap/scripts/install-maple-mono-font.sh" \
   "$repo_root/bootstrap/scripts/install-oh-my-zsh-assets.sh" \
   "$repo_root/bootstrap/scripts/install-uv-tools.sh" \
+  "$repo_root/bootstrap/scripts/local-overlays.sh" \
   "$repo_root/bootstrap/scripts/mirrors.sh" \
   "$repo_root/bootstrap/scripts/uninstall.sh" \
   "$repo_root/bootstrap/scripts/xdg-config.sh" \

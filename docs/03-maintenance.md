@@ -96,11 +96,15 @@ Removing a default is as significant as adding one. Before removing:
 - Confirm the default is not used by bootstrap scripts or smoke tests.
 - Add a note to the merge request describing what engineers should do on machines that already installed it.
 
-## Validating The Shared Local Env Overlay
+## Validating Local Environment Boundaries
 
-`$XDG_CONFIG_HOME/oh-my-devenv/env.sh` is the one shared non-secret env slot that Bash, Zsh, and bootstrap all read. Use it for values like `GOPRIVATE`, `GONOSUMDB`, `GONOPROXY`, and `DOTFILES_*` mirror controls. `XDG_CONFIG_HOME` itself is resolved before this file is read and must not be changed from the overlay.
+`$XDG_CONFIG_HOME/oh-my-devenv/env.sh` holds persistent non-secret shell
+environment such as `GOPRIVATE`, `GONOSUMDB`, and `GONOPROXY`. Bash and Zsh read
+it; bootstrap does not. `$XDG_CONFIG_HOME/oh-my-devenv/bootstrap.env` holds
+bootstrap-only controls such as `DOTFILES_MIRROR_MODE`. Neither file may change
+`XDG_CONFIG_HOME`.
 
-To validate that all three consumers agree:
+To validate the consumer boundary:
 
 1. Create the file from [`docs/local-overlay-examples/env.sh.example`](local-overlay-examples/env.sh.example) and add a test export such as `export GOPRIVATE='<private-module-prefixes>'`.
 2. Open a fresh Zsh and confirm it is visible:
@@ -115,13 +119,15 @@ To validate that all three consumers agree:
    bash -lc 'source "$HOME/.bash/env.bash"; printf "%s\n" "${GOPRIVATE:-<unset>}"'
    ```
 
-4. Confirm bootstrap sees the same value:
+4. Create `bootstrap.env` from its example, add
+   `export DOTFILES_MIRROR_MODE=external`, and confirm bootstrap sees it:
 
    ```bash
-   bash -lc 'source bootstrap/scripts/common.sh; printf "%s\n" "${GOPRIVATE:-<unset>}"'
+   bash -lc 'source bootstrap/scripts/common.sh; printf "%s\n" "${DOTFILES_MIRROR_MODE:-<unset>}"'
    ```
 
-If those three values differ, the contract drifted and the change is not ready to merge.
+The shell checks should agree with each other; the bootstrap check should reflect
+`bootstrap.env` independently.
 
 ## Validating A Mirror Override
 
@@ -130,7 +136,8 @@ Re-running the full bootstrap to confirm that a `DOTFILES_<KEY>` override points
 Mirror mode currently covers the consumers wired through `dotfiles_apply_mirror_env`: Go tools (`GOPROXY`), uv tools (`UV_INDEX_URL`), Homebrew API/bottles, the mise installer URL, and the oh-my-zsh main repo URL. It does not rewrite apt sources, mise runtime downloads, or oh-my-zsh plugin repositories.
 
 1. Open a fresh shell session so nothing from a previous `chezmoi apply` leaks in.
-2. Export the override you want to verify (or place the same value in `$XDG_CONFIG_HOME/oh-my-devenv/env.sh` and open a fresh shell):
+2. Export the override you want to verify, or place the same value in
+   `$XDG_CONFIG_HOME/oh-my-devenv/bootstrap.env`:
 
    ```bash
    export DOTFILES_MIRROR_MODE=internal
@@ -155,15 +162,16 @@ Mirror mode currently covers the consumers wired through `dotfiles_apply_mirror_
 
    If the mirror is unreachable or rejects the request, the failure surfaces immediately with the usual `go install` error instead of being buried under the full bootstrap output.
 
-5. When done, unset the overrides or close the shell. The next `chezmoi apply` returns to the mode encoded in your shell init files.
+5. When done, unset the overrides or close the shell. The next `chezmoi apply`
+   returns to the mode encoded in `bootstrap.env`.
 
 `bash bootstrap/scripts/run-smoke-tests.sh` still runs only under the implicit `external` mode, because the CI runner has no way to reach any internal endpoint. The assertions verify the mode-switch logic and defend the `external` defaults in the manifest; they do not try to dial the mirrors themselves.
 
 ## Security
 
 - `gitleaks` scans staged diffs on every commit via `pre-commit`. Bootstrap smoke tests run in CI only (see CI section below), not as a pre-commit hook.
-- Secrets and credentials never live in this repository. They stay in local overlays or user-owned stores (`$XDG_CONFIG_HOME/oh-my-devenv/secrets.sh`, `~/.gitconfig.local`, `$XDG_CONFIG_HOME/git/hooks/pre-push`, `~/.ssh/config.d/*.conf`, `uv auth`, `~/.npmrc`).
-- `bootstrap/scripts/common.sh` deliberately reads only `$XDG_CONFIG_HOME/oh-my-devenv/env.sh`, never `secrets.sh`. If Codex, Claude Code, or another automation needs tokens, launch it from a shell that explicitly sourced `secrets.sh` or use that tool's own secret/env injection.
+- Secrets and credentials never live in this repository. They stay in local overlays or user-owned stores (`$XDG_CONFIG_HOME/oh-my-devenv/secrets.sh`, `~/.gitconfig.local`, `$XDG_CONFIG_HOME/git/hooks/*`, `~/.ssh/config.d/*.conf`, `uv auth`, `~/.npmrc`).
+- `bootstrap/scripts/common.sh` deliberately reads only `$XDG_CONFIG_HOME/oh-my-devenv/bootstrap.env`, never `env.sh` or `secrets.sh`. If Codex, Claude Code, or another automation needs tokens, launch it from a shell that explicitly sourced `secrets.sh` or use that tool's own secret/env injection.
 - The baseline's managed `mise` config defaults GitHub Artifact Attestations verification to off, and the runtime-install hook exports the same default for first bootstrap. This is a reliability tradeoff for shared egress environments (OrbStack VMs, shared CI runners, corp NAT) where anonymous GitHub API rate limits can otherwise break a clean install before the toolchain is usable.
 - The Ubuntu font installer accepts a resumable alternate download URL, but always verifies the repository-pinned SHA-256 digest and required PostScript names before replacing a baseline-owned font directory.
 - To validate or dogfood the stricter path, opt back in explicitly with `MISE_GITHUB_ATTESTATIONS=true MISE_AQUA_GITHUB_ATTESTATIONS=true chezmoi apply`. Python follows the global setting unless `MISE_PYTHON_GITHUB_ATTESTATIONS` is set separately.
@@ -178,7 +186,10 @@ The repository CI pipeline is intentionally lightweight:
 - `secret-scan` runs `gitleaks` over the repository tree to catch committed secrets.
 - The pipeline is allowed to be simple and occasionally imperfect. It should catch obvious repo regressions, not model every clean-machine install path on every platform.
 
-The smoke suite is scoped to executable bootstrap behavior: template rendering, shell syntax, manifest parsing, deployability boundaries, mirror mode, and `shellcheck`. It deliberately does not freeze README prose, onboarding headings, changelog markers, badges, ownership wording, or retired CI lanes; those stay governed by review and the documentation boundaries above.
+The smoke suite is scoped to executable bootstrap behavior: template rendering,
+shell syntax, manifest parsing, the canonical overlay table, deployability
+boundaries, mirror mode, and `shellcheck`. Other documentation prose remains
+governed by review.
 
 If a change needs heavier confidence than the smoke jobs provide, validate it manually on a real machine or disposable VM and record that in the review description.
 
@@ -194,11 +205,9 @@ Use `bootstrap/scripts/uninstall.sh` when you need to tear down **only** what th
 
 **Overlays are never deleted**
 
-The script skips (and logs `[would-skip] overlay-protected`) for the local overlay slots documented in the README: `$XDG_CONFIG_HOME/oh-my-devenv/env.sh`, `$XDG_CONFIG_HOME/oh-my-devenv/secrets.sh`, `$XDG_CONFIG_HOME/oh-my-devenv/zshrc.zsh`, `$XDG_CONFIG_HOME/oh-my-devenv/bashrc.bash`, `$XDG_CONFIG_HOME/ghostty/config.local.ghostty`, `~/.gitconfig.local`, `$XDG_CONFIG_HOME/git/hooks/pre-push`, `~/.npmrc`, and `~/.ssh/config.d/*.conf`. If a path is both managed and an overlay (it should not be), the overlay rule wins.
-
-User-owned Git hooks such as `$XDG_CONFIG_HOME/git/hooks/pre-push` also stay untouched.
-They are outside the managed destination set, so `uninstall.sh` never removes
-them as part of baseline cleanup.
+The script reads [`bootstrap/manifests/local-overlays.tsv`](../bootstrap/manifests/local-overlays.tsv)
+and logs `[would-skip] overlay-protected` for every matching user-owned path. If
+a path is both managed and an overlay (it should not be), the overlay rule wins.
 
 **Chezmoi `--source` checkouts**
 

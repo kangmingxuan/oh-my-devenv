@@ -23,20 +23,20 @@ oh_my_devenv_setup_xdg_config_home() {
   export XDG_CONFIG_HOME
 }
 
-oh_my_devenv_source_shared_env() {
+oh_my_devenv_source_env_file() {
+  local env_file="$1"
   local expected_xdg_config_home="$XDG_CONFIG_HOME"
-  local shared_env="$expected_xdg_config_home/oh-my-devenv/env.sh"
 
-  if [[ -f "$shared_env" ]]; then
+  if [[ -f "$env_file" ]]; then
     # shellcheck disable=SC1090
-    source "$shared_env"
+    source "$env_file"
   fi
 
   if [[ "${XDG_CONFIG_HOME:-}" != "$expected_xdg_config_home" ]]; then
     XDG_CONFIG_HOME="$expected_xdg_config_home"
     export XDG_CONFIG_HOME
     printf 'ERROR: %s must not change XDG_CONFIG_HOME; export it before starting the shell or chezmoi\n' \
-      "$shared_env" >&2
+      "$env_file" >&2
     return 1
   fi
 }

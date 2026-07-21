@@ -253,7 +253,7 @@ common_repo_root="$(cd "$common_script_dir/../.." && pwd)"
 # shellcheck disable=SC1091
 source "$common_repo_root/dot_local/share/oh-my-devenv/xdg.sh"
 oh_my_devenv_setup_xdg_config_home
-oh_my_devenv_source_shared_env
+oh_my_devenv_source_env_file "$XDG_CONFIG_HOME/oh-my-devenv/bootstrap.env"
 
 # shellcheck disable=SC1091
 source "$common_script_dir/mirrors.sh"

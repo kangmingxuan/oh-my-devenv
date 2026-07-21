@@ -85,9 +85,9 @@ command -v git curl chezmoi
 Use the repository URL below.
 
 The baseline honors `XDG_CONFIG_HOME` for managed mise, Ghostty, and Fontconfig
-files and for all config overlays. It defaults to `$HOME/.config`. To use a
-different config root, export an absolute path before running `chezmoi`; do not
-set or change it from `env.sh`:
+files plus the `oh-my-devenv`, Git hook, and Ghostty overlays. It defaults to
+`$HOME/.config`. To use a different config root, export an absolute path before
+running `chezmoi`; local env files must not set or change it:
 
 ```bash
 export XDG_CONFIG_HOME="$HOME/.config-work"
@@ -118,12 +118,12 @@ mkdir -p "$XDG_CONFIG_HOME/oh-my-devenv"
 cat > "$XDG_CONFIG_HOME/oh-my-devenv/Brewfile.local" <<'EOF'
 cask "orbstack"
 EOF
-cat >> "$XDG_CONFIG_HOME/oh-my-devenv/env.sh" <<'EOF'
+cat >> "$XDG_CONFIG_HOME/oh-my-devenv/bootstrap.env" <<'EOF'
 export DOTFILES_EXTRA_BREWFILES="$XDG_CONFIG_HOME/oh-my-devenv/Brewfile.local"
 EOF
 ```
 
-To install this repo's optional catalog instead, set `DOTFILES_INSTALL_REPO_OPTIONAL_BREWFILE=1`. After the first bootstrap, sync local Brewfile changes explicitly with `brew bundle install --file="$XDG_CONFIG_HOME/oh-my-devenv/Brewfile.local"`.
+To install this repo's optional catalog instead, set `DOTFILES_INSTALL_REPO_OPTIONAL_BREWFILE=1` in `bootstrap.env`. After the first bootstrap, sync local Brewfile changes explicitly with `brew bundle install --file="$XDG_CONFIG_HOME/oh-my-devenv/Brewfile.local"`.
 
 </details>
 
