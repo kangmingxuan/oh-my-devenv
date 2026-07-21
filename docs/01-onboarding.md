@@ -34,6 +34,8 @@ Brewfile before running bootstrap and expose it through
 `$XDG_CONFIG_HOME/oh-my-devenv/bootstrap.env` with
 `DOTFILES_EXTRA_BREWFILES`. The default baseline still does not install
 OrbStack or other optional casks.
+If you install it, keep its shell and SSH initialization in the documented
+[local vendor integration overlays](local-overlay-examples/README.md#optional-vendor-integrations).
 
 ---
 

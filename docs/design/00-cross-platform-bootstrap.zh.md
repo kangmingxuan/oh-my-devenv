@@ -397,7 +397,7 @@ dotfiles 需要保证：
 - `chezmoi` 负责配置和编排
 - 独立的 chezmoi 子 source 将配置文件直接管理到绝对路径 `XDG_CONFIG_HOME` 下，默认值为 `$HOME/.config`
 - macOS 用 Homebrew 管系统工具
-- OrbStack 在 macOS 中是可选项；如通过 opt-in Homebrew 路径安装，则由 shell 登录层接管初始化
+- 可选 vendor 应用的 shell 与 SSH 初始化保留在用户自有的本地 overlay 中
 - Ubuntu / Debian / WSL 用 `apt` 管系统工具
 - `mise` 管语言运行时
 - 语言生态工具用各自原生方式安装

@@ -30,6 +30,7 @@ This repository versions the baseline with [Semantic Versioning 2.0](https://sem
 
 ### Changed
 
+- Moved JetBrains Toolbox PATH setup and OrbStack shell/SSH initialization out of managed templates and into documented local overlays.
 - Split persistent shell environment from bootstrap-only settings: shells read `env.sh`, bootstrap reads `bootstrap.env`, and one inventory now defines every supported local overlay and its uninstall protection.
 - Made `XDG_CONFIG_HOME` the single config root for managed mise, Ghostty, and Fontconfig files and for local config overlays. It defaults to `$HOME/.config`; custom absolute roots are applied through a dedicated chezmoi subsource.
 - Upgraded uv from 0.10.9 to 0.11.28, adopting the 0.11 networking and certificate-verification changes while keeping uv pinned to a reproducible patch release.
