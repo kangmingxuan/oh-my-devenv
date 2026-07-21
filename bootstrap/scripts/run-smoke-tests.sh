@@ -166,6 +166,12 @@ require_command sh
 tmp_dir="$(mktemp -d)"
 trap 'rm -rf "$tmp_dir"' EXIT
 
+desktop_platform_supported_data=false
+if [[ "$(chezmoi --source="$repo_root" execute-template \
+  '{{ includeTemplate "desktop-platform-supported" . }}')" == "true" ]]; then
+  desktop_platform_supported_data=true
+fi
+
 # Stand-in chezmoi data for template rendering. Carries two concerns at
 # once:
 #   - `name` / `email` mirror the shape that `.chezmoi.toml.tmpl` produces
@@ -183,7 +189,7 @@ email = "smoke@example.com"
 gitName = "Smoke Tests"
 gitEmail = "smoke@example.com"
 desktopBaseline = true
-desktopPlatformSupported = true
+desktopPlatformSupported = $desktop_platform_supported_data
 EOF
 
 # Literal strings asserted against rendered templates.
@@ -531,18 +537,22 @@ if [[ -n "$xdg_status" ]]; then
   fail_test "nested XDG source is not clean after apply: $xdg_status"
 fi
 
-mkdir -p "$xdg_test_home/oh-my-devenv"
-touch "$xdg_test_home/oh-my-devenv/secrets.sh"
-uninstall_preview="$(HOME="$tmp_dir/uninstall-home" XDG_CONFIG_HOME="$xdg_test_home" \
-  bash "$repo_root/bootstrap/scripts/uninstall.sh")"
-if ! grep -Fq "[would-remove] file: $xdg_test_home/mise/config.toml" <<<"$uninstall_preview"; then
-  fail_test "uninstall preview does not include the custom-XDG mise config"
-fi
-if ! grep -Fq "[would-skip] overlay-protected: $xdg_test_home/oh-my-devenv/secrets.sh" <<<"$uninstall_preview"; then
-  fail_test "uninstall preview does not protect the custom-XDG secrets overlay"
-fi
-if grep -Fq "$tmp_dir/uninstall-home/.config/mise/config.toml" <<<"$uninstall_preview"; then
-  fail_test "uninstall preview fell back to HOME/.config instead of custom XDG_CONFIG_HOME"
+# uninstall.sh already relies on Bash 4 features (mapfile and associative
+# arrays), so execute its dynamic preview where that existing requirement holds.
+if (( BASH_VERSINFO[0] >= 4 )); then
+  mkdir -p "$xdg_test_home/oh-my-devenv"
+  touch "$xdg_test_home/oh-my-devenv/secrets.sh"
+  uninstall_preview="$(HOME="$tmp_dir/uninstall-home" XDG_CONFIG_HOME="$xdg_test_home" \
+    bash "$repo_root/bootstrap/scripts/uninstall.sh")"
+  if ! grep -Fq "[would-remove] file: $xdg_test_home/mise/config.toml" <<<"$uninstall_preview"; then
+    fail_test "uninstall preview does not include the custom-XDG mise config"
+  fi
+  if ! grep -Fq "[would-skip] overlay-protected: $xdg_test_home/oh-my-devenv/secrets.sh" <<<"$uninstall_preview"; then
+    fail_test "uninstall preview does not protect the custom-XDG secrets overlay"
+  fi
+  if grep -Fq "$tmp_dir/uninstall-home/.config/mise/config.toml" <<<"$uninstall_preview"; then
+    fail_test "uninstall preview fell back to HOME/.config instead of custom XDG_CONFIG_HOME"
+  fi
 fi
 
 log_step "🧩" "Running manifest contract checks..."
