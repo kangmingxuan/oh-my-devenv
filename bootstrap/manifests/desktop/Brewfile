@@ -1,3 +1,4 @@
-# Shared desktop terminal and its configured font.
+# Shared macOS desktop workstation bundle.
 cask "ghostty"
 cask "font-maple-mono-nf-cn"
+cask "orbstack"

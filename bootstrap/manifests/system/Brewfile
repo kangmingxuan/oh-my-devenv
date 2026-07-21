@@ -28,7 +28,3 @@ brew "pinentry-mac"
 # Additional Git hosting CLIs can be installed separately on machines that
 # need them.
 brew "gh"
-
-# Optional local apps live in a sibling manifest `Brewfile.optional` and are
-# never installed by `chezmoi apply`. See "Customizing" in README.md for how
-# to opt in on your own machine.

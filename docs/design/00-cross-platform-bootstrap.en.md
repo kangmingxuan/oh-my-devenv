@@ -13,7 +13,7 @@ Requirements:
 - Use `chezmoi` as the single source of truth for dotfiles
 - Automatically install required tools on a new machine
 - Clearly separate responsibilities across system tools, language runtimes, and ecosystem tools
-- Offer one explicit, portable desktop-terminal baseline on supported workstations without affecting server, WSL, or CI installs
+- Offer one explicit, all-or-nothing platform desktop baseline on supported workstations without affecting server, WSL, or CI installs
 
 ## 2. Design Decision
 
@@ -23,7 +23,7 @@ Use the following layered model:
 2. **System package manager**:
    - macOS uses `Homebrew`
    - Ubuntu / Debian / WSL use `apt`
-3. **Desktop asset installer**: when selected, installs Ghostty and Maple Mono NF CN from a separate platform-specific manifest
+3. **Desktop asset installer**: when selected, installs the complete platform bundle from a separate manifest: Ghostty and Maple Mono NF CN everywhere supported, plus OrbStack on macOS
 4. **mise**: manages runtime versions and binary-distributed tools such as Go / Node / Python / `golangci-lint` / `uv`
 5. **Ecosystem tool installers**: manage language-specific tools
    - Go: `go install` (for tools such as `gopls` and `dlv`)
@@ -51,6 +51,7 @@ Use the following layered model:
 - Build tools
 - Common Unix utilities
 - Ghostty on supported desktop platforms
+- OrbStack on the selected macOS desktop baseline
 
 Examples:
 
@@ -183,9 +184,9 @@ Requirements:
 - Use Homebrew for system tools
 - Manage package list with `Brewfile`
 - Install via `brew bundle`
-- When `desktopBaseline` is selected, install Ghostty and Maple Mono NF CN from the separate desktop `Brewfile`
-- Keep OrbStack as an optional local integration in `Brewfile.optional`; it is not installed by the baseline unless the user sets `DOTFILES_INSTALL_REPO_OPTIONAL_BREWFILE=1`
-- Allow first-bootstrap local Brewfile opt-ins through `DOTFILES_EXTRA_BREWFILES`; local changes after bootstrap are synced manually with `brew bundle install --file=...`
+- When `desktopBaseline` is selected, install Ghostty, Maple Mono NF CN, and OrbStack together from the separate desktop `Brewfile`
+- Read the single fixed local package path `$XDG_CONFIG_HOME/oh-my-devenv/Brewfile.local` when it exists during the system-package hook; local changes after bootstrap are synced manually with `brew bundle install --file=...`
+- Install the OrbStack cask without claiming that first-launch setup, Docker runtime state, or licensing is complete
 - Manage shell framework and plugins outside Homebrew via a dedicated shell asset script that uses `git clone`
 
 ### Ubuntu / Debian / WSL
@@ -297,8 +298,8 @@ uv = "0.11.28"
 - Run only on macOS
 - Validate `brew` exists
 - Run `brew bundle` from a source-only `Brewfile` under `bootstrap/manifests/`
-- Keep baseline CLI tools in the system `Brewfile`; keep the selected Ghostty/font pair in the desktop `Brewfile`; unrelated GUI app casks such as OrbStack stay in `Brewfile.optional`
-- After the baseline Brewfile, install repo optional and user-owned Brewfiles only when explicit macOS opt-in environment variables are set
+- Keep baseline CLI tools in the system `Brewfile`; keep the selected Ghostty/font/OrbStack bundle in the desktop `Brewfile`; keep unrelated GUI apps in the user-owned `Brewfile.local`
+- After the system Brewfile, install the fixed local Brewfile only when that file exists
 
 ### `install-maple-mono-font`
 

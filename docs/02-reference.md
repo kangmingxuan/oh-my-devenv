@@ -17,8 +17,8 @@ manifest changes (chezmoi tracks a content hash), so routine re-applies are chea
 |-------|------|--------------|
 | 0 | `run_before_00-banner` | Prints the startup banner. Suppress with `NO_LOGO=1`. |
 | 1 | `run_once_before_10-bootstrap` | One-time setup: backs up any pre-existing managed files and ensures minimum prerequisites. |
-| 2 | `run_onchange_after_20-install-system-packages` | Installs system packages — `apt` on Linux / WSL, Homebrew on macOS. Honors the macOS Brewfile opt-ins below. |
-| 3 | `run_onchange_after_22-install-desktop-assets` | When selected, installs Ghostty and Maple Mono NF CN on supported desktop platforms. |
+| 2 | `run_onchange_after_20-install-system-packages` | Installs system packages — `apt` on Linux / WSL, Homebrew on macOS — plus the fixed local macOS `Brewfile.local` when present. |
+| 3 | `run_onchange_after_22-install-desktop-assets` | When selected, installs the platform desktop bundle: Ghostty and Maple Mono NF CN everywhere supported, plus OrbStack on macOS. |
 | 4 | `run_onchange_after_25-install-shell-assets` | Installs oh-my-zsh and the plugins from the shell manifest. |
 | 5 | `run_onchange_after_30-install-mise` | Installs [mise](https://mise.jdx.dev/) (Homebrew on macOS, installer script on Linux). |
 | 6 | `run_after_35-apply-xdg-config` | Applies the dedicated `xdg_config/` chezmoi source directly under `$XDG_CONFIG_HOME`. |
@@ -41,7 +41,7 @@ is the source of truth for exact packages and pinned versions.
 |-------|--------------|----------|----------|
 | System packages | `apt` (Linux / WSL) | [`bootstrap/manifests/system/apt-packages.txt`](../bootstrap/manifests/system/apt-packages.txt) | git, curl, wget, zsh, tmux, jq, ripgrep, fzf, direnv, fd-find, bat, tree, zip, unzip, shellcheck, shfmt, build-essential, pkg-config |
 | System packages | Homebrew (macOS) | [`bootstrap/manifests/system/Brewfile`](../bootstrap/manifests/system/Brewfile) | the same CLI set plus yq, gnupg, pinentry-mac, and gh |
-| Desktop assets | Homebrew (macOS) | [`bootstrap/manifests/desktop/Brewfile`](../bootstrap/manifests/desktop/Brewfile) | Ghostty and Maple Mono NF CN |
+| Desktop assets | Homebrew (macOS) | [`bootstrap/manifests/desktop/Brewfile`](../bootstrap/manifests/desktop/Brewfile) | Ghostty, Maple Mono NF CN, and OrbStack |
 | Desktop terminal | `apt` + managed config (Ubuntu 26.04+) | [`bootstrap/manifests/desktop/apt-packages.txt`](../bootstrap/manifests/desktop/apt-packages.txt) | Ghostty, Fontconfig support, and a managed `monospace` compatibility rule |
 | Desktop font | verified archive (Ubuntu 26.04+) | [`bootstrap/manifests/desktop/maple-mono-nf-cn.env`](../bootstrap/manifests/desktop/maple-mono-nf-cn.env) | pinned Maple Mono NF CN release installed under the user data directory |
 | Runtimes and binary tools | [mise](https://mise.jdx.dev/) | [`xdg_config/mise/config.toml.tmpl`](../xdg_config/mise/config.toml.tmpl) | go, node, python, golangci-lint, uv (versions pinned here) |
@@ -50,11 +50,19 @@ is the source of truth for exact packages and pinned versions.
 | Shell assets | git clone | [`bootstrap/manifests/shell/oh-my-zsh-plugins.txt`](../bootstrap/manifests/shell/oh-my-zsh-plugins.txt) | oh-my-zsh + zsh-autosuggestions, zsh-completions, zsh-syntax-highlighting |
 
 The desktop layer is controlled by the persisted `desktopBaseline` machine
-choice. It is supported on macOS and non-WSL Ubuntu 26.04+; other platforms
-render no Ghostty config and install no desktop assets. OrbStack remains outside
-that shared choice: it lives in
-[`bootstrap/manifests/system/Brewfile.optional`](../bootstrap/manifests/system/Brewfile.optional)
-and only installs when you opt in (see the Brewfile flags below).
+choice. It is an all-or-nothing, platform-specific bundle supported on macOS
+and non-WSL Ubuntu 26.04+; other platforms render no Ghostty config and install
+no desktop assets. The macOS bundle includes Ghostty, Maple Mono NF CN, and
+OrbStack. Installing the OrbStack cask does not complete its first-launch setup
+or licensing; those remain user actions. Using OrbStack for freelance,
+business, or professional work requires a paid
+[OrbStack license](https://docs.orbstack.dev/licensing).
+
+Machine-local macOS packages outside that bundle use one extension point:
+`$XDG_CONFIG_HOME/oh-my-devenv/Brewfile.local`. The system-package hook installs
+the file when it exists. Its contents do not participate in the hook's
+`run_onchange` hash, so later edits require an explicit
+`brew bundle install --file="$XDG_CONFIG_HOME/oh-my-devenv/Brewfile.local"`.
 
 On supported Ubuntu machines,
 `$XDG_CONFIG_HOME/fontconfig/conf.d/99-oh-my-devenv-maple-mono-nf-cn.conf` makes the
@@ -148,13 +156,6 @@ validate a single override.
 | Variable | Default | Effect |
 |----------|---------|--------|
 | `DOTFILES_MAPLE_MONO_URL` | pinned upstream release URL | Ubuntu-only alternate URL for the exact Maple Mono archive named in the manifest. The fixed SHA-256 digest still has to match. |
-
-### macOS package opt-ins
-
-| Variable | Default | Effect |
-|----------|---------|--------|
-| `DOTFILES_INSTALL_REPO_OPTIONAL_BREWFILE=1` | off | Also install `Brewfile.optional` (OrbStack) during the first bootstrap. |
-| `DOTFILES_EXTRA_BREWFILES` | unset | Colon-separated **absolute** paths to extra Brewfiles applied on first bootstrap. Missing files fail the run. |
 
 ### Tool installation
 

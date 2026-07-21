@@ -376,17 +376,11 @@ syntax_check bash "$tmp_dir/run_onchange_after_20-install-system-packages.sh"
 shellcheck_rendered_bash "$tmp_dir/run_onchange_after_20-install-system-packages.sh"
 assert_file_contains "$tmp_dir/run_onchange_after_20-install-system-packages.sh" "install_error_trap"
 if grep -Fq "Installing system packages via Homebrew" "$tmp_dir/run_onchange_after_20-install-system-packages.sh"; then
-  assert_file_contains "$tmp_dir/run_onchange_after_20-install-system-packages.sh" "Brewfile.optional hash:"
-  assert_file_contains "$tmp_dir/run_onchange_after_20-install-system-packages.sh" "DOTFILES_INSTALL_REPO_OPTIONAL_BREWFILE"
-  assert_file_contains "$tmp_dir/run_onchange_after_20-install-system-packages.sh" "DOTFILES_EXTRA_BREWFILES"
-  assert_file_contains "$tmp_dir/run_onchange_after_20-install-system-packages.sh" "entries must be absolute paths"
-  assert_file_contains "$tmp_dir/run_onchange_after_20-install-system-packages.sh" "extra Homebrew Brewfile not found"
   assert_file_contains "$tmp_dir/run_onchange_after_20-install-system-packages.sh" "\"\$manifests_dir/system/Brewfile\""
+  assert_file_contains "$tmp_dir/run_onchange_after_20-install-system-packages.sh" "local_brewfile=\"\$XDG_CONFIG_HOME/oh-my-devenv/Brewfile.local\""
+  assert_file_contains "$tmp_dir/run_onchange_after_20-install-system-packages.sh" "[[ -f \"\$local_brewfile\" ]]"
 else
   assert_file_contains "$tmp_dir/run_onchange_after_20-install-system-packages.sh" "Installing system packages via apt"
-  assert_file_not_contains "$tmp_dir/run_onchange_after_20-install-system-packages.sh" "Brewfile.optional"
-  assert_file_not_contains "$tmp_dir/run_onchange_after_20-install-system-packages.sh" "DOTFILES_INSTALL_REPO_OPTIONAL_BREWFILE"
-  assert_file_not_contains "$tmp_dir/run_onchange_after_20-install-system-packages.sh" "DOTFILES_EXTRA_BREWFILES"
 fi
 
 render_template .chezmoiscripts/run_onchange_after_22-install-desktop-assets.sh.tmpl "$tmp_dir/run_onchange_after_22-install-desktop-assets.sh"
@@ -686,6 +680,9 @@ if (( BASH_VERSINFO[0] >= 4 )); then
 fi
 
 log_step "🧩" "Running manifest contract checks..."
+assert_file_contains "$repo_root/bootstrap/manifests/desktop/Brewfile" 'cask "ghostty"'
+assert_file_contains "$repo_root/bootstrap/manifests/desktop/Brewfile" 'cask "font-maple-mono-nf-cn"'
+assert_file_contains "$repo_root/bootstrap/manifests/desktop/Brewfile" 'cask "orbstack"'
 assert_desktop_platform_support '{"chezmoi":{"os":"darwin","osRelease":null,"kernel":null}}' true
 assert_desktop_platform_support '{"chezmoi":{"os":"linux","osRelease":{"id":"ubuntu","versionID":"26.04"},"kernel":{"osrelease":"linux"}}}' true
 assert_desktop_platform_support '{"chezmoi":{"os":"linux","osRelease":{"id":"ubuntu","versionID":"24.04"},"kernel":{"osrelease":"linux"}}}' ''
@@ -887,6 +884,7 @@ assert_toml_section_contains "$tmp_chezmoi_toml" "diff" 'exclude = ["scripts"]'
 assert_file_contains "$tmp_chezmoi_toml" 'name = "Smoke Tests"'
 assert_file_contains "$tmp_chezmoi_toml" 'email = "smoke@example.com"'
 assert_file_contains "$tmp_chezmoi_toml" 'desktopBaseline = true'
+assert_file_contains "$repo_root/.chezmoi.toml.tmpl" "Install macOS desktop baseline (Ghostty + Maple Mono NF CN + OrbStack)"
 assert_file_contains "$repo_root/xdg_config/mise/config.toml.tmpl" "[settings]"
 assert_file_contains "$repo_root/xdg_config/mise/config.toml.tmpl" "github_attestations = false"
 assert_file_contains "$repo_root/xdg_config/mise/config.toml.tmpl" "[settings.aqua]"

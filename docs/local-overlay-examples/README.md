@@ -64,7 +64,7 @@ local env files must not set or change `XDG_CONFIG_HOME`.
 8. Keep responsibilities clean:
    - `$XDG_CONFIG_HOME/oh-my-devenv/env.sh` is for persistent, non-secret exports that Bash and Zsh should load.
    - `$XDG_CONFIG_HOME/oh-my-devenv/bootstrap.env` is for non-secret settings consumed only by bootstrap tooling.
-   - `$XDG_CONFIG_HOME/oh-my-devenv/Brewfile.local` is for macOS-only Homebrew apps and CLIs that you explicitly opt in to during first bootstrap.
+   - `$XDG_CONFIG_HOME/oh-my-devenv/Brewfile.local` is the single fixed path for macOS-only Homebrew apps and CLIs outside the shared desktop baseline.
    - `$XDG_CONFIG_HOME/oh-my-devenv/secrets.sh` is for shell-compatible secrets that interactive Bash and Zsh read automatically; bootstrap and non-interactive shell commands never read it automatically.
    - `$XDG_CONFIG_HOME/oh-my-devenv/zshrc.zsh` and `$XDG_CONFIG_HOME/oh-my-devenv/bashrc.bash` are late interactive-only overlays for aliases, functions, and prompt tweaks.
    - The managed `~/.gitconfig` keeps your default Git identity; `~/.gitconfig.local` is for user-owned Git preferences and guardrails.
@@ -74,26 +74,21 @@ local env files must not set or change `XDG_CONFIG_HOME`.
 
 ## macOS Local Homebrew Apps
 
-The selected desktop baseline installs only Ghostty and its configured font.
-Other macOS GUI apps remain local opt-ins. You can add them before the first
-`chezmoi init --apply` by creating a local Brewfile and pointing bootstrap at it
-from `bootstrap.env`:
+The selected macOS desktop baseline installs Ghostty, its configured font, and
+OrbStack as one bundle. Other macOS GUI apps remain local opt-ins. You can add
+them before the first `chezmoi init --apply` by creating the fixed local
+Brewfile path:
 
 ```bash
 export XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
 mkdir -p "$XDG_CONFIG_HOME/oh-my-devenv"
 cp docs/local-overlay-examples/Brewfile.local.example \
   "$XDG_CONFIG_HOME/oh-my-devenv/Brewfile.local"
-printf '%s\n' \
-  'export DOTFILES_EXTRA_BREWFILES="$XDG_CONFIG_HOME/oh-my-devenv/Brewfile.local"' \
-  >> "$XDG_CONFIG_HOME/oh-my-devenv/bootstrap.env"
 ```
 
-To install the repo-maintained optional catalog instead, set
-`DOTFILES_INSTALL_REPO_OPTIONAL_BREWFILE=1` in the same `bootstrap.env`. These opt-ins
-are read by the first system-package hook. Paths in `DOTFILES_EXTRA_BREWFILES`
-must expand to absolute paths, and missing files fail bootstrap instead of being
-silently skipped. If you edit `Brewfile.local` later, sync it explicitly:
+The system-package hook reads this file when it exists. The file is deliberately
+not part of the hook's `run_onchange` hash, so if you edit it later, sync it
+explicitly:
 
 ```bash
 brew bundle install --file="$XDG_CONFIG_HOME/oh-my-devenv/Brewfile.local"
@@ -101,10 +96,10 @@ brew bundle install --file="$XDG_CONFIG_HOME/oh-my-devenv/Brewfile.local"
 
 ## Optional Vendor Integrations
 
-Vendor-specific shell and SSH integration stays in local overlays. Existing
-JetBrains Toolbox or OrbStack users should create these overlays before their
-next `chezmoi apply`; the shared templates do not detect or initialize either
-application.
+Vendor-specific shell and SSH integration stays in local overlays. JetBrains
+Toolbox users and macOS desktop-baseline users who want OrbStack's shell or SSH
+integration should create these overlays; the shared templates do not detect or
+initialize either application.
 
 To expose JetBrains Toolbox launchers, add the path for your platform to
 `$XDG_CONFIG_HOME/oh-my-devenv/env.sh`:

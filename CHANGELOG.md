@@ -20,16 +20,17 @@ This repository versions the baseline with [Semantic Versioning 2.0](https://sem
 
 ### Added
 
-- Opt-in shared desktop baseline for macOS and non-WSL Ubuntu 26.04+: Ghostty, Maple Mono NF CN, managed Ghostty defaults, a Linux Fontconfig compatibility rule, and a machine-local override slot.
+- Opt-in, all-or-nothing desktop baseline for macOS and non-WSL Ubuntu 26.04+: Ghostty, Maple Mono NF CN, managed Ghostty defaults, a Linux Fontconfig compatibility rule, and OrbStack on macOS.
 - `smoke-tests-macos` CI job that runs the smoke suite on `macos-latest`, so the `darwin` template arms are rendered and shell-checked instead of going untested.
 - `apply-linux` CI job that runs a real `chezmoi init --apply` end to end and asserts the final environment check passes, covering installer semantics the render-only smoke suite cannot.
 - Dependabot configuration to keep GitHub Actions versions current.
-- macOS Homebrew opt-in extension point for first-bootstrap optional packages, using `DOTFILES_INSTALL_REPO_OPTIONAL_BREWFILE` and `DOTFILES_EXTRA_BREWFILES`.
+- Fixed-path `$XDG_CONFIG_HOME/oh-my-devenv/Brewfile.local` extension point for machine-local macOS packages during first bootstrap, with explicit manual synchronization for later edits.
 - Bilingual landing page: a Chinese `README.zh.md` translation of the root README, with a language switcher linking it and the English `README.md` together.
 - `docs/02-reference.md`: a single lookup page for the bootstrap hooks, what gets installed, day-to-day commands, and every environment variable / flag the baseline understands.
 
 ### Changed
 
+- Expanded the selected macOS desktop bundle to include OrbStack. Existing macOS machines with `desktopBaseline = true` install it the next time the desktop manifest hook runs.
 - Moved JetBrains Toolbox PATH setup and OrbStack shell/SSH initialization out of managed templates and into documented local overlays.
 - Split persistent shell environment from bootstrap-only settings: shells read `env.sh`, bootstrap reads `bootstrap.env`, and one inventory now defines every supported local overlay and its uninstall protection.
 - Made `XDG_CONFIG_HOME` the single config root for managed mise, Ghostty, and Fontconfig files and for local config overlays. It defaults to `$HOME/.config`; custom absolute roots are applied through a dedicated chezmoi subsource.
@@ -40,5 +41,6 @@ This repository versions the baseline with [Semantic Versioning 2.0](https://sem
 
 ### Removed
 
+- The overlapping repo-owned optional Homebrew catalog and environment-variable selectors.
 - The unused `usage` CLI from the shared baseline. Existing machine-local installs are left untouched and can be removed explicitly with `mise uninstall usage@2.18.2`.
 - The unused `isWsl` chezmoi data flag and the `DOTFILES_FORCE_WSL` escape hatch, plus the redundant `smoke-tests-wsl-shaped` CI job. WSL continues to work through the standard Linux path.

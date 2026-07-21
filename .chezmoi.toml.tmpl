@@ -10,7 +10,11 @@
     (eq .chezmoi.os "darwin")
     (and $isSupportedDesktop $hasGraphicalSession)
 -}}
-{{- $desktopBaseline := promptBoolOnce . "desktopBaseline" "Install desktop baseline (Ghostty + Maple Mono NF CN)" $desktopBaselineDefault -}}
+{{- $desktopBaselinePrompt := "Install desktop baseline (Ghostty + Maple Mono NF CN)" -}}
+{{- if eq .chezmoi.os "darwin" -}}
+{{- $desktopBaselinePrompt = "Install macOS desktop baseline (Ghostty + Maple Mono NF CN + OrbStack)" -}}
+{{- end -}}
+{{- $desktopBaseline := promptBoolOnce . "desktopBaseline" $desktopBaselinePrompt $desktopBaselineDefault -}}
 
 [status]
     # Keep routine run_* hooks out of `chezmoi status` so the output
