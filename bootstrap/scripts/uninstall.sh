@@ -137,22 +137,19 @@ add_candidate() {
   seen["$p"]=1
 }
 
-# Always point chezmoi at the repo that contains this script. In CI we run
-# `chezmoi init --apply --source="$CI_PROJECT_DIR"` once, but later bare
-# `chezmoi managed` calls still fall back to the default `~/.local/share/chezmoi`
-# source dir. On a fresh runner that default tree is empty, so managed_paths
-# becomes an empty set even though the apply just succeeded.
-#
 # Output format also varies by environment: some builds emit newline-delimited
 # paths, others emit JSON when stdout is not a TTY. Capture raw output, then
 # decode JSON when needed or split newline records otherwise.
-read_managed_paths() {
+read_managed_paths_from() {
+  local label="$1"
   local cap err first
+
+  shift
 
   cap="$(mktemp)"
   err="$(mktemp)"
-  if ! chezmoi --source="$repo_root" managed --include=files,symlinks --path-style=absolute >"$cap" 2>"$err"; then
-    printf 'ERROR: chezmoi managed failed:\n' >&2
+  if ! "$@" >"$cap" 2>"$err"; then
+    printf 'ERROR: %s failed:\n' "$label" >&2
     cat "$err" >&2
     rm -f "$cap" "$err"
     exit 1
@@ -189,7 +186,7 @@ for item in data:
       }
     else
       rm -f "$cap"
-      printf 'ERROR: chezmoi managed emitted JSON but python3 is not on PATH.\n' >&2
+      printf 'ERROR: %s emitted JSON but python3 is not on PATH.\n' "$label" >&2
       exit 1
     fi
   else
@@ -198,8 +195,20 @@ for item in data:
   rm -f "$cap"
 }
 
+read_managed_paths() {
+  # Always point chezmoi at the repo that contains this script. A bare command
+  # can resolve to an empty default source on CI or a source checkout.
+  read_managed_paths_from \
+    "chezmoi managed" \
+    chezmoi --source="$repo_root" managed \
+    --include=files,symlinks \
+    --path-style=absolute
+}
+
 read_xdg_managed_paths() {
-  bash "$script_dir/xdg-config.sh" managed
+  read_managed_paths_from \
+    "XDG chezmoi managed" \
+    bash "$script_dir/xdg-config.sh" managed
 }
 
 # --- Build candidate list -------------------------------------------------

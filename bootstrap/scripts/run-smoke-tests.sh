@@ -267,10 +267,13 @@ assert_file_contains "$tmp_dir/relative-xdg.err" "ignoring relative XDG_CONFIG_H
 
 mkdir -p "$tmp_dir/env-must-not-move-xdg/oh-my-devenv"
 printf '%s\n' 'unset XDG_CONFIG_HOME' >"$tmp_dir/env-must-not-move-xdg/oh-my-devenv/env.sh"
-if XDG_CONFIG_HOME="$tmp_dir/env-must-not-move-xdg" \
-  bash -c 'source "$1"; oh_my_devenv_setup_xdg_config_home; oh_my_devenv_source_shared_env' \
-  _ "$xdg_resolver" 2>"$tmp_dir/env-moved-xdg.err"; then
-  fail_test "env.sh must not be able to change XDG_CONFIG_HOME"
+# shellcheck disable=SC2016
+source_moving_env_command='source "$1"; oh_my_devenv_setup_xdg_config_home; if oh_my_devenv_source_shared_env; then exit 1; fi; printf "%s\n" "$XDG_CONFIG_HOME"'
+restored_xdg="$(XDG_CONFIG_HOME="$tmp_dir/env-must-not-move-xdg" \
+  bash -c "$source_moving_env_command" \
+  _ "$xdg_resolver" 2>"$tmp_dir/env-moved-xdg.err")"
+if [[ "$restored_xdg" != "$tmp_dir/env-must-not-move-xdg" ]]; then
+  fail_test "env.sh changed XDG_CONFIG_HOME to '$restored_xdg' despite the guard"
 fi
 assert_file_contains "$tmp_dir/env-moved-xdg.err" "must not change XDG_CONFIG_HOME"
 

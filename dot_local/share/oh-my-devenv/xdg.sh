@@ -33,6 +33,8 @@ oh_my_devenv_source_shared_env() {
   fi
 
   if [[ "${XDG_CONFIG_HOME:-}" != "$expected_xdg_config_home" ]]; then
+    XDG_CONFIG_HOME="$expected_xdg_config_home"
+    export XDG_CONFIG_HOME
     printf 'ERROR: %s must not change XDG_CONFIG_HOME; export it before starting the shell or chezmoi\n' \
       "$shared_env" >&2
     return 1
