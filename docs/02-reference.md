@@ -17,7 +17,7 @@ manifest changes (chezmoi tracks a content hash), so routine re-applies are chea
 |-------|------|--------------|
 | 0 | `run_before_00-banner` | Prints the startup banner. Suppress with `NO_LOGO=1`. |
 | 1 | `run_once_before_10-bootstrap` | One-time setup: backs up any pre-existing managed files and ensures minimum prerequisites. |
-| 2 | `run_onchange_after_20-install-system-packages` | Installs system packages — `apt` on Linux / WSL, Homebrew on macOS — plus the fixed local macOS `Brewfile.local` when present. |
+| 2 | `run_onchange_after_20-install-system-packages` | Installs shared system packages — `apt` on Linux / WSL and Homebrew on macOS. |
 | 3 | `run_onchange_after_22-install-desktop-assets` | When selected, installs the platform desktop bundle: Ghostty and Maple Mono NF CN everywhere supported, plus OrbStack on macOS. |
 | 4 | `run_onchange_after_25-install-shell-assets` | Installs oh-my-zsh and the plugins from the shell manifest. |
 | 5 | `run_onchange_after_30-install-mise` | Installs [mise](https://mise.jdx.dev/) (Homebrew on macOS, installer script on Linux). |
@@ -58,12 +58,6 @@ or licensing; those remain user actions. Using OrbStack for freelance,
 business, or professional work requires a paid
 [OrbStack license](https://docs.orbstack.dev/licensing).
 
-Machine-local macOS packages outside that bundle use one extension point:
-`$XDG_CONFIG_HOME/oh-my-devenv/Brewfile.local`. The system-package hook installs
-the file when it exists. Its contents do not participate in the hook's
-`run_onchange` hash, so later edits require an explicit
-`brew bundle install --file="$XDG_CONFIG_HOME/oh-my-devenv/Brewfile.local"`.
-
 On supported Ubuntu machines,
 `$XDG_CONFIG_HOME/fontconfig/conf.d/99-oh-my-devenv-maple-mono-nf-cn.conf` makes the
 generic Fontconfig `monospace` family resolve to Maple Mono NF CN before distro
@@ -101,9 +95,6 @@ chezmoi source-path
 mise current
 mise list
 
-# macOS: sync a local Brewfile after the first bootstrap
-brew bundle install --file="$XDG_CONFIG_HOME/oh-my-devenv/Brewfile.local"
-
 # Preview an uninstall of only what this baseline applied (dry-run; add --confirm to act)
 bash bootstrap/scripts/uninstall.sh
 ```
@@ -121,7 +112,7 @@ For a one-off setting not persisted in `bootstrap.env`, export it before
 
 | Variable | Default | Effect |
 |----------|---------|--------|
-| `XDG_CONFIG_HOME` | `$HOME/.config` | Absolute destination for managed mise, Ghostty, and Fontconfig files plus the `oh-my-devenv`, Git hook, and Ghostty overlays. Export a custom value before starting the shell or running `chezmoi`; local env files must not change it. Relative values are ignored with a warning. |
+| `XDG_CONFIG_HOME` | `$HOME/.config` | Absolute destination for managed mise, Ghostty, and Fontconfig files plus the `oh-my-devenv` and Ghostty overlays. Export a custom value before starting the shell or running `chezmoi`; local env files must not change it. Relative values are ignored with a warning. |
 
 ### Output
 
@@ -188,7 +179,8 @@ common slots:
 - `$XDG_CONFIG_HOME/oh-my-devenv/env.sh` — persistent non-secret exports read by Bash and Zsh.
 - `$XDG_CONFIG_HOME/oh-my-devenv/bootstrap.env` — non-secret settings read only by bootstrap scripts.
 - `$XDG_CONFIG_HOME/oh-my-devenv/secrets.sh` — secrets read by interactive shells only.
-- `~/.gitconfig.local` — user-owned Git preferences on top of the managed identity.
+- `$XDG_CONFIG_HOME/oh-my-devenv/git/config` — user-owned Git preferences on top of the managed identity.
+- `$XDG_CONFIG_HOME/oh-my-devenv/git/hooks/*` — optional Git 2.54+ configured hooks that coexist with repository-local `.git/hooks/*`.
 - `~/.ssh/config.d/*.conf` — extra SSH hosts.
 - `$XDG_CONFIG_HOME/ghostty/config.local.ghostty` — machine-only Ghostty overrides loaded after the managed baseline.
 

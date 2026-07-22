@@ -22,7 +22,7 @@ oh-my-devenv is a shared, reproducible development-environment baseline. Point `
 - **Modern CLI toolkit** — ripgrep, fd, bat, fzf, jq, direnv, tmux, shellcheck, shfmt, and more.
 - **Opt-in desktop baseline** — one all-or-nothing platform bundle: Ghostty and Maple Mono NF CN on supported workstations, OrbStack on macOS, and the required Linux Fontconfig alias on Ubuntu 26.04+.
 - **Safe first run** — backs up any existing managed dotfiles and prompts once for your Git identity and desktop-baseline choice.
-- **Local overlays, not forks** — keep machine, team, and secret settings under `$XDG_CONFIG_HOME/oh-my-devenv/` and `*.local` files; never edit the shared baseline. The default config root is `~/.config`.
+- **Local overlays, not forks** — keep machine, team, and secret settings in the documented user-owned config slots; never edit the shared baseline. The project-owned slots converge under `$XDG_CONFIG_HOME/oh-my-devenv/`, whose default root is `~/.config`.
 - **Team-ready** — one reproducible baseline the whole team can track, with machine- and team-specific values kept in local overlays.
 
 ## How it works
@@ -85,7 +85,7 @@ command -v git curl chezmoi
 Use the repository URL below.
 
 The baseline honors `XDG_CONFIG_HOME` for managed mise, Ghostty, and Fontconfig
-files plus the `oh-my-devenv`, Git hook, and Ghostty overlays. It defaults to
+files plus the `oh-my-devenv` and Ghostty overlays. It defaults to
 `$HOME/.config`. To use a different config root, export an absolute path before
 running `chezmoi`; local env files must not set or change it:
 
@@ -106,23 +106,6 @@ chezmoi init --apply https://github.com/kangmingxuan/oh-my-devenv.git
 ```
 
 The first apply backs up any pre-existing managed files, prompts once for your Git author name, email, and desktop-baseline choice, deploys the dotfiles, runs the ordered bootstrap hooks, and ends with an environment check. The desktop choice defaults to yes on macOS and graphical Ubuntu 26.04+ hosts, and to no on non-graphical or unsupported Linux hosts and WSL; the repository's apply-CI fixture disables it explicitly. On macOS, accepting the choice installs Ghostty, Maple Mono NF CN, and OrbStack together. Homebrew installs the OrbStack application, but you must launch it once to finish setup; using OrbStack for freelance, business, or professional work requires a paid [OrbStack license](https://docs.orbstack.dev/licensing). On success you will see **`All checks passed.`** and a list of core tool versions.
-
-<details>
-<summary><b>macOS:</b> add machine-local Homebrew packages before the first apply</summary>
-
-OrbStack belongs to the selected macOS desktop baseline. To include other machine-local Homebrew packages during the first apply, create the fixed local Brewfile before bootstrap runs:
-
-```bash
-export XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
-mkdir -p "$XDG_CONFIG_HOME/oh-my-devenv"
-cat > "$XDG_CONFIG_HOME/oh-my-devenv/Brewfile.local" <<'EOF'
-cask "visual-studio-code"
-EOF
-```
-
-The system-package hook installs this file when it exists. After the first bootstrap, sync local Brewfile changes explicitly with `brew bundle install --file="$XDG_CONFIG_HOME/oh-my-devenv/Brewfile.local"`.
-
-</details>
 
 ### Before you run it
 

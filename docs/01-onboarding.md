@@ -25,7 +25,7 @@ The exact prerequisite install commands and real bootstrap URLs live in the [Qui
 
 You still need **SSH or HTTPS access** to the Git host that holds this repository before the bootstrap can work. You do **not** need Go, Node, or Python installed beforehand; the bootstrap scripts install them.
 
-The shared baseline does not hard-code host-specific Git rewrites. If your environment needs private-host rewrites, SSH aliases, or host-specific guardrails, keep them in local overlays such as `~/.gitconfig.local` or the examples under `docs/local-overlay-examples/`.
+The shared baseline does not hard-code host-specific Git rewrites. If your environment needs private-host rewrites, SSH aliases, or host-specific guardrails, keep them in the XDG-based overlays under `$XDG_CONFIG_HOME/oh-my-devenv/` or the other tool-owned slots documented under `docs/local-overlay-examples/`.
 
 The desktop choice is one platform-specific bundle rather than a set of
 component switches. On macOS it installs Ghostty, Maple Mono NF CN, and
@@ -36,12 +36,6 @@ professional work requires a paid [OrbStack license](https://docs.orbstack.dev/l
 OrbStack shell and SSH
 initialization remains in the documented
 [local vendor integration overlays](local-overlay-examples/README.md#optional-vendor-integrations).
-
-Other macOS Homebrew apps remain machine-local. To install them during the
-first `chezmoi init --apply`, create
-`$XDG_CONFIG_HOME/oh-my-devenv/Brewfile.local` before bootstrap runs. The
-system-package hook reads that one fixed path when present; later edits are
-synced explicitly with `brew bundle install --file=...`.
 
 ---
 
@@ -84,7 +78,7 @@ Bootstrap is split into ordered hooks under `.chezmoiscripts/`:
 
 0. **`run_before_00-*`** — prints the startup banner (hide it with `NO_LOGO=1`).
 1. **`run_once_before_10-*`** — one-time prerequisites and, if needed, **backup** of any pre-existing managed files before they are overwritten.
-2. **`run_onchange_after_20-*`** — system packages (`apt` on Linux / WSL, Homebrew on macOS), plus the fixed machine-local macOS `Brewfile.local` when it exists.
+2. **`run_onchange_after_20-*`** — shared system packages (`apt` on Linux / WSL, Homebrew on macOS).
 3. **`run_onchange_after_22-*`** — when selected, installs the platform desktop bundle: Ghostty and Maple Mono NF CN everywhere supported, plus OrbStack on macOS.
 4. **`run_onchange_after_25-*`** — shell assets (oh-my-zsh and plugins from the manifest).
 5. **`run_onchange_after_30-*`** — install mise itself.

@@ -1,10 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Copy this file to $XDG_CONFIG_HOME/git/hooks/pre-push and make it executable:
-#   install -d "$XDG_CONFIG_HOME/git/hooks"
-#   cp docs/local-overlay-examples/git-pre-push.example "$XDG_CONFIG_HOME/git/hooks/pre-push"
-#   chmod 755 "$XDG_CONFIG_HOME/git/hooks/pre-push"
+# Copy this file to $XDG_CONFIG_HOME/oh-my-devenv/git/hooks/pre-push and make it executable:
+#   install -d "$XDG_CONFIG_HOME/oh-my-devenv/git/hooks"
+#   cp docs/local-overlay-examples/git-pre-push.example "$XDG_CONFIG_HOME/oh-my-devenv/git/hooks/pre-push"
+#   chmod 755 "$XDG_CONFIG_HOME/oh-my-devenv/git/hooks/pre-push"
+#
+# Register it through hook.oh-my-devenv-identity-guard in the local Git config.
+# Do not set core.hooksPath: configured hooks in Git 2.54+ preserve and run the
+# repository's own .git/hooks/pre-push after this guardrail.
 #
 # Replace the placeholders below before you rely on this guardrail.
 # Leaving them untouched turns the hook into a no-op.

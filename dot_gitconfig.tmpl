@@ -1,6 +1,10 @@
+{{- $xdgConfigHome := env "XDG_CONFIG_HOME" -}}
+{{- if not (hasPrefix "/" $xdgConfigHome) -}}
+{{-   $xdgConfigHome = joinPath .chezmoi.homeDir ".config" -}}
+{{- end -}}
 [user]
     name = {{ .name | quote }}
     email = {{ .email | quote }}
 
 [include]
-    path = ~/.gitconfig.local
+    path = {{ joinPath $xdgConfigHome "oh-my-devenv/git/config" | quote }}

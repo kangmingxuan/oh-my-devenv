@@ -14,12 +14,6 @@ install_error_trap "$0"
 # Brewfile hash: {{ include "bootstrap/manifests/system/Brewfile" | sha256sum }}
 log_step "🍺" "Installing system packages via Homebrew..."
 bash "$scripts_dir/install-brew-packages.sh" "$manifests_dir/system/Brewfile"
-
-local_brewfile="$XDG_CONFIG_HOME/oh-my-devenv/Brewfile.local"
-if [[ -f "$local_brewfile" ]]; then
-  log_step "🍺" "Installing local Homebrew packages from $local_brewfile..."
-  bash "$scripts_dir/install-brew-packages.sh" "$local_brewfile"
-fi
 {{- else if eq .chezmoi.os "linux" -}}
 # apt-packages.txt hash: {{ include "bootstrap/manifests/system/apt-packages.txt" | sha256sum }}
 log_step "📦" "Installing system packages via apt..."

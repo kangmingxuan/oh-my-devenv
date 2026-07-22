@@ -70,7 +70,7 @@ Milestones cut annotated git tags (`v0.<M>.0`). After a milestone's final MR mer
 Third-party dependencies pulled in by this repository fall into these categories:
 
 - **System packages** (`apt`, Homebrew): bump the manifest files (`bootstrap/manifests/system/apt-packages.txt`, `bootstrap/manifests/system/Brewfile`). Prefer stable distro names over version pins.
-- **Desktop assets**: keep the explicit, all-or-nothing platform bundle in `bootstrap/manifests/desktop/`. The macOS Brewfile owns Ghostty, its font cask, and OrbStack; the Ubuntu 26.04+ apt manifest owns Ghostty; `maple-mono-nf-cn.env` pins the Linux font archive URL and SHA-256 digest; and the managed Fontconfig fragment keeps Linux font selection aligned with Ghostty's configured family. Other GUI apps and personal CLIs belong in the fixed user-owned `$XDG_CONFIG_HOME/oh-my-devenv/Brewfile.local` path.
+- **Desktop assets**: keep the explicit, all-or-nothing platform bundle in `bootstrap/manifests/desktop/`. The macOS Brewfile owns Ghostty, its font cask, and OrbStack; the Ubuntu 26.04+ apt manifest owns Ghostty; `maple-mono-nf-cn.env` pins the Linux font archive URL and SHA-256 digest; and the managed Fontconfig fragment keeps Linux font selection aligned with Ghostty's configured family. Other GUI apps and personal CLIs stay outside this repository's bootstrap contract.
 - **Shell assets** (oh-my-zsh and plugins): managed by explicit Git clone/update. The upstream repository is captured in `bootstrap/manifests/shell/oh-my-zsh-plugins.txt`. That manifest uses a strict two-field, order-sensitive contract shared by four readers (`dot_zshrc.tmpl`, `install-oh-my-zsh-assets.sh`, the `60-check` hook, and `run-smoke-tests.sh`); adding a field or special case means updating all four.
 - **Runtimes** (mise): pinned to complete versions in `xdg_config/mise/config.toml.tmpl`. Bump intentionally.
 - **Binary-distributed tools** (for example `golangci-lint` and `uv`): pinned via mise alongside the runtimes.
@@ -83,12 +83,6 @@ breaking, or independently risky upgrades isolated, and explain the grouping
 and validation in the merge request description.
 
 If you touch the install flow itself, keep the change scoped and review the relevant entrypoint under `bootstrap/scripts/install-*.sh` before merging.
-
-The macOS system-package hook reads
-`$XDG_CONFIG_HOME/oh-my-devenv/Brewfile.local` when it runs, but the local file
-does not participate in the hook's `run_onchange` hash. Treat that as a
-first-bootstrap convenience rather than an always-on sync loop, and document
-manual `brew bundle install --file=...` for later local changes.
 
 ## Removing Things
 
@@ -171,7 +165,7 @@ Mirror mode currently covers the consumers wired through `dotfiles_apply_mirror_
 ## Security
 
 - `gitleaks` scans staged diffs on every commit via `pre-commit`. Bootstrap smoke tests run in CI only (see CI section below), not as a pre-commit hook.
-- Secrets and credentials never live in this repository. They stay in local overlays or user-owned stores (`$XDG_CONFIG_HOME/oh-my-devenv/secrets.sh`, `~/.gitconfig.local`, `$XDG_CONFIG_HOME/git/hooks/*`, `~/.ssh/config.d/*.conf`, `uv auth`, `~/.npmrc`).
+- Secrets and credentials never live in this repository. They stay in local overlays or user-owned stores (`$XDG_CONFIG_HOME/oh-my-devenv/secrets.sh`, `$XDG_CONFIG_HOME/oh-my-devenv/git/config`, `$XDG_CONFIG_HOME/oh-my-devenv/git/hooks/*`, `~/.ssh/config.d/*.conf`, `uv auth`, `~/.npmrc`).
 - `bootstrap/scripts/common.sh` deliberately reads only `$XDG_CONFIG_HOME/oh-my-devenv/bootstrap.env`, never `env.sh` or `secrets.sh`. If Codex, Claude Code, or another automation needs tokens, launch it from a shell that explicitly sourced `secrets.sh` or use that tool's own secret/env injection.
 - The baseline's managed `mise` config defaults GitHub Artifact Attestations verification to off, and the runtime-install hook exports the same default for first bootstrap. This is a reliability tradeoff for shared egress environments (OrbStack VMs, shared CI runners, corp NAT) where anonymous GitHub API rate limits can otherwise break a clean install before the toolchain is usable.
 - The Ubuntu font installer accepts a resumable alternate download URL, but always verifies the repository-pinned SHA-256 digest and required PostScript names before replacing a baseline-owned font directory.
