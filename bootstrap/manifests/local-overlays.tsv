@@ -6,9 +6,8 @@ bootstrap_env	bootstrap.env.example	$XDG_CONFIG_HOME/oh-my-devenv/bootstrap.env	
 secrets	secrets.sh.example	$XDG_CONFIG_HOME/oh-my-devenv/secrets.sh	exact	interactive Bash and Zsh	interactive secrets
 zshrc	zshrc.zsh.example	$XDG_CONFIG_HOME/oh-my-devenv/zshrc.zsh	exact	Zsh	interactive shell
 bashrc	bashrc.bash.example	$XDG_CONFIG_HOME/oh-my-devenv/bashrc.bash	exact	Bash	interactive shell
-gitconfig	gitconfig.local.example	$HOME/.gitconfig.local	exact	Git include	tool-native configuration
-git_hooks	git-pre-push.example	$XDG_CONFIG_HOME/git/hooks/*	glob	Git core.hooksPath	tool-native configuration
+gitconfig	git-config.example	$XDG_CONFIG_HOME/oh-my-devenv/git/config	exact	Git include	tool-native configuration
+git_hooks	git-pre-push.example	$XDG_CONFIG_HOME/oh-my-devenv/git/hooks/*	glob	Git configured hooks (2.54+)	tool-native guardrails
 ssh_config	ssh-config.d.corp.conf.example	$HOME/.ssh/config.d/*.conf	glob	OpenSSH Include	tool-native configuration
 npmrc	npmrc.example	$HOME/.npmrc	exact	npm	tool-native configuration
-brewfile	Brewfile.local.example	$XDG_CONFIG_HOME/oh-my-devenv/Brewfile.local	exact	macOS bootstrap	bootstrap package input
 ghostty	ghostty-config.local.ghostty.example	$XDG_CONFIG_HOME/ghostty/config.local.ghostty	exact	Ghostty	tool-native configuration

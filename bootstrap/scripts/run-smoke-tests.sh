@@ -205,7 +205,8 @@ bash_overlay_literal="$(local_overlay_location bashrc)"
 gitconfig_overlay_literal="$(local_overlay_location gitconfig)"
 ssh_overlay_literal="$(local_overlay_location ssh_config)"
 ghostty_overlay_literal="$(local_overlay_location ghostty)"
-gitconfig_include_literal="path = ~/${gitconfig_overlay_literal#\$HOME/}"
+gitconfig_include_path="$(local_overlay_resolve_location "$gitconfig_overlay_literal")"
+gitconfig_include_literal="path = \"$gitconfig_include_path\""
 ssh_include_literal="Include ~/${ssh_overlay_literal#\$HOME/}"
 ghostty_include_literal="config-file = ?${ghostty_overlay_literal##*/}"
 # shellcheck disable=SC2016
@@ -377,8 +378,6 @@ shellcheck_rendered_bash "$tmp_dir/run_onchange_after_20-install-system-packages
 assert_file_contains "$tmp_dir/run_onchange_after_20-install-system-packages.sh" "install_error_trap"
 if grep -Fq "Installing system packages via Homebrew" "$tmp_dir/run_onchange_after_20-install-system-packages.sh"; then
   assert_file_contains "$tmp_dir/run_onchange_after_20-install-system-packages.sh" "\"\$manifests_dir/system/Brewfile\""
-  assert_file_contains "$tmp_dir/run_onchange_after_20-install-system-packages.sh" "local_brewfile=\"\$XDG_CONFIG_HOME/oh-my-devenv/Brewfile.local\""
-  assert_file_contains "$tmp_dir/run_onchange_after_20-install-system-packages.sh" "[[ -f \"\$local_brewfile\" ]]"
 else
   assert_file_contains "$tmp_dir/run_onchange_after_20-install-system-packages.sh" "Installing system packages via apt"
 fi
@@ -613,6 +612,15 @@ for overlay_example_path in "$overlay_examples_dir"/*.example; do
     fail_test "overlay example must appear exactly once in inventory: $overlay_example"
   fi
 done
+
+git_config_example="$overlay_examples_dir/git-config.example"
+git_hook_example="$overlay_examples_dir/git-pre-push.example"
+assert_file_contains "$git_config_example" '[hook "oh-my-devenv-identity-guard"]'
+assert_file_contains "$git_config_example" "event = pre-push"
+assert_file_contains "$git_config_example" "<absolute-xdg-config-home>/oh-my-devenv/git/hooks/pre-push"
+# shellcheck disable=SC2016
+assert_file_contains "$git_hook_example" '$XDG_CONFIG_HOME/oh-my-devenv/git/hooks/pre-push'
+git config --file "$git_config_example" --list >/dev/null
 
 log_step "📁" "Applying the nested XDG chezmoi source..."
 xdg_test_home="$tmp_dir/xdg-config-home"
@@ -914,6 +922,7 @@ shellcheck "$repo_root/bootstrap/scripts/common.sh" \
   "$repo_root/bootstrap/scripts/mirrors.sh" \
   "$repo_root/bootstrap/scripts/uninstall.sh" \
   "$repo_root/bootstrap/scripts/xdg-config.sh" \
-  "$repo_root/bootstrap/scripts/run-smoke-tests.sh"
+  "$repo_root/bootstrap/scripts/run-smoke-tests.sh" \
+  "$repo_root/docs/local-overlay-examples/git-pre-push.example"
 
 log_step "✅" "Smoke tests passed."

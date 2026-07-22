@@ -1,23 +1,24 @@
-# ~/.gitconfig.local
+# $XDG_CONFIG_HOME/oh-my-devenv/git/config
 #
 # Local Git overrides that are intentionally kept out of the shared baseline.
-# Copy this file to ~/.gitconfig.local (drop the .example suffix).
+# Copy this file to $XDG_CONFIG_HOME/oh-my-devenv/git/config.
 #
 # The managed ~/.gitconfig already provides your default Git identity.
 # Use this file for private per-machine preferences and optional guardrails.
-# Anything you set here wins over the baseline
-# defaults because dot_gitconfig.tmpl includes this file via [include].
+# Anything you set here wins over the baseline defaults because the managed
+# ~/.gitconfig includes this file last.
 
 # --------------------------------------------------------------------------
 # Optional: user-owned Git guardrails.
 #
-# Point Git at a private hooks directory if you want a local pre-push safety
-# check. See git-pre-push.example for a copyable starter.
-# This is also the right place to keep a shared hooksPath when you maintain
-# multiple worktrees with different `user.email` values.
+# Git 2.54+ can register this machine-wide guardrail without replacing each
+# repository's .git/hooks/pre-push. The command must be an absolute path because
+# Git does not expand $XDG_CONFIG_HOME in config values. See git-pre-push.example
+# and the local-overlay README for the complete setup.
 # --------------------------------------------------------------------------
-# [core]
-#     hooksPath = <absolute-xdg-config-home>/git/hooks
+# [hook "oh-my-devenv-identity-guard"]
+#     event = pre-push
+#     command = <absolute-xdg-config-home>/oh-my-devenv/git/hooks/pre-push
 
 # --------------------------------------------------------------------------
 # Optional: note for repos that truly need a non-default identity.
@@ -30,7 +31,7 @@
 # git -C ~/workspace/personal/<repo> config user.email "<your.personal.email@example.com>"
 
 # If you use multiple worktrees that each need their own identity, keep those
-# per-worktree identities in the worktree configs, not in ~/.gitconfig.local:
+# per-worktree identities in the worktree configs, not in this machine overlay:
 #
 # git -C ~/workspace/<repo> config extensions.worktreeConfig true
 # git -C ~/workspace/<repo> config --worktree user.email "<identity-for-this-worktree>"

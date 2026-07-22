@@ -185,7 +185,6 @@
 - 通过 `Brewfile` 管理包清单
 - 使用 `brew bundle` 安装
 - 选择 `desktopBaseline` 后，从独立的桌面 `Brewfile` 一起安装 Ghostty、Maple Mono NF CN 与 OrbStack
-- 系统包 hook 运行时，若固定路径 `$XDG_CONFIG_HOME/oh-my-devenv/Brewfile.local` 存在则读取它；首次之后的本地清单变更用 `brew bundle install --file=...` 手动同步
 - 安装 OrbStack cask，但不声称首次启动设置、Docker runtime 状态或许可证已经就绪
 - shell 框架和插件不走 Homebrew，改由独立 shell 资产脚本通过 `git clone` 管理
 
@@ -298,8 +297,7 @@ uv = "0.11.28"
 - 仅在 macOS 中运行
 - 校验 `brew` 存在
 - 从 `bootstrap/manifests/` 中的 source-only `Brewfile` 执行 `brew bundle`
-- baseline CLI 工具保留在系统 `Brewfile`；已选择的 Ghostty/字体/OrbStack 组合保留在桌面 `Brewfile`；其他 GUI 应用放入用户自己的 `Brewfile.local`
-- 系统 Brewfile 之后，仅在固定路径的本地 Brewfile 存在时安装它
+- baseline CLI 工具保留在系统 `Brewfile`，已选择的 Ghostty/字体/OrbStack 组合保留在桌面 `Brewfile`；无关 GUI 应用不属于本仓库的引导契约
 
 ### `install-maple-mono-font`
 

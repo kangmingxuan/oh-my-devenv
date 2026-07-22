@@ -185,7 +185,6 @@ Requirements:
 - Manage package list with `Brewfile`
 - Install via `brew bundle`
 - When `desktopBaseline` is selected, install Ghostty, Maple Mono NF CN, and OrbStack together from the separate desktop `Brewfile`
-- Read the single fixed local package path `$XDG_CONFIG_HOME/oh-my-devenv/Brewfile.local` when it exists during the system-package hook; local changes after bootstrap are synced manually with `brew bundle install --file=...`
 - Install the OrbStack cask without claiming that first-launch setup, Docker runtime state, or licensing is complete
 - Manage shell framework and plugins outside Homebrew via a dedicated shell asset script that uses `git clone`
 
@@ -298,8 +297,7 @@ uv = "0.11.28"
 - Run only on macOS
 - Validate `brew` exists
 - Run `brew bundle` from a source-only `Brewfile` under `bootstrap/manifests/`
-- Keep baseline CLI tools in the system `Brewfile`; keep the selected Ghostty/font/OrbStack bundle in the desktop `Brewfile`; keep unrelated GUI apps in the user-owned `Brewfile.local`
-- After the system Brewfile, install the fixed local Brewfile only when that file exists
+- Keep baseline CLI tools in the system `Brewfile` and the selected Ghostty/font/OrbStack bundle in the desktop `Brewfile`; unrelated GUI apps remain outside this repository's bootstrap contract
 
 ### `install-maple-mono-font`
 
