@@ -730,6 +730,8 @@ chezmoi --source="$repo_root" \
   >"$synthetic_linux_ghostty"
 assert_file_contains "$synthetic_macos_ghostty" "macos-titlebar-style = native"
 assert_file_not_contains "$synthetic_linux_ghostty" "macos-titlebar-style"
+assert_file_contains "$synthetic_macos_ghostty" "copy-on-select = clipboard"
+assert_file_contains "$synthetic_linux_ghostty" "copy-on-select = clipboard"
 check_tool_manifest_parser "$repo_root/bootstrap/manifests/ecosystem/go-tools.txt" go_tool_binary_name
 check_tool_manifest_parser "$repo_root/bootstrap/manifests/ecosystem/uv-tools.txt" uv_tool_binary_name
 if grep -Eq '@latest([[:space:]]|$)' "$repo_root/bootstrap/manifests/ecosystem/go-tools.txt"; then
