@@ -417,7 +417,6 @@ render_template xdg_config/ghostty/config.ghostty.tmpl "$tmp_dir/config.ghostty"
 if (( desktop_platform_supported == 1 )); then
   assert_file_contains "$tmp_dir/config.ghostty" "font-family = Maple Mono NF CN"
   assert_file_contains "$tmp_dir/config.ghostty" "notify-on-command-finish = unfocused"
-  assert_file_contains "$tmp_dir/config.ghostty" "keybind = global:f12=toggle_quick_terminal"
   assert_file_contains "$tmp_dir/config.ghostty" "$ghostty_include_literal"
 elif [[ -s "$tmp_dir/config.ghostty" ]]; then
   fail_test "Ghostty config must render zero bytes on unsupported platforms"
@@ -730,8 +729,16 @@ chezmoi --source="$repo_root" \
   >"$synthetic_linux_ghostty"
 assert_file_contains "$synthetic_macos_ghostty" "macos-titlebar-style = native"
 assert_file_not_contains "$synthetic_linux_ghostty" "macos-titlebar-style"
+assert_file_contains "$synthetic_macos_ghostty" "window-save-state = always"
+assert_file_not_contains "$synthetic_linux_ghostty" "window-save-state"
+assert_file_contains "$synthetic_macos_ghostty" "macos-option-as-alt = left"
+assert_file_not_contains "$synthetic_linux_ghostty" "macos-option-as-alt"
+assert_file_contains "$synthetic_macos_ghostty" "mouse-shift-capture = never"
+assert_file_contains "$synthetic_linux_ghostty" "mouse-shift-capture = never"
 assert_file_contains "$synthetic_macos_ghostty" "copy-on-select = clipboard"
 assert_file_contains "$synthetic_linux_ghostty" "copy-on-select = clipboard"
+assert_file_contains "$synthetic_macos_ghostty" "split-preserve-zoom = navigation"
+assert_file_contains "$synthetic_linux_ghostty" "split-preserve-zoom = navigation"
 check_tool_manifest_parser "$repo_root/bootstrap/manifests/ecosystem/go-tools.txt" go_tool_binary_name
 check_tool_manifest_parser "$repo_root/bootstrap/manifests/ecosystem/uv-tools.txt" uv_tool_binary_name
 if grep -Eq '@latest([[:space:]]|$)' "$repo_root/bootstrap/manifests/ecosystem/go-tools.txt"; then
