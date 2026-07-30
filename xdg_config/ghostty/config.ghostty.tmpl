@@ -24,21 +24,26 @@ window-width = 120
 window-height = 32
 {{ if eq .chezmoi.os "darwin" -}}
 macos-titlebar-style = native
+# Restore windows, tabs, splits, and working directories after a clean exit.
+window-save-state = always
+# Use left Option as terminal Alt while preserving right Option for macOS input.
+macos-option-as-alt = left
 {{ end -}}
 
 # Behavior
 mouse-hide-while-typing = true
+# Keep Shift-drag selection available when terminal applications capture the mouse.
+mouse-shift-capture = never
 # Match iTerm2 by updating the system clipboard whenever text is selected.
 copy-on-select = clipboard
+# Keep split zoom active while navigating between splits.
+split-preserve-zoom = navigation
 shell-integration-features = cursor,sudo,title,ssh-env,ssh-terminfo,path
 
 # Notify when a command taking at least Ghostty's default threshold finishes
 # while the terminal is unfocused.
 notify-on-command-finish = unfocused
 notify-on-command-finish-action = bell,notify
-
-# Toggle the quick terminal even while another application is focused.
-keybind = global:f12=toggle_quick_terminal
 
 config-file = ?config.local.ghostty
 {{- end -}}
