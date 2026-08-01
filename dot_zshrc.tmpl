@@ -96,4 +96,9 @@ unset zsh_user_completion_dir
 # Load local interactive overlay last so it can intentionally override
 # baseline aliases, prompt, functions, and key bindings. Put persistent non-secret
 # environment variables in $XDG_CONFIG_HOME/oh-my-devenv/env.sh instead.
-[[ -f "$XDG_CONFIG_HOME/oh-my-devenv/zshrc.zsh" ]] && source "$XDG_CONFIG_HOME/oh-my-devenv/zshrc.zsh"
+# Keep the trailing command's exit status at 0 when the overlay is absent,
+# so a fresh shell does not inherit $? = 1 (which leaks into the shell's
+# exit code on Ctrl+D / exit).
+if [[ -f "$XDG_CONFIG_HOME/oh-my-devenv/zshrc.zsh" ]]; then
+  source "$XDG_CONFIG_HOME/oh-my-devenv/zshrc.zsh"
+fi

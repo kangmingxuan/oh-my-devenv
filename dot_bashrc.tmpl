@@ -125,4 +125,9 @@ fi
 # baseline aliases, prompt, functions, and key bindings. Put persistent non-secret
 # environment variables in $XDG_CONFIG_HOME/oh-my-devenv/env.sh instead.
 # shellcheck disable=SC1091
-[[ -f "$XDG_CONFIG_HOME/oh-my-devenv/bashrc.bash" ]] && source "$XDG_CONFIG_HOME/oh-my-devenv/bashrc.bash"
+# Keep the trailing command's exit status at 0 when the overlay is absent,
+# so a fresh shell does not inherit $? = 1 (which leaks into the shell's
+# exit code on Ctrl+D / exit).
+if [[ -f "$XDG_CONFIG_HOME/oh-my-devenv/bashrc.bash" ]]; then
+  source "$XDG_CONFIG_HOME/oh-my-devenv/bashrc.bash"
+fi
