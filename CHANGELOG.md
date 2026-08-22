@@ -20,6 +20,7 @@ This repository versions the baseline with [Semantic Versioning 2.0](https://sem
 
 ### Added
 
+- Opinionated global instructions shared by Codex, Claude Code, and Kimi Code; secret-free Claude settings and helpers; and secret-free Kimi TUI preferences. Agent configuration directories are private while credentials and runtime state remain unmanaged.
 - Opt-in, all-or-nothing desktop baseline for macOS and non-WSL Ubuntu 26.04+: Ghostty, Maple Mono NF CN, managed Ghostty defaults, a Linux Fontconfig compatibility rule, and OrbStack on macOS.
 - `smoke-tests-macos` CI job that runs the smoke suite on `macos-latest`, so the `darwin` template arms are rendered and shell-checked instead of going untested.
 - `apply-linux` CI job that runs a real `chezmoi init --apply` end to end and asserts the final environment check passes, covering installer semantics the render-only smoke suite cannot.
@@ -29,6 +30,7 @@ This repository versions the baseline with [Semantic Versioning 2.0](https://sem
 
 ### Changed
 
+- Defined oh-my-devenv as the maintainer's public, opinionated current design: validation checks behavior and safety boundaries without duplicating configuration facts, and superseded designs are replaced without compatibility logic.
 - Expanded the selected macOS desktop bundle to include OrbStack. Existing macOS machines with `desktopBaseline = true` install it the next time the desktop manifest hook runs.
 - Moved JetBrains Toolbox PATH setup and OrbStack shell/SSH initialization out of managed templates and into documented local overlays.
 - Split persistent shell environment from bootstrap-only settings: shells read `env.sh`, bootstrap reads `bootstrap.env`, and one inventory now defines every supported local overlay and its uninstall protection.

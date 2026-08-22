@@ -2,14 +2,15 @@
 
 This document describes how this repository is maintained day to day. It complements `CONTRIBUTING.md`, which covers the contributor-facing workflow.
 
-The repository is maintained on a **best-effort** basis by a single maintainer. The goal is a useful shared baseline with cheap validation, not a platform-grade environment product.
+The repository is maintained on a **best-effort** basis by a single maintainer. The goal is a coherent, opinionated personal environment with cheap validation, published for anyone who wants the same choices; it is not a platform-grade environment product.
 
 ## Principles
 
-1. **Single baseline.** This repository ships a single shared default. There is no `personal` vs. `work` mode, and no per-user branches.
-2. **Conservative defaults.** A default lands here only if it is useful for most engineers and safe on a fresh machine. Team- or project-specific tweaks stay in local overlays.
-3. **No private data.** No personal emails, usernames, internal IP ranges, or credentials. Host-specific corporate or private infrastructure details stay in overlays or user-owned config.
+1. **Single opinionated baseline.** This repository ships the maintainer's current preferred design. There is no `personal` vs. `work` mode and no attempt to satisfy every workflow.
+2. **Current design only.** Replace superseded paths and behavior directly. Do not retain compatibility aliases, fallback loaders, or legacy branches.
+3. **No private data.** No personal emails, usernames, internal IP ranges, credentials, generated agent state, or machine-local trust decisions. Those facts stay in overlays or tool-owned state.
 4. **Reproducible bootstrap.** Every change must keep `bash bootstrap/scripts/run-smoke-tests.sh` passing and keep a clean-machine bootstrap working on macOS, Ubuntu/Debian, and WSL.
+5. **Validate behavior, not duplicated facts.** Tests enforce parsing, rendering, syntax, permissions, boundaries, and behavior. They do not restate literal configuration values that already have a canonical source file.
 
 ## Roles
 
@@ -57,10 +58,10 @@ A reviewable change is ready to merge when all of the following hold:
 
 ## Release / Rollout
 
-Engineers pull the latest `main` through `chezmoi update`. Because changes reach users immediately, prefer:
+Users pull the latest `main` through `chezmoi update`. Because changes reach machines immediately, prefer:
 
 - Small, reviewable merge requests.
-- Behavior changes behind an opt-in environment variable when feasible (for example `NO_LOGO`, `NO_EMOJI`).
+- Direct replacement of superseded behavior, with no compatibility path left behind.
 - A note in the merge request description when a change is expected to be user-visible.
 
 Milestones cut annotated git tags (`v0.<M>.0`). After a milestone's final MR merges, the maintainer pushes the tag manually to keep tagging a deliberate act. Tag messages follow the `v<version> — <milestone-name>` convention. See `CHANGELOG.md` for the versioning policy and the full history.
@@ -166,7 +167,7 @@ Mirror mode currently covers the consumers wired through `dotfiles_apply_mirror_
 
 - `gitleaks` scans staged diffs on every commit via `pre-commit`. Bootstrap smoke tests run in CI only (see CI section below), not as a pre-commit hook.
 - Secrets and credentials never live in this repository. They stay in local overlays or user-owned stores (`$XDG_CONFIG_HOME/oh-my-devenv/secrets.sh`, `$XDG_CONFIG_HOME/oh-my-devenv/git/config`, `$XDG_CONFIG_HOME/oh-my-devenv/git/hooks/*`, `~/.ssh/config.d/*.conf`, `uv auth`, `~/.npmrc`).
-- `bootstrap/scripts/common.sh` deliberately reads only `$XDG_CONFIG_HOME/oh-my-devenv/bootstrap.env`, never `env.sh` or `secrets.sh`. If Codex, Claude Code, or another automation needs tokens, launch it from a shell that explicitly sourced `secrets.sh` or use that tool's own secret/env injection.
+- `bootstrap/scripts/common.sh` deliberately reads only `$XDG_CONFIG_HOME/oh-my-devenv/bootstrap.env`, never `env.sh` or `secrets.sh`. If Codex, Claude Code, or another environment-driven automation needs tokens, launch it from a shell that explicitly sourced `secrets.sh`. Kimi Code provider credentials stay in its own login and `config.toml` flow, both of which remain unmanaged.
 - The baseline's managed `mise` config defaults GitHub Artifact Attestations verification to off, and the runtime-install hook exports the same default for first bootstrap. This is a reliability tradeoff for shared egress environments (OrbStack VMs, shared CI runners, corp NAT) where anonymous GitHub API rate limits can otherwise break a clean install before the toolchain is usable.
 - The Ubuntu font installer accepts a resumable alternate download URL, but always verifies the repository-pinned SHA-256 digest and required PostScript names before replacing a baseline-owned font directory.
 - To validate or dogfood the stricter path, opt back in explicitly with `MISE_GITHUB_ATTESTATIONS=true MISE_AQUA_GITHUB_ATTESTATIONS=true chezmoi apply`. Python follows the global setting unless `MISE_PYTHON_GITHUB_ATTESTATIONS` is set separately.

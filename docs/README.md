@@ -2,14 +2,14 @@
 
 This repository's docs are split by reader journey. Start with the page that matches what you are trying to do — you do not need to read everything in order.
 
-The repository is a single-maintainer, best-effort shared baseline. These docs help you get productive fast, look things up when something changes, and understand the edges of the baseline.
+The repository is a single-maintainer, best-effort, opinionated baseline published for people who want the same choices. These docs help you get productive fast, look things up when something changes, and understand its boundaries.
 
 ## Start here — find your path
 
 | I want to… | Start here | Then |
 |------------|-----------|------|
 | **Set up a new machine** | [`README.md`](../README.md) → Quick Start | [`01-onboarding.md`](01-onboarding.md) for prompts, hook order, success signals, and troubleshooting |
-| **Customize my machine** without changing the shared baseline | [`local-overlay-examples/README.md`](local-overlay-examples/README.md) | [`02-reference.md`](02-reference.md) to look up the flag or overlay slot you need |
+| **Add private machine facts** without publishing them | [`local-overlay-examples/README.md`](local-overlay-examples/README.md) | [`02-reference.md`](02-reference.md) to look up the flag or overlay slot you need |
 | **Look up** a flag, command, or what gets installed | [`02-reference.md`](02-reference.md) | The manifest it links to for exact versions |
 | **Understand how and why** it is built | [`design/README.md`](design/README.md) | [`design/00-cross-platform-bootstrap.en.md`](design/00-cross-platform-bootstrap.en.md) for the layered model |
 | **Maintain or contribute** to the baseline | [`03-maintenance.md`](03-maintenance.md) | [`CONTRIBUTING.md`](../CONTRIBUTING.md), and [`04-macos-preflight.md`](04-macos-preflight.md) for macOS-touching changes |
@@ -21,7 +21,7 @@ The repository is a single-maintainer, best-effort shared baseline. These docs h
 - [`README.md`](../README.md): landing page and the self-contained first-run quick start. A Chinese translation lives in [`README.zh.md`](../README.zh.md).
 - [`01-onboarding.md`](01-onboarding.md): the first-run walkthrough — prompts, hook order, success signals, and troubleshooting.
 - [`02-reference.md`](02-reference.md): quick reference for the bootstrap hooks, what gets installed, day-to-day commands, and every environment variable / flag.
-- [`local-overlay-examples/README.md`](local-overlay-examples/README.md): copyable templates for machine-local overlays that do not belong in the shared baseline.
+- [`local-overlay-examples/README.md`](local-overlay-examples/README.md): copyable templates for private and machine-local facts that must not enter the public baseline.
 
 ### Understand the design
 

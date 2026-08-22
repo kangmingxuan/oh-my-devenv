@@ -67,7 +67,7 @@ local env files must not set or change `XDG_CONFIG_HOME`.
    - `$XDG_CONFIG_HOME/oh-my-devenv/secrets.sh` is for shell-compatible secrets that interactive Bash and Zsh read automatically; bootstrap and non-interactive shell commands never read it automatically.
    - `$XDG_CONFIG_HOME/oh-my-devenv/zshrc.zsh` and `$XDG_CONFIG_HOME/oh-my-devenv/bashrc.bash` are late interactive-only overlays for aliases, functions, and prompt tweaks.
    - The managed `~/.gitconfig` keeps your default Git identity; `$XDG_CONFIG_HOME/oh-my-devenv/git/config` is for user-owned Git preferences and guardrail registration.
-   - `$XDG_CONFIG_HOME/oh-my-devenv/git/hooks/*` contains user-owned Git 2.54+ configured hooks, not shared baseline behavior.
+   - `$XDG_CONFIG_HOME/oh-my-devenv/git/hooks/*` contains user-owned Git 2.54+ configured hooks, not public baseline behavior.
    - `~/.npmrc` is the right home for scoped internal npm registry configuration.
    - `$XDG_CONFIG_HOME/ghostty/config.local.ghostty` is for machine-only appearance, sizing, or keybinding overrides on top of the shared Ghostty baseline.
 
@@ -164,20 +164,24 @@ Use the tool's own secret or environment configuration when that is a better
 fit. The baseline intentionally does not make non-interactive shell commands
 source `secrets.sh`.
 
+Kimi Code is a deliberate exception: its ordinary provider credentials do not
+use shell variables as a generic fallback. Keep them in Kimi's own login and
+`config.toml` flow; the baseline does not manage that file.
+
 ## What Belongs Here vs. Upstream
 
 These overlays exist specifically for values that **must not** be part of the
-shared baseline:
+public baseline:
 
 - Personal identity (your real name and email for git commits)
-- Corporate or team-specific hostnames, proxies, rewrites, and aliases that do not belong in the shared baseline
+- Corporate or private hostnames, proxies, rewrites, and aliases that must not enter the public baseline
 - Secrets (tokens, credentials) — even revoked ones
 - Machine-local toggles that only make sense on one workstation
 
-If you find yourself copy-pasting the same content into more than a few local
-overlays, that is a signal the baseline should grow a neutral, parameterized
-version of it. File an issue instead of maintaining the overlay in every
-teammate's `~/`.
+If you find yourself copy-pasting the same public, non-secret content into more
+than a few local overlays, consider whether it belongs in the opinionated
+baseline itself. Add it only when it matches the maintained design; do not add
+a compatibility profile merely to accommodate alternatives.
 
 ## What Does **Not** Belong Here
 

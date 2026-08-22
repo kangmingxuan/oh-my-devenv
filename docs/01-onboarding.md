@@ -11,7 +11,8 @@ After a successful first `chezmoi apply`, you should have:
 - **Shells**: managed `zsh` and `bash`; `zsh` includes [oh-my-zsh](https://ohmyz.sh/) and the plugins listed in this repo’s manifest.
 - **Runtimes**: `go`, `node`, `python`, and [mise](https://mise.jdx.dev/) as the version manager.
 - **Tooling**: `git`, `curl`, `uv`, `golangci-lint`, `shellcheck`, `shfmt`, plus the Go and Python CLI tools declared in `bootstrap/manifests/ecosystem/`.
-- **Dotfiles**: managed copies of `~/.zshrc`, `~/.bashrc`, `~/.gitconfig`, mise config, and related files — tuned for a shared baseline, not for one person’s taste.
+- **Dotfiles**: managed copies of `~/.zshrc`, `~/.bashrc`, `~/.gitconfig`, mise config, and related files — one maintainer's deliberate, opinionated defaults.
+- **Coding agents**: shared global instructions for Codex, Claude Code, and Kimi Code; secret-free Claude settings and helpers; and secret-free Kimi TUI preferences. The tools and their credentials are not installed by this repository.
 - **Optional desktop baseline**: an all-or-nothing platform bundle with Ghostty and Maple Mono NF CN on supported workstations, plus OrbStack on macOS.
 - **Python workflow**: `uv` as the only documented package / auth / publish path; no pip-era machine-global config in the baseline.
 
@@ -25,7 +26,7 @@ The exact prerequisite install commands and real bootstrap URLs live in the [Qui
 
 You still need **SSH or HTTPS access** to the Git host that holds this repository before the bootstrap can work. You do **not** need Go, Node, or Python installed beforehand; the bootstrap scripts install them.
 
-The shared baseline does not hard-code host-specific Git rewrites. If your environment needs private-host rewrites, SSH aliases, or host-specific guardrails, keep them in the XDG-based overlays under `$XDG_CONFIG_HOME/oh-my-devenv/` or the other tool-owned slots documented under `docs/local-overlay-examples/`.
+The public baseline does not hard-code private Git rewrites. If your environment needs private-host rewrites, SSH aliases, or host-specific guardrails, keep them in the XDG-based overlays under `$XDG_CONFIG_HOME/oh-my-devenv/` or the other tool-owned slots documented under `docs/local-overlay-examples/`.
 
 The desktop choice is one platform-specific bundle rather than a set of
 component switches. On macOS it installs Ghostty, Maple Mono NF CN, and
@@ -107,7 +108,7 @@ If anything fails, the script exits non-zero and prints diagnostic hints — see
 
 ## Restricted network?
 
-If you are on a corporate or otherwise restricted network, public registries may be slow or blocked. Keep those overrides local to your machine rather than baking them into the shared baseline. Start from [**Local overlay examples**](local-overlay-examples/README.md) before your first apply:
+If you are on a corporate or otherwise restricted network, public registries may be slow or blocked. Keep those private endpoints local to your machine rather than baking them into the public baseline. Start from [**Local overlay examples**](local-overlay-examples/README.md) before your first apply:
 
 - Put persistent Go settings in `$XDG_CONFIG_HOME/oh-my-devenv/env.sh`
 - Put bootstrap mirror settings in `$XDG_CONFIG_HOME/oh-my-devenv/bootstrap.env`
