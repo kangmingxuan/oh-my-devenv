@@ -67,6 +67,31 @@ other Fontconfig clients. The final check verifies both that Fontconfig loaded
 the managed fragment and that `fc-match monospace` returns the regular Maple
 Mono NF CN face.
 
+## Coding-agent configuration
+
+The repository manages opinionated user-level configuration for Codex, Claude
+Code, and Kimi Code, but it does not install any of the applications:
+
+| Target | Purpose |
+|--------|---------|
+| `~/.codex/AGENTS.md` | Global personal instructions shared across repositories. |
+| `~/.claude/CLAUDE.md` | Claude-specific instructions and an import of the Codex baseline. |
+| `~/.claude/settings.json` | Secret-free Claude permissions, sandbox, hooks, status line, effort, and theme defaults. |
+| `~/.claude/notify.sh` and `notify.ps1` | Native completion and attention notifications on macOS, Linux, and WSL. |
+| `~/.claude/statusline-command.sh` | Working directory, Git state, model, and remaining-context status line. |
+| `~/.kimi-code/AGENTS.md` | Symlink to the shared Codex instruction baseline. |
+| `~/.kimi-code/tui.toml` | Secret-free terminal UI, notification, editor, and update preferences. |
+
+The `~/.claude`, `~/.codex`, and `~/.kimi-code` directories converge to mode
+`0700`. Their other application-owned contents remain unmanaged. In particular,
+credentials, auth files, transcripts, caches, trust decisions, Codex
+`config.toml`, and Kimi `config.toml` do not belong in this public source. Kimi
+keeps provider/model definitions and credential references in the same
+`config.toml`, so the baseline deliberately leaves that tool-owned file intact
+instead of merging it. Put environment-based credentials such as
+`ANTHROPIC_API_KEY` in the machine-local `secrets.sh` overlay and launch the
+relevant agent from a shell that sourced it.
+
 ## Day-to-day commands
 
 ```bash

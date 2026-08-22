@@ -105,6 +105,15 @@ assert_file_not_contains() {
   fi
 }
 
+assert_exact_mode() {
+  local file_path="$1"
+  local expected_mode="$2"
+
+  if [[ -z "$(find "$file_path" -prune -perm "$expected_mode" -print)" ]]; then
+    fail_test "$file_path does not have mode $expected_mode"
+  fi
+}
+
 assert_toml_section_contains() {
   local file_path="$1"
   local section_name="$2"
@@ -167,6 +176,8 @@ check_oh_my_zsh_manifest_contract() {
 require_command chezmoi
 require_command shellcheck
 require_command bash
+require_command git
+require_command jq
 require_command zsh
 require_command sh
 
@@ -351,6 +362,33 @@ assert_file_contains "$repo_root/bootstrap/scripts/common.sh" "$bootstrap_overla
 assert_file_not_contains "$repo_root/bootstrap/scripts/common.sh" "$env_overlay_literal"
 assert_file_not_contains "$repo_root/bootstrap/scripts/common.sh" "$shared_secrets_literal"
 
+log_step "🤖" "Checking coding-agent configuration..."
+jq empty "$repo_root/private_dot_claude/settings.json"
+syntax_check bash "$repo_root/private_dot_claude/executable_notify.sh"
+syntax_check bash "$repo_root/private_dot_claude/executable_statusline-command.sh"
+shellcheck_rendered_bash "$repo_root/private_dot_claude/executable_notify.sh"
+shellcheck_rendered_bash "$repo_root/private_dot_claude/executable_statusline-command.sh"
+
+statusline_repo="$tmp_dir/statusline-repo"
+git init -q "$statusline_repo"
+touch "$statusline_repo/tracked"
+git -C "$statusline_repo" add tracked
+git -C "$statusline_repo" \
+  -c user.name="Smoke Tests" \
+  -c user.email="smoke@example.com" \
+  -c commit.gpgsign=false \
+  -c core.hooksPath=/dev/null \
+  commit -qm "Initial fixture"
+touch "$statusline_repo/untracked"
+statusline_output="$(
+  jq -nc --arg cwd "$statusline_repo" \
+    '{workspace:{current_dir:$cwd},model:{display_name:"smoke"},context_window:{used_percentage:0}}' |
+    bash "$repo_root/private_dot_claude/executable_statusline-command.sh"
+)"
+if [[ "$statusline_output" != *"*"* ]]; then
+  fail_test "Claude status line does not mark a repository with untracked files as dirty"
+fi
+
 log_step "📜" "Rendering and checking chezmoi bootstrap scripts..."
 render_template .chezmoiscripts/run_once_before_10-bootstrap.sh.tmpl "$tmp_dir/run_once_before_10-bootstrap.sh"
 syntax_check bash "$tmp_dir/run_once_before_10-bootstrap.sh"
@@ -499,6 +537,53 @@ assert_file_contains "$tmp_dir/run_onchange_after_60-check.sh" "fc-match -f '%{p
 
 log_step "🤖" "Verifying docs and repo-only files stay undeployed..."
 managed_listing="$(chezmoi managed --source="$repo_root" --path-style=absolute)"
+agent_managed_actual="$tmp_dir/agent-managed.actual"
+agent_managed_expected="$tmp_dir/agent-managed.expected"
+awk '/\/\.(claude|codex|kimi-code)(\/|$)/' <<<"$managed_listing" | sort >"$agent_managed_actual"
+printf '%s\n' \
+  "$HOME/.claude" \
+  "$HOME/.claude/CLAUDE.md" \
+  "$HOME/.claude/notify.ps1" \
+  "$HOME/.claude/notify.sh" \
+  "$HOME/.claude/settings.json" \
+  "$HOME/.claude/statusline-command.sh" \
+  "$HOME/.codex" \
+  "$HOME/.codex/AGENTS.md" \
+  "$HOME/.kimi-code" \
+  "$HOME/.kimi-code/AGENTS.md" \
+  "$HOME/.kimi-code/tui.toml" \
+  | sort >"$agent_managed_expected"
+if ! diff -u "$agent_managed_expected" "$agent_managed_actual"; then
+  fail_test "managed coding-agent targets differ from the public baseline boundary"
+fi
+
+agent_home="$tmp_dir/agent-home"
+mkdir -p "$agent_home/.claude" "$agent_home/.codex" "$agent_home/.kimi-code"
+chmod 0755 "$agent_home/.claude" "$agent_home/.codex" "$agent_home/.kimi-code"
+chezmoi apply \
+  --source="$repo_root" \
+  --destination="$agent_home" \
+  --config=/dev/null \
+  --config-format=toml \
+  --override-data-file "$tmp_data_file" \
+  --force \
+  --no-tty \
+  "$agent_home/.claude" \
+  "$agent_home/.codex" \
+  "$agent_home/.kimi-code"
+assert_exact_mode "$agent_home/.claude" 0700
+assert_exact_mode "$agent_home/.codex" 0700
+assert_exact_mode "$agent_home/.kimi-code" 0700
+jq empty "$agent_home/.claude/settings.json"
+syntax_check bash "$agent_home/.claude/notify.sh"
+syntax_check bash "$agent_home/.claude/statusline-command.sh"
+if [[ ! -L "$agent_home/.kimi-code/AGENTS.md" ]]; then
+  fail_test "Kimi Code global instructions are not a symlink to the shared baseline"
+fi
+if [[ "$(readlink "$agent_home/.kimi-code/AGENTS.md")" != "../.codex/AGENTS.md" ]]; then
+  fail_test "Kimi Code global instructions point outside the shared baseline"
+fi
+
 if grep -Fq "$HOME/xdg_config" <<<"$managed_listing"; then
   fail_test "main chezmoi source must not deploy the nested xdg_config source under HOME"
 fi

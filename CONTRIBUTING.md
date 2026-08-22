@@ -1,22 +1,23 @@
 # Contributing
 
-This repository is a shared development environment baseline managed by [chezmoi](https://www.chezmoi.io/). It is intentionally conservative: changes that land here are rendered on every machine that tracks this baseline, so they need to stay reproducible, safe by default, and free of personal or host-specific values.
+This repository is a public, opinionated development environment managed by [chezmoi](https://www.chezmoi.io/). Personal taste is part of the product: changes should strengthen one coherent current design rather than approximate a neutral default for everyone. Everything that lands here is rendered on every tracking machine, so it must remain reproducible, safe to publish, and free of private identities, credentials, infrastructure, and machine state.
 
 ## Scope
 
 Changes that belong in this repository:
 
-- Baseline system packages that most engineers benefit from (editors, `git`, `curl`, formatting and diagnostic tools).
+- System packages selected as part of the maintained environment (editors, `git`, `curl`, formatting and diagnostic tools).
 - The explicitly selected, platform-specific desktop baseline on supported workstations, including OrbStack on macOS.
 - Baseline shell, Git, SSH, and runtime templates that work on macOS, Ubuntu/Debian, and WSL.
+- Public coding-agent instructions and secret-free settings that express the maintained workflow.
 - Source-only bootstrap scripts and their smoke-test coverage.
 - Documentation describing the baseline and its maintenance.
 
 Changes that do **not** belong in this repository:
 
 - Personal identifiers (real names, personal emails, personal domains).
-- Personal SSH hosts, internal IP ranges, or private infrastructure hostnames that are not safe as shared defaults.
-- Team- or project-specific tooling that only a subset of users need.
+- Personal SSH hosts, internal IP ranges, or private infrastructure hostnames that are not safe in a public repository.
+- Generated agent state, transcripts, caches, trust decisions, or machine-local permissions.
 - Anything that requires a private credential or private network to validate.
 
 Use the documented local extension points for machine-specific or team-specific
@@ -24,6 +25,11 @@ values. The complete paths, consumers, lifecycles, and copyable examples live
 in [`docs/local-overlay-examples/README.md`](docs/local-overlay-examples/README.md);
 [`bootstrap/manifests/local-overlays.tsv`](bootstrap/manifests/local-overlays.tsv)
 is the canonical inventory enforced by smoke tests and uninstall protection.
+
+The repository represents only the latest design. When a design changes, replace
+the old path in the same change; do not add compatibility aliases, fallback
+loaders, or parallel legacy configuration. Recovery belongs in backups and Git
+history, not runtime branches.
 
 ## Development Workflow
 
@@ -55,6 +61,7 @@ is the canonical inventory enforced by smoke tests and uninstall protection.
 - Shell and application templates (`dot_*.tmpl`, `dot_*/env.*.tmpl`, and `xdg_config/**/*.tmpl`) must render on macOS and Linux/WSL, with and without optional integrations.
 - The templates are smoke-tested by rendering them with `chezmoi execute-template` and syntax-checking the output with the corresponding shell.
 - When you add a new template, add it to `bootstrap/scripts/run-smoke-tests.sh` so rendering and syntax checks are enforced on every change.
+- Tests verify parsing, rendering, syntax, permissions, management boundaries, and user-visible behavior. Do not duplicate literal configuration values in test code; the configuration file is their source of truth.
 
 ## Manifest Contracts
 

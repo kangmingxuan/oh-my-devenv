@@ -10,7 +10,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 ![Platforms](https://img.shields.io/badge/platforms-macOS%20%7C%20Ubuntu%2FDebian%20%7C%20WSL-informational)
 
-oh-my-devenv 是一套可共享、可复现的开发环境基线。在一台全新机器上让 `chezmoi` 指向它，几分钟后你就拥有受管的 shell、语言运行时和精选 CLI 工具链 —— 全部进入 `PATH`，全部来自同一份事实来源。受支持的工作站还可选择启用平台专属桌面基线。机器和团队的个性化设置留在本地 overlay 中，基线本身保持干净、可移植。
+oh-my-devenv 是一套主观鲜明、可复现的开发环境。它公开的是维护者当前认可的一整套选择：认同这些选择就使用，不认同就不使用。在一台全新机器上让 `chezmoi` 指向它，几分钟后你就拥有受管的 shell、语言运行时、编码智能体默认配置和精选 CLI 工具链，全部来自同一份事实来源。密钥与机器私有事实留在本地 overlay 中，使公开基线可以安全检出。
 
 ## 功能亮点
 
@@ -18,12 +18,13 @@ oh-my-devenv 是一套可共享、可复现的开发环境基线。在一台全�
 - **一条命令完成引导** —— `chezmoi init --apply` 通过有序 hook 安装全部内容；重复运行幂等且安全。
 - **分层且可复现** —— chezmoi 统一编排系统软件包、可选桌面资产、shell 资产、[mise](https://mise.jdx.dev/) 运行时与各语言工具，每一层都有自己的清单（manifest）。
 - **受管的 shell** —— `zsh` 搭配 [oh-my-zsh](https://ohmyz.sh/) 插件（autosuggestions、completions、syntax highlighting），并配套 `bash` 配置。
+- **受管的编码智能体默认配置** —— Codex、Claude Code 与 Kimi Code 共用全局指令；Claude 获得无秘密的运行默认值，Kimi 获得无秘密的 TUI 偏好。
 - **锁定版本的运行时** —— 通过 mise 管理 Go、Node、Python 与 golangci-lint，外加 `gopls`、`dlv`、`ruff`、`basedpyright`、`pre-commit` 等生态工具。
 - **现代 CLI 工具箱** —— ripgrep、fd、bat、fzf、jq、direnv、tmux、shellcheck、shfmt 等。
 - **可选桌面基线** —— 一个全有或全无的平台包：受支持的工作站安装 Ghostty 与 Maple Mono NF CN，macOS 额外安装 OrbStack，Ubuntu 26.04+ 配置所需的 Fontconfig 别名规则。
 - **安全的首次运行** —— 自动备份已存在的受管 dotfiles，并仅在首次询问 Git 身份和桌面基线选择。
-- **用本地 overlay，而非分叉** —— 把机器、团队与密钥设置放在文档明确的用户配置槽位中，绝不修改共享基线。项目自有槽位统一收敛到 `$XDG_CONFIG_HOME/oh-my-devenv/`，配置根目录默认是 `~/.config`。
-- **面向团队** —— 整个团队可追踪同一套可复现基线，机器与团队特定的值都放在本地 overlay 中。
+- **用本地 overlay 保存私有事实** —— 把凭据、私有主机和机器专属值放进文档明确的用户配置槽位。项目自有槽位统一收敛到 `$XDG_CONFIG_HOME/oh-my-devenv/`，配置根目录默认是 `~/.config`。
+- **刻意保持主观** —— 仓库只承载一套当前设计，不提供兼容配置档案，也不追求折中式的中性默认值。
 
 ## 工作原理
 
@@ -33,12 +34,14 @@ flowchart TD
     B --> C["系统软件包<br/>Homebrew / apt"]
     B --> D["可选桌面基线<br/>macOS 还包含 OrbStack"]
     B --> E["Shell 资产<br/>oh-my-zsh + 插件"]
+    B --> A1["编码智能体默认配置<br/>Codex + Claude + Kimi"]
     B --> X["受管配置<br/>$XDG_CONFIG_HOME"]
     B --> F["mise 运行时<br/>Go · Node · Python"]
     B --> G["生态工具<br/>go install · uv tool"]
     C --> H["环境校验"]
     D --> H
     E --> H
+    A1 --> H
     X --> H
     F --> H
     G --> H
@@ -127,12 +130,12 @@ chezmoi apply
 
 ## 适用范围与预期
 
-本仓库由单人以 **尽力而为（best-effort）** 的方式维护。请把它当作面向笔记本、虚拟机和一次性实验环境的共享基线：它能快速把全新机器带到可用的 shell、运行时与 CLI 工具链状态 —— 但它不是对每个运行环境或网络路径都提供硬性保证的平台级产品。默认值刻意保持保守，机器或团队特定的设置应放在本地 overlay 中，而非共享基线。桌面基线是显式、全有或全无的机器选择，目前仅在 macOS 和非 WSL 的 Ubuntu 26.04+ 上安装；具体内容因平台而异，macOS 包含 OrbStack。
+本仓库由单人以 **尽力而为（best-effort）** 的方式维护。请把它视为该维护者面向笔记本、虚拟机和一次性实验环境公开的主观基线：它能快速把全新机器带到可用的 shell、运行时、编码智能体配置与 CLI 工具链状态，但不是平台级产品，也不承诺适合每一种工作流。公开默认值都是有意选择；凭据、私有基础设施和机器专属事实应放在本地 overlay 中。桌面基线是显式、全有或全无的机器选择，目前仅在 macOS 和非 WSL 的 Ubuntu 26.04+ 上安装；具体内容因平台而异，macOS 包含 OrbStack。
 
 ## 文档
 
 - [docs/01-onboarding.md](docs/01-onboarding.md) —— 更深入的首次运行讲解：提示、hook 顺序、成功信号与故障排查。
-- [docs/local-overlay-examples/README.md](docs/local-overlay-examples/README.md) —— 不属于共享基线的本机专属调整的可复制模板。
+- [docs/local-overlay-examples/README.md](docs/local-overlay-examples/README.md) —— 不得进入公开基线的私有事实和本机专属值的可复制模板。
 - [docs/README.md](docs/README.md) —— 完整文档导航。
 - [CONTRIBUTING.md](CONTRIBUTING.md) —— 为基线贡献时的范围规则与密钥卫生。
 - [CHANGELOG.md](CHANGELOG.md) —— 按里程碑列出的用户可见变更。

@@ -9,6 +9,6 @@ repos:
     rev: v0.11.0.1
     hooks:
       - id: shellcheck
-        files: ^bootstrap/scripts/.*\.sh$
+        files: ^(bootstrap/scripts/.*|private_dot_claude/executable_.*)\.sh$
         args:
           - -x
