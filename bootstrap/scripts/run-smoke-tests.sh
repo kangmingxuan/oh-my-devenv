@@ -565,6 +565,7 @@ chezmoi apply \
   --destination="$agent_home" \
   --config=/dev/null \
   --config-format=toml \
+  --persistent-state="$tmp_dir/agent-chezmoistate.boltdb" \
   --override-data-file "$tmp_data_file" \
   --force \
   --no-tty \
