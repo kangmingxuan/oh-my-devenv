@@ -167,6 +167,7 @@ check_oh_my_zsh_manifest_contract() {
 require_command chezmoi
 require_command shellcheck
 require_command bash
+require_command git
 require_command zsh
 require_command sh
 
