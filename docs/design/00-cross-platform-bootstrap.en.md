@@ -101,6 +101,7 @@ Recommended structure:
 │   ├── run_after_35-apply-xdg-config.sh.tmpl
 │   ├── run_onchange_after_40-install-runtimes.sh.tmpl
 │   ├── run_onchange_after_50-sync-ecosystem-tools.sh.tmpl
+│   ├── run_onchange_after_55-install-shell-completions.sh.tmpl
 │   └── run_onchange_after_60-check.sh.tmpl
 ├── bootstrap/
 │   ├── manifests/
@@ -166,7 +167,8 @@ Recommended execution order:
 6. `run_after_35-apply-xdg-config.sh.tmpl`
 7. `run_onchange_after_40-install-runtimes.sh.tmpl`
 8. `run_onchange_after_50-sync-ecosystem-tools.sh.tmpl`
-9. `run_onchange_after_60-check.sh.tmpl`
+9. `run_onchange_after_55-install-shell-completions.sh.tmpl`
+10. `run_onchange_after_60-check.sh.tmpl`
 
 Requirements:
 
@@ -342,9 +344,10 @@ Dotfiles must ensure:
 For Debian/Ubuntu naming differences, keep compatibility handling minimal:
 
 - Keep shell startup support packages such as `bash-completion` in the system package layer
-- Enable `mise` Bash completion only when the loaded `bash-completion` helper is new enough; generate Zsh completion into the user completion directory during bootstrap on Linux
-- Generate `uv` Bash completion with `uv generate-shell-completion bash` and register it directly; generate Zsh completion into the user completion directory after `mise install`
-- Prefer `fzf --bash` / `fzf --zsh` when available, and fall back to distro-provided completion and key-binding scripts for older fzf packages
+- Generate official CLI completions once during bootstrap into the standard XDG Bash and Zsh directories; shell startup only discovers them
+- Provide first-class Bash completion on Linux / WSL and intentionally limited Bash support on macOS
+- Add Homebrew's standard site-functions directory on macOS and keep `zsh-completions` last in `fpath` as a fallback
+- Use the current `fzf --bash` / `fzf --zsh` integration directly
 - `fd-find` maps to `fd`
 - Handle `bat` / `batcat` difference only when needed
 

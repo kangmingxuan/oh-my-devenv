@@ -27,13 +27,5 @@ export MISE_PYTHON_GITHUB_ATTESTATIONS="${MISE_PYTHON_GITHUB_ATTESTATIONS:-$MISE
 log_step "⚙️" "Syncing mise-managed runtimes and tools..."
 mise install --yes
 
-zsh_completion_dir="${XDG_DATA_HOME:-$HOME/.local/share}/zsh/site-functions"
-mkdir -p "$zsh_completion_dir"
-
-if command -v uv >/dev/null 2>&1; then
-  uv generate-shell-completion zsh >"$zsh_completion_dir/_uv"
-  log_info "Installed uv Zsh completion to $zsh_completion_dir/_uv"
-fi
-
 log_info "Current mise toolchain:"
 mise list

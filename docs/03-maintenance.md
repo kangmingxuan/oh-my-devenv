@@ -73,6 +73,7 @@ Third-party dependencies pulled in by this repository fall into these categories
 - **System packages** (`apt`, Homebrew): bump the manifest files (`bootstrap/manifests/system/apt-packages.txt`, `bootstrap/manifests/system/Brewfile`). Prefer stable distro names over version pins.
 - **Desktop assets**: keep the explicit, all-or-nothing platform bundle in `bootstrap/manifests/desktop/`. The macOS Brewfile owns Ghostty, its font cask, and OrbStack; the Ubuntu 26.04+ apt manifest owns Ghostty; `maple-mono-nf-cn.env` pins the Linux font archive URL and SHA-256 digest; and the managed Fontconfig fragment keeps Linux font selection aligned with Ghostty's configured family. Other GUI apps and personal CLIs stay outside this repository's bootstrap contract.
 - **Shell assets** (oh-my-zsh and plugins): managed by explicit Git clone/update. The upstream repository is captured in `bootstrap/manifests/shell/oh-my-zsh-plugins.txt`. That manifest uses a strict two-field, order-sensitive contract shared by four readers (`dot_zshrc.tmpl`, `install-oh-my-zsh-assets.sh`, the `60-check` hook, and `run-smoke-tests.sh`); adding a field or special case means updating all four.
+- **Shell completions**: package-manager assets stay package-owned. Official CLI-generated assets are atomically refreshed by `install-shell-completions.sh` in the standard XDG Bash and Zsh directories, checked by the 60 hook, and enumerated exactly by uninstall. Keep `zsh-completions` last in `fpath` as fallback precedence.
 - **Runtimes** (mise): pinned to complete versions in `xdg_config/mise/config.toml.tmpl`. Bump intentionally.
 - **Binary-distributed tools** (for example `golangci-lint` and `uv`): pinned via mise alongside the runtimes.
 - **Go tools** (`bootstrap/manifests/ecosystem/go-tools.txt`): pin exact module versions so clean installs and existing machines converge.
@@ -98,7 +99,8 @@ Removing a default is as significant as adding one. Before removing:
 environment such as `GOPRIVATE`, `GONOSUMDB`, and `GONOPROXY`. Bash and Zsh read
 it; bootstrap does not. `$XDG_CONFIG_HOME/oh-my-devenv/bootstrap.env` holds
 bootstrap-only controls such as `DOTFILES_MIRROR_MODE`. Neither file may change
-`XDG_CONFIG_HOME`.
+`XDG_CONFIG_HOME` or `XDG_DATA_HOME`; export custom absolute roots before the
+shell or chezmoi starts.
 
 To validate the consumer boundary:
 

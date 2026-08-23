@@ -17,7 +17,7 @@ oh-my-devenv 是一套主观鲜明、可复现的开发环境。它公开的是�
 - **一份来源，跨平台通用** —— macOS（Intel + Apple Silicon）、Ubuntu / Debian 与 WSL 共用同一套模板化基线。
 - **一条命令完成引导** —— `chezmoi init --apply` 通过有序 hook 安装全部内容；重复运行幂等且安全。
 - **分层且可复现** —— chezmoi 统一编排系统软件包、可选桌面资产、shell 资产、[mise](https://mise.jdx.dev/) 运行时与各语言工具，每一层都有自己的清单（manifest）。
-- **受管的 shell** —— `zsh` 搭配 [oh-my-zsh](https://ohmyz.sh/) 插件（autosuggestions、completions、syntax highlighting），并配套 `bash` 配置。
+- **受管的 shell** —— 所有平台上的 Zsh 与 Linux / WSL 上的 Bash 都提供完整自动补全；macOS Bash 则刻意只保留有限支持。
 - **锁定版本的运行时** —— 通过 mise 管理 Go、Node、Python 与 golangci-lint，外加 `gopls`、`dlv`、`ruff`、`basedpyright`、`pre-commit` 等生态工具。
 - **现代 CLI 工具箱** —— ripgrep、fd、bat、fzf、jq、direnv、tmux、shellcheck、shfmt 等。
 - **可选桌面基线** —— 一个全有或全无的平台包：受支持的工作站安装 Ghostty 与 Maple Mono NF CN，macOS 额外安装 OrbStack，Ubuntu 26.04+ 配置所需的 Fontconfig 别名规则。

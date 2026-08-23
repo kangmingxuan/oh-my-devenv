@@ -237,6 +237,7 @@ check_cmd git
 check_cmd curl
 check_cmd zsh
 check_cmd mise
+check_cmd usage
 check_path "$XDG_CONFIG_HOME/mise/config.toml" "mise config"
 
 # Runtimes
@@ -256,6 +257,9 @@ check_cmd shfmt
 # Shell assets
 check_path "$HOME/.oh-my-zsh/oh-my-zsh.sh" "oh-my-zsh"
 check_oh_my_zsh_plugins "$manifests_dir/shell/oh-my-zsh-plugins.txt" "${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}"
+if ! bash "$scripts_dir/install-shell-completions.sh" check '{{ .chezmoi.os }}'; then
+  errors=$((errors + 1))
+fi
 
 {{ if and $desktopBaseline $isSupportedDesktop -}}
 # Desktop baseline

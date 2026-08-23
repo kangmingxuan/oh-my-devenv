@@ -85,7 +85,8 @@ Bootstrap is split into ordered hooks under `.chezmoiscripts/`:
 6. **`run_after_35-*`** — apply the dedicated `xdg_config/` chezmoi source directly under `$XDG_CONFIG_HOME`.
 7. **`run_onchange_after_40-*`** — install language runtimes via mise.
 8. **`run_onchange_after_50-*`** — sync ecosystem tools (`go install`, `uv tool`, etc.).
-9. **`run_onchange_after_60-*`** — final environment check and a short “welcome” summary.
+9. **`run_onchange_after_55-*`** — generate official Bash / Zsh completion assets in standard user data directories.
+10. **`run_onchange_after_60-*`** — final environment check and a short “welcome” summary.
 
 The generated chezmoi config excludes scripts from `chezmoi status`, so routine hook runs do not make a clean setup look locally modified.
 

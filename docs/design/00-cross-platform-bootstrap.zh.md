@@ -101,6 +101,7 @@
 │   ├── run_after_35-apply-xdg-config.sh.tmpl
 │   ├── run_onchange_after_40-install-runtimes.sh.tmpl
 │   ├── run_onchange_after_50-sync-ecosystem-tools.sh.tmpl
+│   ├── run_onchange_after_55-install-shell-completions.sh.tmpl
 │   └── run_onchange_after_60-check.sh.tmpl
 ├── bootstrap/
 │   ├── manifests/
@@ -166,7 +167,8 @@
 6. `run_after_35-apply-xdg-config.sh.tmpl`
 7. `run_onchange_after_40-install-runtimes.sh.tmpl`
 8. `run_onchange_after_50-sync-ecosystem-tools.sh.tmpl`
-9. `run_onchange_after_60-check.sh.tmpl`
+9. `run_onchange_after_55-install-shell-completions.sh.tmpl`
+10. `run_onchange_after_60-check.sh.tmpl`
 
 要求：
 
@@ -342,9 +344,10 @@ dotfiles 需要保证：
 对于 Debian/Ubuntu 中的命名差异，可做最小兼容处理：
 
 - `bash-completion` 这类 shell 启动时直接依赖的支持包，继续由系统包管理器提供
-- `mise` 的 Bash 补全仅在已加载的 `bash-completion` helper 足够新时启用；Linux 下的 Zsh 补全在 bootstrap 阶段生成到用户 completion 目录
-- `uv` 的 Bash 补全直接使用 `uv generate-shell-completion bash` 生成并注册；Zsh 补全在 `mise install` 后生成到用户 completion 目录
-- `fzf` 优先使用 `fzf --bash` / `fzf --zsh`，旧版本回退到发行版提供的 completion 与 key-bindings 脚本
+- CLI 官方提供的补全在 bootstrap 阶段统一生成到标准 XDG Bash / Zsh 目录；shell 启动时只负责发现
+- Linux / WSL 的 Bash 提供完整补全，macOS Bash 刻意只保留有限支持
+- macOS 显式加入 Homebrew 标准 site-functions 目录，并将 `zsh-completions` 放在 `fpath` 最后作为 fallback
+- 直接使用当前的 `fzf --bash` / `fzf --zsh` 集成
 - `fd-find` 对应 `fd`
 - `bat` / `batcat` 差异按需处理
 

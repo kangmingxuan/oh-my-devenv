@@ -72,48 +72,25 @@ alias la='ls -A'
 alias l='ls -CF'
 
 # --- Bash Completion ---
-# Enable programmable completion features.
-# This is optional when completion is already enabled globally.
-if ! shopt -oq posix; then
-  if [ -f /usr/share/bash-completion/bash_completion ]; then
-    # shellcheck disable=SC1091
-    source /usr/share/bash-completion/bash_completion
-  elif [ -f /etc/bash_completion ]; then
-    # shellcheck disable=SC1091
-    source /etc/bash_completion
-  fi
+{{- if eq .chezmoi.os "linux" }}
+# Debian and Ubuntu expose user completions through bash-completion's standard
+# XDG data directory. macOS Bash is intentionally limited to basic shell setup.
+if [[ -r /usr/share/bash-completion/bash_completion ]]; then
+  # shellcheck disable=SC1091
+  source /usr/share/bash-completion/bash_completion
 fi
+{{- end }}
 
 # --- Custom Configurations ---
 if command -v mise >/dev/null 2>&1; then
   eval "$(mise activate bash)"
-
-  # Register completions only when the loaded bash-completion library exposes
-  # the helpers required by `mise completion bash`.
-  if declare -F _comp_initialize >/dev/null 2>&1 && ! complete -p mise >/dev/null 2>&1; then
-    eval "$(mise completion bash 2>/dev/null)"
-  fi
 fi
 
-if command -v uv >/dev/null 2>&1 && ! complete -p uv >/dev/null 2>&1; then
-  eval "$(uv generate-shell-completion bash 2>/dev/null)"
-fi
-
+{{- if eq .chezmoi.os "linux" }}
 if command -v fzf >/dev/null 2>&1; then
-  if fzf_shell_integration="$(fzf --bash 2>/dev/null)" && [[ -n "$fzf_shell_integration" ]]; then
-    eval "$fzf_shell_integration"
-  else
-    if [[ -f /usr/share/bash-completion/completions/fzf ]]; then
-      # shellcheck disable=SC1091
-      source /usr/share/bash-completion/completions/fzf
-    fi
-    if [[ -f /usr/share/doc/fzf/examples/key-bindings.bash ]]; then
-      # shellcheck disable=SC1091
-      source /usr/share/doc/fzf/examples/key-bindings.bash
-    fi
-  fi
-  unset fzf_shell_integration
+  eval "$(fzf --bash)"
 fi
+{{- end }}
 
 # Set GPG_TTY for GPG agent to work properly in terminal.
 if [[ -t 0 ]]; then
