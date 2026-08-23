@@ -717,11 +717,16 @@ done
 
 git_config_example="$overlay_examples_dir/git-config.example"
 git_hook_example="$overlay_examples_dir/git-pre-push.example"
+mise_config_example="$overlay_examples_dir/mise-config.local.toml.example"
 assert_file_contains "$git_config_example" '[hook "oh-my-devenv-identity-guard"]'
 assert_file_contains "$git_config_example" "event = pre-push"
 assert_file_contains "$git_config_example" "<absolute-xdg-config-home>/oh-my-devenv/git/hooks/pre-push"
 # shellcheck disable=SC2016
 assert_file_contains "$git_hook_example" '$XDG_CONFIG_HOME/oh-my-devenv/git/hooks/pre-push'
+# shellcheck disable=SC2016
+assert_file_contains "$mise_config_example" '$XDG_CONFIG_HOME/mise/config.local.toml'
+# shellcheck disable=SC2016
+assert_file_contains "$mise_config_example" '--path "${XDG_CONFIG_HOME:-$HOME/.config}/mise/config.local.toml"'
 git config --file "$git_config_example" --list >/dev/null
 
 log_step "📁" "Applying the nested XDG chezmoi source..."
@@ -744,6 +749,9 @@ xdg_managed_listing="$(XDG_CONFIG_HOME="$xdg_test_home" XDG_STATE_HOME="$xdg_tes
   bash "$repo_root/bootstrap/scripts/xdg-config.sh" managed "$xdg_test_config")"
 if ! grep -Fxq "$xdg_test_home/mise/config.toml" <<<"$xdg_managed_listing"; then
   fail_test "nested XDG source does not manage mise/config.toml under XDG_CONFIG_HOME"
+fi
+if grep -Fxq "$xdg_test_home/mise/config.local.toml" <<<"$xdg_managed_listing"; then
+  fail_test "nested XDG source must not manage the mise local overlay"
 fi
 if ! grep -Fxq "$xdg_test_home/fontconfig/conf.d/99-oh-my-devenv-maple-mono-nf-cn.conf" <<<"$xdg_managed_listing"; then
   fail_test "nested XDG source does not manage the Fontconfig fragment under XDG_CONFIG_HOME"

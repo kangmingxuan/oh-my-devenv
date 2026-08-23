@@ -27,6 +27,7 @@ This repository versions the baseline with [Semantic Versioning 2.0](https://sem
 - Bilingual landing page: a Chinese `README.zh.md` translation of the root README, with a language switcher linking it and the English `README.md` together.
 - `docs/02-reference.md`: a single lookup page for the bootstrap hooks, what gets installed, day-to-day commands, and every environment variable / flag the baseline understands.
 - Centrally generated CLI completions in the standard Bash and Zsh user data directories, including `uvx` and Linux `bat` adapters.
+- A documented, uninstall-protected mise local overlay for machine-only global tools and settings.
 
 ### Changed
 
