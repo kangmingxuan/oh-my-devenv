@@ -85,7 +85,7 @@ command -v git curl chezmoi
 Use the repository URL below.
 
 The baseline honors `XDG_CONFIG_HOME` for managed mise, Ghostty, and Fontconfig
-files plus the `oh-my-devenv` and Ghostty overlays. It defaults to
+files plus the `oh-my-devenv`, mise, and Ghostty overlays. It defaults to
 `$HOME/.config`. To use a different config root, export an absolute path before
 running `chezmoi`; local env files must not set or change it:
 

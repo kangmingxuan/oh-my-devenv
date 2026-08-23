@@ -200,6 +200,7 @@ common slots:
 - `$XDG_CONFIG_HOME/oh-my-devenv/git/config` — user-owned Git preferences on top of the managed identity.
 - `$XDG_CONFIG_HOME/oh-my-devenv/git/hooks/*` — optional Git 2.54+ configured hooks that coexist with repository-local `.git/hooks/*`.
 - `~/.ssh/config.d/*.conf` — extra SSH hosts.
+- `$XDG_CONFIG_HOME/mise/config.local.toml` — machine-only mise tools and settings merged with the managed global baseline; overriding baseline keys requires mise 2026.8.5 or newer.
 - `$XDG_CONFIG_HOME/ghostty/config.local.ghostty` — machine-only Ghostty overrides loaded after the managed baseline.
 
 ## Related documents

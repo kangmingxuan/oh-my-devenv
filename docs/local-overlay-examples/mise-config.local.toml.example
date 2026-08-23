@@ -1,0 +1,20 @@
+# $XDG_CONFIG_HOME/mise/config.local.toml
+#
+# Machine-local mise tools and settings merged with the managed global baseline
+# without changing $XDG_CONFIG_HOME/mise/config.toml. This overlay requires mise
+# 2026.8.5 or newer so conflicting local values override config.toml.
+#
+# Prefer letting mise create or update the real overlay with an explicit path:
+#
+#   mise use \
+#     --path "${XDG_CONFIG_HOME:-$HOME/.config}/mise/config.local.toml" \
+#     --pin <tool>@<version>
+#
+# `mise use --global` writes the managed config.toml instead, while
+# `mise use --env local` writes a project-local mise.local.toml.
+
+[tools]
+# <tool> = "<complete-version>"
+
+[settings]
+# jobs = 4

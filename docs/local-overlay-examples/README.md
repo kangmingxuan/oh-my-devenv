@@ -16,6 +16,7 @@ the baseline leaves to each user's home directory or user-owned tool config:
 | `git-pre-push.example` | `$XDG_CONFIG_HOME/oh-my-devenv/git/hooks/*` | Git configured hooks (2.54+) | tool-native guardrails |
 | `ssh-config.d.corp.conf.example` | `$HOME/.ssh/config.d/*.conf` | OpenSSH Include | tool-native configuration |
 | `npmrc.example` | `$HOME/.npmrc` | npm | tool-native configuration |
+| `mise-config.local.toml.example` | `$XDG_CONFIG_HOME/mise/config.local.toml` | mise | tool-native configuration |
 | `ghostty-config.local.ghostty.example` | `$XDG_CONFIG_HOME/ghostty/config.local.ghostty` | Ghostty | tool-native configuration |
 
 The machine-readable source for this table is
@@ -61,7 +62,10 @@ local env files must not set or change `XDG_CONFIG_HOME`.
    one that should not before you trust it.
 7. For Ghostty overrides, open a new terminal window after copying the example;
    `ghostty +show-config` should exit successfully and show the effective values.
-8. Keep responsibilities clean:
+8. For machine-local mise tools, prefer `mise use --path` as documented below;
+   it installs the tool and updates the overlay without editing the managed
+   global config.
+9. Keep responsibilities clean:
    - `$XDG_CONFIG_HOME/oh-my-devenv/env.sh` is for persistent, non-secret exports that Bash and Zsh should load.
    - `$XDG_CONFIG_HOME/oh-my-devenv/bootstrap.env` is for non-secret settings consumed only by bootstrap tooling.
    - `$XDG_CONFIG_HOME/oh-my-devenv/secrets.sh` is for shell-compatible secrets that interactive Bash and Zsh read automatically; bootstrap and non-interactive shell commands never read it automatically.
@@ -69,7 +73,42 @@ local env files must not set or change `XDG_CONFIG_HOME`.
    - The managed `~/.gitconfig` keeps your default Git identity; `$XDG_CONFIG_HOME/oh-my-devenv/git/config` is for user-owned Git preferences and guardrail registration.
    - `$XDG_CONFIG_HOME/oh-my-devenv/git/hooks/*` contains user-owned Git 2.54+ configured hooks, not public baseline behavior.
    - `~/.npmrc` is the right home for scoped internal npm registry configuration.
+   - `$XDG_CONFIG_HOME/mise/config.local.toml` is for machine-only global mise tools and settings merged with the managed baseline.
    - `$XDG_CONFIG_HOME/ghostty/config.local.ghostty` is for machine-only appearance, sizing, or keybinding overrides on top of the shared Ghostty baseline.
+
+## mise Machine-Local Configuration
+
+mise natively merges `$XDG_CONFIG_HOME/mise/config.local.toml` with the managed
+`config.toml`, with conflicting local values taking precedence. This overlay
+requires mise 2026.8.5 or newer. Check the installed version and, when
+necessary, update it through the same installation channel:
+
+```bash
+mise --version
+brew upgrade mise    # macOS Homebrew install
+mise self-update     # standalone Linux/WSL install
+```
+
+Create or update the overlay with an explicit path:
+
+```bash
+mise_local_config="${XDG_CONFIG_HOME:-$HOME/.config}/mise/config.local.toml"
+install -d "$(dirname "$mise_local_config")"
+mise use --path "$mise_local_config" --pin <tool>@<version>
+```
+
+Use `mise config set --file "$mise_local_config" <key> <value>` when you only
+want to update TOML without installing a tool. Verify the active configuration
+afterward:
+
+```bash
+mise config ls
+mise current
+```
+
+Do not use `mise use --global` for machine-only tools because it writes the
+chezmoi-managed `config.toml`. `mise use --env local` is also a different scope:
+it writes a project-local `mise.local.toml` in the current directory.
 
 ## Git Configuration and Hooks
 
