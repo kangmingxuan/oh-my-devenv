@@ -13,7 +13,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-            curl git zsh ca-certificates xz-utils shellcheck
+            curl git zsh bash-completion bat ca-certificates xz-utils shellcheck
       - name: Install chezmoi
         run: |
           mkdir -p "$HOME/.local/bin"

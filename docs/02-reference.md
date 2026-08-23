@@ -24,7 +24,8 @@ manifest changes (chezmoi tracks a content hash), so routine re-applies are chea
 | 6 | `run_after_35-apply-xdg-config` | Applies the dedicated `xdg_config/` chezmoi source directly under `$XDG_CONFIG_HOME`. |
 | 7 | `run_onchange_after_40-install-runtimes` | Runs `mise install` to fetch the pinned runtimes. |
 | 8 | `run_onchange_after_50-sync-ecosystem-tools` | Installs the Go tools (`go install`) and Python tools (`uv tool`). |
-| 9 | `run_onchange_after_60-check` | Final environment check. On success prints **`All checks passed.`**, a core-tool version list, and a short next-steps block. |
+| 9 | `run_onchange_after_55-install-shell-completions` | Generates official CLI completion assets in the standard Bash and Zsh user data directories. |
+| 10 | `run_onchange_after_60-check` | Final environment check. On success prints **`All checks passed.`**, a core-tool version list, and a short next-steps block. |
 
 The first-run backups land under
 `${XDG_STATE_HOME:-$HOME/.local/state}/chezmoi-first-run-backup/<timestamp>/`.
@@ -44,7 +45,7 @@ is the source of truth for exact packages and pinned versions.
 | Desktop assets | Homebrew (macOS) | [`bootstrap/manifests/desktop/Brewfile`](../bootstrap/manifests/desktop/Brewfile) | Ghostty, Maple Mono NF CN, and OrbStack |
 | Desktop terminal | `apt` + managed config (Ubuntu 26.04+) | [`bootstrap/manifests/desktop/apt-packages.txt`](../bootstrap/manifests/desktop/apt-packages.txt) | Ghostty, Fontconfig support, and a managed `monospace` compatibility rule |
 | Desktop font | verified archive (Ubuntu 26.04+) | [`bootstrap/manifests/desktop/maple-mono-nf-cn.env`](../bootstrap/manifests/desktop/maple-mono-nf-cn.env) | pinned Maple Mono NF CN release installed under the user data directory |
-| Runtimes and binary tools | [mise](https://mise.jdx.dev/) | [`xdg_config/mise/config.toml.tmpl`](../xdg_config/mise/config.toml.tmpl) | go, node, python, golangci-lint, uv (versions pinned here) |
+| Runtimes and binary tools | [mise](https://mise.jdx.dev/) | [`xdg_config/mise/config.toml.tmpl`](../xdg_config/mise/config.toml.tmpl) | go, node, python, golangci-lint, uv, usage (versions pinned here) |
 | Go tools | `go install` | [`bootstrap/manifests/ecosystem/go-tools.txt`](../bootstrap/manifests/ecosystem/go-tools.txt) | gopls, dlv |
 | Python tools | `uv tool` | [`bootstrap/manifests/ecosystem/uv-tools.txt`](../bootstrap/manifests/ecosystem/uv-tools.txt) | ruff, basedpyright, pre-commit |
 | Shell assets | git clone | [`bootstrap/manifests/shell/oh-my-zsh-plugins.txt`](../bootstrap/manifests/shell/oh-my-zsh-plugins.txt) | oh-my-zsh + zsh-autosuggestions, zsh-completions, zsh-syntax-highlighting |
@@ -113,6 +114,23 @@ For a one-off setting not persisted in `bootstrap.env`, export it before
 | Variable | Default | Effect |
 |----------|---------|--------|
 | `XDG_CONFIG_HOME` | `$HOME/.config` | Absolute destination for managed mise, Ghostty, and Fontconfig files plus the `oh-my-devenv` and Ghostty overlays. Export a custom value before starting the shell or running `chezmoi`; local env files must not change it. Relative values are ignored with a warning. |
+| `XDG_DATA_HOME` | `$HOME/.local/share` | Absolute root for generated Bash and Zsh completion assets and other user data. Export it before starting the shell or running `chezmoi`; local env files must not change it. Relative values are ignored with a warning. |
+
+### Shell completion contract
+
+Linux / WSL provides first-class Bash and Zsh completion. macOS provides
+first-class Zsh completion; its system Bash receives only the basic managed
+environment. Package-manager completions are used directly. Completions that a
+CLI officially generates are installed by the 55 hook under:
+
+- `$XDG_DATA_HOME/bash-completion/completions/<command>.bash`
+- `$XDG_DATA_HOME/zsh/site-functions/_<command>`
+
+Zsh puts the user site-functions directory before system and Homebrew sources
+when oh-my-zsh initializes completion. The `zsh-completions` plugin remains
+installed but is appended last, so it acts only as a fallback. Machine-local
+completion files use the same standard directories; no project-specific loader
+or glob convention is required.
 
 ### Output
 

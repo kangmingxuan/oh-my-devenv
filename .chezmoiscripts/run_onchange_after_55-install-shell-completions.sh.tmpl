@@ -1,0 +1,21 @@
+#!/bin/bash
+# completion installer hash: {{ include "bootstrap/scripts/install-shell-completions.sh" | sha256sum }}
+# mise config hash: {{ include "xdg_config/mise/config.toml.tmpl" | sha256sum }}
+# go-tools.txt hash: {{ include "bootstrap/manifests/ecosystem/go-tools.txt" | sha256sum }}
+# uv-tools.txt hash: {{ include "bootstrap/manifests/ecosystem/uv-tools.txt" | sha256sum }}
+
+set -euo pipefail
+
+bootstrap_dir='{{ joinPath .chezmoi.sourceDir "bootstrap" }}'
+scripts_dir="$bootstrap_dir/scripts"
+
+source "$scripts_dir/common.sh"
+install_error_trap "$0"
+source "$scripts_dir/go-env.sh"
+
+setup_go_env
+export PATH="$HOME/.local/bin:$HOME/.local/share/mise/shims:$GOBIN:$PATH"
+
+log_step "🧩" "Installing shell completions..."
+bash "$scripts_dir/install-shell-completions.sh" install '{{ .chezmoi.os }}'
+log_info "Shell completions installed."

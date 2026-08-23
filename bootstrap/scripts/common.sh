@@ -249,10 +249,10 @@ uv_tool_binary_name() {
 common_script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 common_repo_root="$(cd "$common_script_dir/../.." && pwd)"
 
-# Resolve XDG_CONFIG_HOME before bootstrap reads any local configuration.
+# Resolve XDG directories before bootstrap reads any local configuration.
 # shellcheck disable=SC1091
 source "$common_repo_root/dot_local/share/oh-my-devenv/xdg.sh"
-oh_my_devenv_setup_xdg_config_home
+oh_my_devenv_setup_xdg_dirs
 oh_my_devenv_source_env_file "$XDG_CONFIG_HOME/oh-my-devenv/bootstrap.env"
 
 # shellcheck disable=SC1091

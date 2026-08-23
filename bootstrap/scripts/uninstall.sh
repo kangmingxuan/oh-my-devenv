@@ -51,7 +51,7 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "$script_dir/../.." && pwd)"
 # shellcheck disable=SC1091
 source "$repo_root/dot_local/share/oh-my-devenv/xdg.sh"
-oh_my_devenv_setup_xdg_config_home
+oh_my_devenv_setup_xdg_dirs
 # shellcheck disable=SC1091
 source "$script_dir/local-overlays.sh"
 local_overlay_load
@@ -208,6 +208,15 @@ for line in "${managed_lines[@]}" "${xdg_managed_lines[@]}"; do
 done
 
 add_candidate "${XDG_STATE_HOME:-$HOME/.local/state}/chezmoi/oh-my-devenv-xdg.boltdb"
+
+case "$(uname -s)" in
+  Darwin) completion_platform=darwin ;;
+  *) completion_platform=linux ;;
+esac
+while IFS= read -r completion_file; do
+  add_candidate "$completion_file"
+done < <(bash "$script_dir/install-shell-completions.sh" list "$completion_platform")
+unset completion_file completion_platform
 
 if [[ -d "$HOME/.oh-my-zsh" ]]; then
   add_candidate "$HOME/.oh-my-zsh"

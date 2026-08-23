@@ -57,10 +57,3 @@ else
 fi
 
 "$mise_bin" --version
-
-{{ if ne .chezmoi.os "darwin" -}}
-zsh_completion_dir="${XDG_DATA_HOME:-$HOME/.local/share}/zsh/site-functions"
-mkdir -p "$zsh_completion_dir"
-"$mise_bin" completion zsh >"$zsh_completion_dir/_mise"
-log_info "Installed mise Zsh completion to $zsh_completion_dir/_mise"
-{{ end -}}

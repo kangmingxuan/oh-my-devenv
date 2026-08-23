@@ -225,7 +225,7 @@ xdg_persistent_state_literal='--persistent-state="$xdg_persistent_state"'
 
 log_step "🧪" "Running local smoke tests..."
 
-log_step "📂" "Checking XDG_CONFIG_HOME resolution..."
+log_step "📂" "Checking XDG directory resolution..."
 xdg_resolver="$repo_root/dot_local/share/oh-my-devenv/xdg.sh"
 syntax_check bash "$xdg_resolver"
 syntax_check zsh "$xdg_resolver"
@@ -264,11 +264,25 @@ if [[ "$relative_xdg" != "$tmp_dir/home/.config" ]]; then
 fi
 assert_file_contains "$tmp_dir/relative-xdg.err" "ignoring relative XDG_CONFIG_HOME=relative/config"
 
+# shellcheck disable=SC2016
+resolve_xdg_data_command='source "$1"; oh_my_devenv_setup_xdg_data_home; printf "%s\n" "$XDG_DATA_HOME"'
+default_xdg_data="$(env -i PATH="/usr/bin:/bin" HOME="$tmp_dir/home" \
+  bash -c "$resolve_xdg_data_command" _ "$xdg_resolver")"
+if [[ "$default_xdg_data" != "$tmp_dir/home/.local/share" ]]; then
+  fail_test "unset XDG_DATA_HOME resolved to '$default_xdg_data'"
+fi
+relative_xdg_data="$(env -i PATH="/usr/bin:/bin" HOME="$tmp_dir/home" XDG_DATA_HOME="relative/data" \
+  bash -c "$resolve_xdg_data_command" _ "$xdg_resolver" 2>"$tmp_dir/relative-xdg-data.err")"
+if [[ "$relative_xdg_data" != "$tmp_dir/home/.local/share" ]]; then
+  fail_test "relative XDG_DATA_HOME resolved to '$relative_xdg_data'"
+fi
+assert_file_contains "$tmp_dir/relative-xdg-data.err" "ignoring relative XDG_DATA_HOME=relative/data"
+
 mkdir -p "$tmp_dir/env-boundary/oh-my-devenv"
 printf '%s\n' 'export OH_MY_DEVENV_SMOKE_SHELL=loaded' >"$tmp_dir/env-boundary/oh-my-devenv/env.sh"
 printf '%s\n' 'export OH_MY_DEVENV_SMOKE_BOOTSTRAP=loaded' >"$tmp_dir/env-boundary/oh-my-devenv/bootstrap.env"
 # shellcheck disable=SC2016
-source_env_command='source "$1"; oh_my_devenv_setup_xdg_config_home; oh_my_devenv_source_env_file "$XDG_CONFIG_HOME/oh-my-devenv/env.sh"; printf "%s:%s\n" "${OH_MY_DEVENV_SMOKE_SHELL:-unset}" "${OH_MY_DEVENV_SMOKE_BOOTSTRAP:-unset}"'
+source_env_command='source "$1"; oh_my_devenv_setup_xdg_dirs; oh_my_devenv_source_env_file "$XDG_CONFIG_HOME/oh-my-devenv/env.sh"; printf "%s:%s\n" "${OH_MY_DEVENV_SMOKE_SHELL:-unset}" "${OH_MY_DEVENV_SMOKE_BOOTSTRAP:-unset}"'
 loaded_env="$(env -i PATH="/usr/bin:/bin" HOME="$tmp_dir/home" XDG_CONFIG_HOME="$tmp_dir/env-boundary" \
   bash -c "$source_env_command" \
   _ "$xdg_resolver")"
@@ -290,7 +304,7 @@ for guarded_env_name in env.sh bootstrap.env; do
   mkdir -p "$guarded_env_root/oh-my-devenv"
   printf '%s\n' 'unset XDG_CONFIG_HOME' >"$guarded_env_root/oh-my-devenv/$guarded_env_name"
   # shellcheck disable=SC2016
-  source_moving_env_command='source "$1"; oh_my_devenv_setup_xdg_config_home; if oh_my_devenv_source_env_file "$XDG_CONFIG_HOME/oh-my-devenv/$2"; then exit 1; fi; printf "%s\n" "$XDG_CONFIG_HOME"'
+  source_moving_env_command='source "$1"; oh_my_devenv_setup_xdg_dirs; if oh_my_devenv_source_env_file "$XDG_CONFIG_HOME/oh-my-devenv/$2"; then exit 1; fi; printf "%s\n" "$XDG_CONFIG_HOME"'
   restored_xdg="$(XDG_CONFIG_HOME="$guarded_env_root" \
     bash -c "$source_moving_env_command" \
     _ "$xdg_resolver" "$guarded_env_name" 2>"$tmp_dir/$guarded_env_name-moved-xdg.err")"
@@ -305,6 +319,22 @@ render_template dot_zshrc.tmpl "$tmp_dir/dot_zshrc"
 syntax_check zsh "$tmp_dir/dot_zshrc"
 assert_file_contains "$tmp_dir/dot_zshrc" "$shared_secrets_literal"
 assert_file_contains "$tmp_dir/dot_zshrc" "$zsh_overlay_literal"
+# shellcheck disable=SC2016
+user_fpath_line="$(grep -nF 'fpath=("$XDG_DATA_HOME/zsh/site-functions" $fpath)' "$tmp_dir/dot_zshrc" | cut -d: -f1)"
+fallback_fpath_line="$(grep -nF 'zsh-completions/src' "$tmp_dir/dot_zshrc" | cut -d: -f1)"
+# shellcheck disable=SC2016
+omz_source_line="$(grep -nF 'source "$ZSH/oh-my-zsh.sh"' "$tmp_dir/dot_zshrc" | cut -d: -f1)"
+if [[ -z "$user_fpath_line" || -z "$fallback_fpath_line" || -z "$omz_source_line" \
+  || "$user_fpath_line" -ge "$fallback_fpath_line" || "$fallback_fpath_line" -ge "$omz_source_line" ]]; then
+  fail_test "Zsh completion fpath precedence must be user, system/oh-my-zsh, then zsh-completions fallback"
+fi
+synthetic_macos_zshrc="$tmp_dir/dot_zshrc.macos"
+chezmoi --source="$repo_root" \
+  --override-data '{"chezmoi":{"os":"darwin","osRelease":null,"kernel":null}}' \
+  execute-template --file "$repo_root/dot_zshrc.tmpl" >"$synthetic_macos_zshrc"
+syntax_check zsh "$synthetic_macos_zshrc"
+# shellcheck disable=SC2016
+assert_file_contains "$synthetic_macos_zshrc" 'fpath+=("$HOMEBREW_PREFIX/share/zsh/site-functions")'
 
 render_template dot_zprofile.tmpl "$tmp_dir/dot_zprofile"
 syntax_check zsh "$tmp_dir/dot_zprofile"
@@ -312,7 +342,7 @@ syntax_check zsh "$tmp_dir/dot_zprofile"
 render_template dot_zsh/env.zsh.tmpl "$tmp_dir/env.zsh"
 syntax_check zsh "$tmp_dir/env.zsh"
 assert_file_contains "$tmp_dir/env.zsh" "$xdg_source_literal"
-assert_file_contains "$tmp_dir/env.zsh" "oh_my_devenv_setup_xdg_config_home"
+assert_file_contains "$tmp_dir/env.zsh" "oh_my_devenv_setup_xdg_dirs"
 assert_file_contains "$tmp_dir/env.zsh" "oh_my_devenv_source_env_file"
 assert_file_contains "$tmp_dir/env.zsh" "$env_overlay_literal"
 assert_file_not_contains "$tmp_dir/env.zsh" "$bootstrap_overlay_literal"
@@ -329,7 +359,7 @@ render_template dot_bash/env.bash.tmpl "$tmp_dir/env.bash"
 syntax_check bash "$tmp_dir/env.bash"
 shellcheck_rendered_bash "$tmp_dir/env.bash"
 assert_file_contains "$tmp_dir/env.bash" "$xdg_source_literal"
-assert_file_contains "$tmp_dir/env.bash" "oh_my_devenv_setup_xdg_config_home"
+assert_file_contains "$tmp_dir/env.bash" "oh_my_devenv_setup_xdg_dirs"
 assert_file_contains "$tmp_dir/env.bash" "oh_my_devenv_source_env_file"
 assert_file_contains "$tmp_dir/env.bash" "$env_overlay_literal"
 assert_file_not_contains "$tmp_dir/env.bash" "$bootstrap_overlay_literal"
@@ -346,7 +376,7 @@ assert_file_not_contains "$tmp_dir/dot_gitconfig" 'insteadOf'
 
 render_template private_dot_ssh/private_config.tmpl "$tmp_dir/private_dot_ssh_config"
 assert_file_contains "$tmp_dir/private_dot_ssh_config" "$ssh_include_literal"
-assert_file_contains "$repo_root/bootstrap/scripts/common.sh" "oh_my_devenv_setup_xdg_config_home"
+assert_file_contains "$repo_root/bootstrap/scripts/common.sh" "oh_my_devenv_setup_xdg_dirs"
 assert_file_contains "$repo_root/bootstrap/scripts/common.sh" "oh_my_devenv_source_env_file"
 assert_file_contains "$repo_root/bootstrap/scripts/common.sh" "$bootstrap_overlay_literal"
 assert_file_not_contains "$repo_root/bootstrap/scripts/common.sh" "$env_overlay_literal"
@@ -486,6 +516,76 @@ syntax_check bash "$tmp_dir/run_onchange_after_50-sync-ecosystem-tools.sh"
 shellcheck_rendered_bash "$tmp_dir/run_onchange_after_50-sync-ecosystem-tools.sh"
 assert_file_contains "$tmp_dir/run_onchange_after_50-sync-ecosystem-tools.sh" "install_error_trap"
 
+render_template .chezmoiscripts/run_onchange_after_55-install-shell-completions.sh.tmpl "$tmp_dir/run_onchange_after_55-install-shell-completions.sh"
+syntax_check bash "$tmp_dir/run_onchange_after_55-install-shell-completions.sh"
+shellcheck_rendered_bash "$tmp_dir/run_onchange_after_55-install-shell-completions.sh"
+assert_file_contains "$tmp_dir/run_onchange_after_55-install-shell-completions.sh" "install-shell-completions.sh\" install"
+
+log_step "🧩" "Testing generated shell completion assets..."
+completion_installer="$repo_root/bootstrap/scripts/install-shell-completions.sh"
+completion_stub_bin="$tmp_dir/completion-stub-bin"
+completion_linux_data="$tmp_dir/completion-linux-data"
+completion_macos_data="$tmp_dir/completion-macos-data"
+mkdir -p "$completion_stub_bin"
+cat >"$completion_stub_bin/completion-generator" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+command_name="${0##*/}"
+shell_name="${2:-}"
+if [[ "${FAIL_COMPLETION_FOR:-}" == "$command_name" ]]; then
+  exit 1
+fi
+if [[ "$shell_name" == zsh ]]; then
+  printf '#compdef %s\n_arguments "*:value:((stub))"\n' "$command_name"
+else
+  function_name="${command_name//-/_}_completion"
+  printf '%s() { COMPREPLY=(stub); }\ncomplete -F %s %s\n' \
+    "$function_name" "$function_name" "$command_name"
+fi
+EOF
+chmod +x "$completion_stub_bin/completion-generator"
+for completion_command in uv uvx golangci-lint dlv ruff chezmoi mise; do
+  ln -s completion-generator "$completion_stub_bin/$completion_command"
+done
+
+if [[ "$(uname -s)" != Darwin ]]; then
+  PATH="$completion_stub_bin:/usr/bin:/bin" XDG_DATA_HOME="$completion_linux_data" \
+    bash "$completion_installer" install linux
+  PATH="$completion_stub_bin:/usr/bin:/bin" XDG_DATA_HOME="$completion_linux_data" \
+    bash "$completion_installer" check linux
+  for completion_command in uv uvx golangci-lint dlv ruff chezmoi mise bat; do
+    [[ -s "$completion_linux_data/zsh/site-functions/_$completion_command" ]] || \
+      fail_test "missing Linux Zsh completion for $completion_command"
+    [[ -s "$completion_linux_data/bash-completion/completions/$completion_command.bash" ]] || \
+      fail_test "missing Linux Bash completion for $completion_command"
+  done
+  assert_file_contains "$completion_linux_data/bash-completion/completions/bat.bash" "complete -F _bat bat"
+  assert_file_contains "$completion_linux_data/zsh/site-functions/_bat" "#compdef bat"
+  bash -c 'source "$1"; complete -p uv' \
+    _ "$completion_linux_data/bash-completion/completions/uv.bash" >/dev/null
+  zsh -fc 'fpath=("$1" ${fpath:#/usr/share/zsh/vendor-completions}); autoload -Uz compinit; compinit -D -i; [[ "${_comps[uv]}" == _uv ]]' \
+    _ "$completion_linux_data/zsh/site-functions"
+fi
+
+PATH="$completion_stub_bin:/usr/bin:/bin" XDG_DATA_HOME="$completion_macos_data" \
+  bash "$completion_installer" install darwin
+PATH="$completion_stub_bin:/usr/bin:/bin" XDG_DATA_HOME="$completion_macos_data" \
+  bash "$completion_installer" check darwin
+if [[ -e "$completion_macos_data/bash-completion" \
+  || -e "$completion_macos_data/zsh/site-functions/_mise" \
+  || -e "$completion_macos_data/zsh/site-functions/_bat" ]]; then
+  fail_test "macOS completion install must remain Zsh-only and leave package-owned mise/bat completions alone"
+fi
+
+printf '%s\n' preserved >"$completion_macos_data/zsh/site-functions/_uv"
+if PATH="$completion_stub_bin:/usr/bin:/bin" XDG_DATA_HOME="$completion_macos_data" \
+  FAIL_COMPLETION_FOR=uv bash "$completion_installer" install darwin >/dev/null 2>&1; then
+  fail_test "completion installation must fail when a generator fails"
+fi
+if [[ "$(<"$completion_macos_data/zsh/site-functions/_uv")" != preserved ]]; then
+  fail_test "failed completion generation replaced the previous valid asset"
+fi
+
 render_template .chezmoiscripts/run_onchange_after_60-check.sh.tmpl "$tmp_dir/run_onchange_after_60-check.sh"
 syntax_check bash "$tmp_dir/run_onchange_after_60-check.sh"
 shellcheck_rendered_bash "$tmp_dir/run_onchange_after_60-check.sh"
@@ -497,6 +597,8 @@ assert_file_contains "$tmp_dir/run_onchange_after_60-check.sh" "print_diagnostic
 assert_file_contains "$tmp_dir/run_onchange_after_60-check.sh" "Maple Mono NF CN monospace alias"
 assert_file_contains "$tmp_dir/run_onchange_after_60-check.sh" "fc-conflist"
 assert_file_contains "$tmp_dir/run_onchange_after_60-check.sh" "fc-match -f '%{postscriptname}\\n' monospace"
+assert_file_contains "$tmp_dir/run_onchange_after_60-check.sh" "check_cmd usage"
+assert_file_contains "$tmp_dir/run_onchange_after_60-check.sh" "install-shell-completions.sh\" check"
 
 log_step "🤖" "Verifying docs and repo-only files stay undeployed..."
 managed_listing="$(chezmoi managed --source="$repo_root" --path-style=absolute)"
@@ -656,6 +758,9 @@ fi
 # uninstall.sh already relies on Bash 4 features (mapfile and associative
 # arrays), so execute its dynamic preview where that existing requirement holds.
 if (( BASH_VERSINFO[0] >= 4 )); then
+  uninstall_data_home="$tmp_dir/uninstall-data-home"
+  mkdir -p "$uninstall_data_home/zsh/site-functions"
+  touch "$uninstall_data_home/zsh/site-functions/_uv"
   overlay_fixture_listing="$(
     export HOME="$tmp_dir/uninstall-home"
     export XDG_CONFIG_HOME="$xdg_test_home"
@@ -669,7 +774,7 @@ if (( BASH_VERSINFO[0] >= 4 )); then
       printf '%s\n' "$overlay_fixture"
     done < <(local_overlay_inventory "$overlay_manifest")
   )"
-  uninstall_preview="$(HOME="$tmp_dir/uninstall-home" XDG_CONFIG_HOME="$xdg_test_home" \
+  uninstall_preview="$(HOME="$tmp_dir/uninstall-home" XDG_CONFIG_HOME="$xdg_test_home" XDG_DATA_HOME="$uninstall_data_home" \
     bash "$repo_root/bootstrap/scripts/uninstall.sh")"
   if ! grep -Fq "[would-remove] file: $xdg_test_home/mise/config.toml" <<<"$uninstall_preview"; then
     fail_test "uninstall preview does not include the custom-XDG mise config"
@@ -684,6 +789,9 @@ if (( BASH_VERSINFO[0] >= 4 )); then
   fi
   if ! grep -Fq "$tmp_dir/uninstall-home/.local/state/chezmoi/oh-my-devenv-xdg.boltdb" <<<"$uninstall_preview"; then
     fail_test "uninstall preview does not include the nested chezmoi state file"
+  fi
+  if ! grep -Fq "[would-remove] file: $uninstall_data_home/zsh/site-functions/_uv" <<<"$uninstall_preview"; then
+    fail_test "uninstall preview does not include generated shell completion files"
   fi
 fi
 
@@ -927,6 +1035,7 @@ shellcheck "$repo_root/bootstrap/scripts/common.sh" \
   "$repo_root/bootstrap/scripts/install-go-tools.sh" \
   "$repo_root/bootstrap/scripts/install-maple-mono-font.sh" \
   "$repo_root/bootstrap/scripts/install-oh-my-zsh-assets.sh" \
+  "$repo_root/bootstrap/scripts/install-shell-completions.sh" \
   "$repo_root/bootstrap/scripts/install-uv-tools.sh" \
   "$repo_root/bootstrap/scripts/local-overlays.sh" \
   "$repo_root/bootstrap/scripts/mirrors.sh" \

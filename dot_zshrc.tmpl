@@ -29,7 +29,12 @@
 [[ -f "$XDG_CONFIG_HOME/oh-my-devenv/secrets.sh" ]] && source "$XDG_CONFIG_HOME/oh-my-devenv/secrets.sh"
 
 typeset -U fpath
-zsh_user_completion_dir="${XDG_DATA_HOME:-$HOME/.local/share}/zsh/site-functions"
+fpath=("$XDG_DATA_HOME/zsh/site-functions" $fpath)
+{{- if eq .chezmoi.os "darwin" }}
+if [[ -n "${HOMEBREW_PREFIX:-}" && -d "$HOMEBREW_PREFIX/share/zsh/site-functions" ]]; then
+  fpath+=("$HOMEBREW_PREFIX/share/zsh/site-functions")
+fi
+{{- end }}
 
 export ZSH="$HOME/.oh-my-zsh"
 
@@ -43,15 +48,12 @@ if [[ -s "$ZSH/oh-my-zsh.sh" ]]; then
   )
 
 {{- if $zshCompletionsPath }}
-  # Expose zsh-completions to oh-my-zsh before it runs compinit.
+  # Keep zsh-completions as the last-resort source before oh-my-zsh runs compinit.
   # This path is derived from bootstrap/manifests/shell/oh-my-zsh-plugins.txt.
   # Do not add zsh-completions to plugins=() and do not call compinit here;
   # oh-my-zsh.sh already runs compinit during its own initialization.
-  fpath+=${ZSH_CUSTOM:-${ZSH:-~/.oh-my-zsh}/custom}/{{ $zshCompletionsPath }}/src
+  fpath+=("${ZSH_CUSTOM:-${ZSH:-$HOME/.oh-my-zsh}/custom}/{{ $zshCompletionsPath }}/src")
 {{- end }}
-
-  # User-managed completion files land here on Linux (for example, mise).
-  [[ -d "$zsh_user_completion_dir" ]] && fpath=("$zsh_user_completion_dir" $fpath)
 
   source "$ZSH/oh-my-zsh.sh"
 fi
@@ -64,26 +66,7 @@ fi
 
 # Initialize fzf shell integration if fzf is installed.
 if command -v fzf >/dev/null 2>&1; then
-  if fzf_shell_integration="$(fzf --zsh 2>/dev/null)" && [[ -n "$fzf_shell_integration" ]]; then
-    eval "$fzf_shell_integration"
-  else
-    for fzf_shell_dir in \
-      "${HOMEBREW_PREFIX:+$HOMEBREW_PREFIX/opt/fzf/shell}" \
-      /opt/homebrew/opt/fzf/shell \
-      /usr/local/opt/fzf/shell \
-      "$HOME/.fzf/shell" \
-      /usr/share/fzf \
-      /usr/share/doc/fzf/examples
-    do
-      [[ -n "$fzf_shell_dir" ]] || continue
-      [[ -z "$fzf_completion" && -f "$fzf_shell_dir/completion.zsh" ]] && fzf_completion="$fzf_shell_dir/completion.zsh"
-      [[ -z "$fzf_key_bindings" && -f "$fzf_shell_dir/key-bindings.zsh" ]] && fzf_key_bindings="$fzf_shell_dir/key-bindings.zsh"
-    done
-
-    [[ -n "$fzf_completion" ]] && source "$fzf_completion"
-    [[ -n "$fzf_key_bindings" ]] && source "$fzf_key_bindings"
-  fi
-  unset fzf_shell_integration fzf_shell_dir fzf_completion fzf_key_bindings
+  eval "$(fzf --zsh)"
 fi
 
 # Set GPG_TTY for GPG agent to work properly in terminal.
@@ -91,8 +74,6 @@ if [[ -t 0 ]]; then
   GPG_TTY="$(tty)"
   export GPG_TTY
 fi
-unset zsh_user_completion_dir
-
 # Load local interactive overlay last so it can intentionally override
 # baseline aliases, prompt, functions, and key bindings. Put persistent non-secret
 # environment variables in $XDG_CONFIG_HOME/oh-my-devenv/env.sh instead.

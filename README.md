@@ -17,7 +17,7 @@ oh-my-devenv is an opinionated, reproducible development environment. It publish
 - **Cross-platform from one source** — macOS (Intel + Apple Silicon), Ubuntu / Debian, and WSL share the same templated baseline.
 - **One-command bootstrap** — `chezmoi init --apply` installs everything through ordered hooks; re-running is idempotent and safe.
 - **Layered and reproducible** — chezmoi orchestrates system packages, optional desktop assets, shell assets, [mise](https://mise.jdx.dev/) runtimes, and per-language tools, each from its own manifest.
-- **Managed shells** — `zsh` with [oh-my-zsh](https://ohmyz.sh/) plugins (autosuggestions, completions, syntax highlighting) plus a matching `bash` setup.
+- **Managed shells** — first-class completion for Zsh everywhere and Bash on Linux / WSL, with intentionally limited Bash support on macOS.
 - **Pinned runtimes** — Go, Node, Python, and golangci-lint via mise, plus ecosystem tools such as `gopls`, `dlv`, `ruff`, `basedpyright`, and `pre-commit`.
 - **Modern CLI toolkit** — ripgrep, fd, bat, fzf, jq, direnv, tmux, shellcheck, shfmt, and more.
 - **Opt-in desktop baseline** — one all-or-nothing platform bundle: Ghostty and Maple Mono NF CN on supported workstations, OrbStack on macOS, and the required Linux Fontconfig alias on Ubuntu 26.04+.

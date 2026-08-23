@@ -26,6 +26,7 @@ This repository versions the baseline with [Semantic Versioning 2.0](https://sem
 - Dependabot configuration to keep GitHub Actions versions current.
 - Bilingual landing page: a Chinese `README.zh.md` translation of the root README, with a language switcher linking it and the English `README.md` together.
 - `docs/02-reference.md`: a single lookup page for the bootstrap hooks, what gets installed, day-to-day commands, and every environment variable / flag the baseline understands.
+- Centrally generated CLI completions in the standard Bash and Zsh user data directories, including `uvx` and Linux `bat` adapters.
 
 ### Changed
 
@@ -39,10 +40,10 @@ This repository versions the baseline with [Semantic Versioning 2.0](https://sem
 - Pinned Go, Node, and Python to complete patch versions; refreshed the Go, Python, lint, hook, and secret-scanning tools to current compatible releases; and made related low-risk dependency maintenance a single reviewable change.
 - Reworked the root `README.md` into a more scannable landing page: added status and platform badges, a "What you get" feature summary, and a Mermaid bootstrap-flow diagram; relocated the verbose first-run details to `docs/01-onboarding.md`; and moved the best-effort scope note into its own section. The Quick Start steps and the `#quick-start` anchor are unchanged.
 - Reorganized `docs/README.md` around reader intent (use / customize / look up / understand / maintain) and refreshed the operational docs to match the current bootstrap — the `run_before_00-banner` hook, the `MISE_PYTHON_GITHUB_ATTESTATIONS` override, and the oh-my-zsh plugin-manifest contract.
+- Simplified shell startup by consuming official completion assets instead of probing and generating them interactively. Zsh keeps `zsh-completions` last in `fpath` as a fallback; macOS Bash is intentionally limited.
 
 ### Removed
 
 - The pre-bootstrap `Brewfile.local` extension point. Machine-local applications outside the selected desktop baseline are no longer part of this repository's bootstrap contract.
 - The overlapping repo-owned optional Homebrew catalog and environment-variable selectors.
-- The unused `usage` CLI from the shared baseline. Existing machine-local installs are left untouched and can be removed explicitly with `mise uninstall usage@2.18.2`.
 - The unused `isWsl` chezmoi data flag and the `DOTFILES_FORCE_WSL` escape hatch, plus the redundant `smoke-tests-wsl-shaped` CI job. WSL continues to work through the standard Linux path.
