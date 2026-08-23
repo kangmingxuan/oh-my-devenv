@@ -10,7 +10,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 ![Platforms](https://img.shields.io/badge/platforms-macOS%20%7C%20Ubuntu%2FDebian%20%7C%20WSL-informational)
 
-oh-my-devenv is an opinionated, reproducible development environment. It publishes one maintainer's current choices as a coherent baseline: use it when those choices fit, and do not use it when they do not. Point `chezmoi` at it on a fresh machine and minutes later you have managed shells, language runtimes, coding-agent defaults, and a curated CLI toolchain — all from a single source of truth. Secrets and private machine facts stay in local overlays so the public baseline remains safe to clone.
+oh-my-devenv is an opinionated, reproducible development environment. It publishes one maintainer's current choices as a coherent baseline: use it when those choices fit, and do not use it when they do not. Point `chezmoi` at it on a fresh machine and minutes later you have managed shells, language runtimes, and a curated CLI toolchain — all from a single source of truth. Secrets and private machine facts stay in local overlays so the public baseline remains safe to clone.
 
 ## What you get
 
@@ -18,7 +18,6 @@ oh-my-devenv is an opinionated, reproducible development environment. It publish
 - **One-command bootstrap** — `chezmoi init --apply` installs everything through ordered hooks; re-running is idempotent and safe.
 - **Layered and reproducible** — chezmoi orchestrates system packages, optional desktop assets, shell assets, [mise](https://mise.jdx.dev/) runtimes, and per-language tools, each from its own manifest.
 - **Managed shells** — `zsh` with [oh-my-zsh](https://ohmyz.sh/) plugins (autosuggestions, completions, syntax highlighting) plus a matching `bash` setup.
-- **Managed coding-agent defaults** — Codex, Claude Code, and Kimi Code share global instructions; Claude gets secret-free runtime defaults, while Kimi gets secret-free TUI preferences.
 - **Pinned runtimes** — Go, Node, Python, and golangci-lint via mise, plus ecosystem tools such as `gopls`, `dlv`, `ruff`, `basedpyright`, and `pre-commit`.
 - **Modern CLI toolkit** — ripgrep, fd, bat, fzf, jq, direnv, tmux, shellcheck, shfmt, and more.
 - **Opt-in desktop baseline** — one all-or-nothing platform bundle: Ghostty and Maple Mono NF CN on supported workstations, OrbStack on macOS, and the required Linux Fontconfig alias on Ubuntu 26.04+.
@@ -34,14 +33,12 @@ flowchart TD
     B --> C["System packages<br/>Homebrew / apt"]
     B --> D["Optional desktop baseline<br/>macOS also includes OrbStack"]
     B --> E["Shell assets<br/>oh-my-zsh + plugins"]
-    B --> A1["Coding-agent defaults<br/>Codex + Claude + Kimi"]
     B --> X["Managed config<br/>$XDG_CONFIG_HOME"]
     B --> F["Runtimes via mise<br/>Go · Node · Python"]
     B --> G["Ecosystem tools<br/>go install · uv tool"]
     C --> H["Environment check"]
     D --> H
     E --> H
-    A1 --> H
     X --> H
     F --> H
     G --> H
@@ -133,7 +130,7 @@ For prompts, hook order, success signals, and troubleshooting, see [docs/01-onbo
 
 ## Scope and expectations
 
-This repository is maintained on a **best-effort** basis by a single maintainer. Treat it as that maintainer's public, opinionated baseline for laptops, VMs, and disposable notebook environments: it gets a clean machine to a working shell, runtime, coding-agent configuration, and CLI toolchain quickly, but it is not a platform-grade product or a promise to fit every workflow. Public defaults are deliberate; credentials, private infrastructure, and machine-only facts belong in local overlays. The desktop baseline is an explicit, all-or-nothing machine choice and currently installs only on macOS and non-WSL Ubuntu 26.04+; its contents are platform-specific, with OrbStack included on macOS.
+This repository is maintained on a **best-effort** basis by a single maintainer. Treat it as that maintainer's public, opinionated baseline for laptops, VMs, and disposable notebook environments: it gets a clean machine to a working shell, runtime, and CLI toolchain quickly, but it is not a platform-grade product or a promise to fit every workflow. Public defaults are deliberate; credentials, private infrastructure, and machine-only facts belong in local overlays. The desktop baseline is an explicit, all-or-nothing machine choice and currently installs only on macOS and non-WSL Ubuntu 26.04+; its contents are platform-specific, with OrbStack included on macOS.
 
 ## Documentation
 

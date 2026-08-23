@@ -12,7 +12,6 @@ After a successful first `chezmoi apply`, you should have:
 - **Runtimes**: `go`, `node`, `python`, and [mise](https://mise.jdx.dev/) as the version manager.
 - **Tooling**: `git`, `curl`, `uv`, `golangci-lint`, `shellcheck`, `shfmt`, plus the Go and Python CLI tools declared in `bootstrap/manifests/ecosystem/`.
 - **Dotfiles**: managed copies of `~/.zshrc`, `~/.bashrc`, `~/.gitconfig`, mise config, and related files — one maintainer's deliberate, opinionated defaults.
-- **Coding agents**: shared global instructions for Codex, Claude Code, and Kimi Code; secret-free Claude settings and helpers; and secret-free Kimi TUI preferences. The tools and their credentials are not installed by this repository.
 - **Optional desktop baseline**: an all-or-nothing platform bundle with Ghostty and Maple Mono NF CN on supported workstations, plus OrbStack on macOS.
 - **Python workflow**: `uv` as the only documented package / auth / publish path; no pip-era machine-global config in the baseline.
 

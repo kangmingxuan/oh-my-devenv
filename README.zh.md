@@ -10,7 +10,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 ![Platforms](https://img.shields.io/badge/platforms-macOS%20%7C%20Ubuntu%2FDebian%20%7C%20WSL-informational)
 
-oh-my-devenv 是一套主观鲜明、可复现的开发环境。它公开的是维护者当前认可的一整套选择：认同这些选择就使用，不认同就不使用。在一台全新机器上让 `chezmoi` 指向它，几分钟后你就拥有受管的 shell、语言运行时、编码智能体默认配置和精选 CLI 工具链，全部来自同一份事实来源。密钥与机器私有事实留在本地 overlay 中，使公开基线可以安全检出。
+oh-my-devenv 是一套主观鲜明、可复现的开发环境。它公开的是维护者当前认可的一整套选择：认同这些选择就使用，不认同就不使用。在一台全新机器上让 `chezmoi` 指向它，几分钟后你就拥有受管的 shell、语言运行时和精选 CLI 工具链，全部来自同一份事实来源。密钥与机器私有事实留在本地 overlay 中，使公开基线可以安全检出。
 
 ## 功能亮点
 
@@ -18,7 +18,6 @@ oh-my-devenv 是一套主观鲜明、可复现的开发环境。它公开的是�
 - **一条命令完成引导** —— `chezmoi init --apply` 通过有序 hook 安装全部内容；重复运行幂等且安全。
 - **分层且可复现** —— chezmoi 统一编排系统软件包、可选桌面资产、shell 资产、[mise](https://mise.jdx.dev/) 运行时与各语言工具，每一层都有自己的清单（manifest）。
 - **受管的 shell** —— `zsh` 搭配 [oh-my-zsh](https://ohmyz.sh/) 插件（autosuggestions、completions、syntax highlighting），并配套 `bash` 配置。
-- **受管的编码智能体默认配置** —— Codex、Claude Code 与 Kimi Code 共用全局指令；Claude 获得无秘密的运行默认值，Kimi 获得无秘密的 TUI 偏好。
 - **锁定版本的运行时** —— 通过 mise 管理 Go、Node、Python 与 golangci-lint，外加 `gopls`、`dlv`、`ruff`、`basedpyright`、`pre-commit` 等生态工具。
 - **现代 CLI 工具箱** —— ripgrep、fd、bat、fzf、jq、direnv、tmux、shellcheck、shfmt 等。
 - **可选桌面基线** —— 一个全有或全无的平台包：受支持的工作站安装 Ghostty 与 Maple Mono NF CN，macOS 额外安装 OrbStack，Ubuntu 26.04+ 配置所需的 Fontconfig 别名规则。
@@ -34,14 +33,12 @@ flowchart TD
     B --> C["系统软件包<br/>Homebrew / apt"]
     B --> D["可选桌面基线<br/>macOS 还包含 OrbStack"]
     B --> E["Shell 资产<br/>oh-my-zsh + 插件"]
-    B --> A1["编码智能体默认配置<br/>Codex + Claude + Kimi"]
     B --> X["受管配置<br/>$XDG_CONFIG_HOME"]
     B --> F["mise 运行时<br/>Go · Node · Python"]
     B --> G["生态工具<br/>go install · uv tool"]
     C --> H["环境校验"]
     D --> H
     E --> H
-    A1 --> H
     X --> H
     F --> H
     G --> H
@@ -130,7 +127,7 @@ chezmoi apply
 
 ## 适用范围与预期
 
-本仓库由单人以 **尽力而为（best-effort）** 的方式维护。请把它视为该维护者面向笔记本、虚拟机和一次性实验环境公开的主观基线：它能快速把全新机器带到可用的 shell、运行时、编码智能体配置与 CLI 工具链状态，但不是平台级产品，也不承诺适合每一种工作流。公开默认值都是有意选择；凭据、私有基础设施和机器专属事实应放在本地 overlay 中。桌面基线是显式、全有或全无的机器选择，目前仅在 macOS 和非 WSL 的 Ubuntu 26.04+ 上安装；具体内容因平台而异，macOS 包含 OrbStack。
+本仓库由单人以 **尽力而为（best-effort）** 的方式维护。请把它视为该维护者面向笔记本、虚拟机和一次性实验环境公开的主观基线：它能快速把全新机器带到可用的 shell、运行时与 CLI 工具链状态，但不是平台级产品，也不承诺适合每一种工作流。公开默认值都是有意选择；凭据、私有基础设施和机器专属事实应放在本地 overlay 中。桌面基线是显式、全有或全无的机器选择，目前仅在 macOS 和非 WSL 的 Ubuntu 26.04+ 上安装；具体内容因平台而异，macOS 包含 OrbStack。
 
 ## 文档
 
