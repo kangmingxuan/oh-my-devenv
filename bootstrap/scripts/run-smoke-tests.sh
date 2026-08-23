@@ -563,7 +563,7 @@ if [[ "$(uname -s)" != Darwin ]]; then
   assert_file_contains "$completion_linux_data/zsh/site-functions/_bat" "#compdef bat"
   bash -c 'source "$1"; complete -p uv' \
     _ "$completion_linux_data/bash-completion/completions/uv.bash" >/dev/null
-  zsh -fc 'fpath=("$1" ${fpath:#/usr/share/zsh/vendor-completions}); autoload -Uz compinit; compinit -D; [[ "${_comps[uv]}" == _uv ]]' \
+  zsh -fc 'fpath=("$1" ${fpath:#/usr/share/zsh/vendor-completions}); autoload -Uz compinit; compinit -D -i; [[ "${_comps[uv]}" == _uv ]]' \
     _ "$completion_linux_data/zsh/site-functions"
 fi
 
