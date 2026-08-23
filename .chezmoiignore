@@ -4,6 +4,7 @@ README.md
 README.zh.md
 CHANGELOG.md
 CONTRIBUTING.md
+AGENTS.md
 LICENSE
 docs/**
 .gitignore
