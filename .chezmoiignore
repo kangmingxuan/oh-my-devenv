@@ -14,17 +14,12 @@ docs/**
 # Local or assistant/runtime state must not be deployed from this source tree.
 .agents
 .agents/**
-.claude/*
-!.claude/CLAUDE.md
-!.claude/notify.sh
-!.claude/notify.ps1
-!.claude/settings.json
-!.claude/statusline-command.sh
-.codex/*
-!.codex/AGENTS.md
-.kimi-code/*
-!.kimi-code/AGENTS.md
-!.kimi-code/tui.toml
+.claude
+.claude/**
+.codex
+.codex/**
+.kimi-code
+.kimi-code/**
 
 # Source-only assets. Hooks read bootstrap directly and apply xdg_config as a
 # separate chezmoi source with XDG_CONFIG_HOME as its destination.

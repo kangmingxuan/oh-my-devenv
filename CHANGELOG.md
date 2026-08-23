@@ -20,7 +20,6 @@ This repository versions the baseline with [Semantic Versioning 2.0](https://sem
 
 ### Added
 
-- Opinionated global instructions shared by Codex, Claude Code, and Kimi Code; secret-free Claude settings and helpers; and secret-free Kimi TUI preferences. Agent configuration directories are private while credentials and runtime state remain unmanaged.
 - Opt-in, all-or-nothing desktop baseline for macOS and non-WSL Ubuntu 26.04+: Ghostty, Maple Mono NF CN, managed Ghostty defaults, a Linux Fontconfig compatibility rule, and OrbStack on macOS.
 - `smoke-tests-macos` CI job that runs the smoke suite on `macos-latest`, so the `darwin` template arms are rendered and shell-checked instead of going untested.
 - `apply-linux` CI job that runs a real `chezmoi init --apply` end to end and asserts the final environment check passes, covering installer semantics the render-only smoke suite cannot.

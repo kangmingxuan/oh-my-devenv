@@ -164,10 +164,6 @@ Use the tool's own secret or environment configuration when that is a better
 fit. The baseline intentionally does not make non-interactive shell commands
 source `secrets.sh`.
 
-Kimi Code is a deliberate exception: its ordinary provider credentials do not
-use shell variables as a generic fallback. Keep them in Kimi's own login and
-`config.toml` flow; the baseline does not manage that file.
-
 ## What Belongs Here vs. Upstream
 
 These overlays exist specifically for values that **must not** be part of the

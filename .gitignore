@@ -19,6 +19,7 @@ Desktop.ini
 .agents/
 .claude/
 .codex/
+.kimi-code/
 
 # Local environment and secrets
 .env

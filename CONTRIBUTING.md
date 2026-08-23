@@ -9,7 +9,6 @@ Changes that belong in this repository:
 - System packages selected as part of the maintained environment (editors, `git`, `curl`, formatting and diagnostic tools).
 - The explicitly selected, platform-specific desktop baseline on supported workstations, including OrbStack on macOS.
 - Baseline shell, Git, SSH, and runtime templates that work on macOS, Ubuntu/Debian, and WSL.
-- Public coding-agent instructions and secret-free settings that express the maintained workflow.
 - Source-only bootstrap scripts and their smoke-test coverage.
 - Documentation describing the baseline and its maintenance.
 
@@ -17,7 +16,7 @@ Changes that do **not** belong in this repository:
 
 - Personal identifiers (real names, personal emails, personal domains).
 - Personal SSH hosts, internal IP ranges, or private infrastructure hostnames that are not safe in a public repository.
-- Generated agent state, transcripts, caches, trust decisions, or machine-local permissions.
+- Team- or project-specific tooling that only a subset of users need.
 - Anything that requires a private credential or private network to validate.
 
 Use the documented local extension points for machine-specific or team-specific

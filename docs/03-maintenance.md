@@ -8,7 +8,7 @@ The repository is maintained on a **best-effort** basis by a single maintainer. 
 
 1. **Single opinionated baseline.** This repository ships the maintainer's current preferred design. There is no `personal` vs. `work` mode and no attempt to satisfy every workflow.
 2. **Current design only.** Replace superseded paths and behavior directly. Do not retain compatibility aliases, fallback loaders, or legacy branches.
-3. **No private data.** No personal emails, usernames, internal IP ranges, credentials, generated agent state, or machine-local trust decisions. Those facts stay in overlays or tool-owned state.
+3. **No private data.** No personal emails, usernames, internal IP ranges, or credentials. Host-specific corporate or private infrastructure details stay in overlays or user-owned config.
 4. **Reproducible bootstrap.** Every change must keep `bash bootstrap/scripts/run-smoke-tests.sh` passing and keep a clean-machine bootstrap working on macOS, Ubuntu/Debian, and WSL.
 5. **Validate behavior, not duplicated facts.** Tests enforce parsing, rendering, syntax, permissions, boundaries, and behavior. They do not restate literal configuration values that already have a canonical source file.
 
@@ -167,7 +167,7 @@ Mirror mode currently covers the consumers wired through `dotfiles_apply_mirror_
 
 - `gitleaks` scans staged diffs on every commit via `pre-commit`. Bootstrap smoke tests run in CI only (see CI section below), not as a pre-commit hook.
 - Secrets and credentials never live in this repository. They stay in local overlays or user-owned stores (`$XDG_CONFIG_HOME/oh-my-devenv/secrets.sh`, `$XDG_CONFIG_HOME/oh-my-devenv/git/config`, `$XDG_CONFIG_HOME/oh-my-devenv/git/hooks/*`, `~/.ssh/config.d/*.conf`, `uv auth`, `~/.npmrc`).
-- `bootstrap/scripts/common.sh` deliberately reads only `$XDG_CONFIG_HOME/oh-my-devenv/bootstrap.env`, never `env.sh` or `secrets.sh`. If Codex, Claude Code, or another environment-driven automation needs tokens, launch it from a shell that explicitly sourced `secrets.sh`. Kimi Code provider credentials stay in its own login and `config.toml` flow, both of which remain unmanaged.
+- `bootstrap/scripts/common.sh` deliberately reads only `$XDG_CONFIG_HOME/oh-my-devenv/bootstrap.env`, never `env.sh` or `secrets.sh`. If Codex, Claude Code, or another automation needs tokens, launch it from a shell that explicitly sourced `secrets.sh` or use that tool's own secret/env injection.
 - The baseline's managed `mise` config defaults GitHub Artifact Attestations verification to off, and the runtime-install hook exports the same default for first bootstrap. This is a reliability tradeoff for shared egress environments (OrbStack VMs, shared CI runners, corp NAT) where anonymous GitHub API rate limits can otherwise break a clean install before the toolchain is usable.
 - The Ubuntu font installer accepts a resumable alternate download URL, but always verifies the repository-pinned SHA-256 digest and required PostScript names before replacing a baseline-owned font directory.
 - To validate or dogfood the stricter path, opt back in explicitly with `MISE_GITHUB_ATTESTATIONS=true MISE_AQUA_GITHUB_ATTESTATIONS=true chezmoi apply`. Python follows the global setting unless `MISE_PYTHON_GITHUB_ATTESTATIONS` is set separately.
