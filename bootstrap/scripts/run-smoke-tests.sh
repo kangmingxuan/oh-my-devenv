@@ -740,15 +740,30 @@ fi
 # A failure inside the marker step happens after the generated temp exists and
 # a second marked temp was created; the installer's EXIT trap must remove both
 # and leave the previous asset alone. `tail` is stubbed to fail only for this
-# run because the marker step uses it to copy the body after `#compdef`.
+# run because the marker step uses it to copy the body after `#compdef`. The
+# stub fails only for the expected `tail -n +2 <file>` call and prints a unique
+# marker, so the assertions below prove the run actually reached that step; any
+# other invocation is reported distinctly.
 completion_failing_tail_bin="$tmp_dir/completion-failing-tail-bin"
+completion_marker_failure_log="$tmp_dir/completion-marker-failure.log"
 mkdir -p "$completion_failing_tail_bin"
-printf '#!/usr/bin/env bash\nexit 1\n' >"$completion_failing_tail_bin/tail"
+cat >"$completion_failing_tail_bin/tail" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+if [[ $# -eq 3 && "$1" == "-n" && "$2" == "+2" ]]; then
+  printf 'smoke-marker-copy-failure\n' >&2
+  exit 1
+fi
+printf 'unexpected tail invocation in marker-failure fixture: %s\n' "$*" >&2
+exit 2
+EOF
 chmod +x "$completion_failing_tail_bin/tail"
 if PATH="$completion_failing_tail_bin:$completion_stub_bin:/usr/bin:/bin" XDG_DATA_HOME="$synthetic_completion_data" \
-  bash "$completion_installer" install darwin "$synthetic_completion_manifest" >/dev/null 2>&1; then
+  bash "$completion_installer" install darwin "$synthetic_completion_manifest" >"$completion_marker_failure_log" 2>&1; then
   fail_test "completion installation must fail when the marker step fails"
 fi
+assert_file_not_contains "$completion_marker_failure_log" "unexpected tail invocation in marker-failure fixture"
+assert_file_contains "$completion_marker_failure_log" "smoke-marker-copy-failure"
 if [[ "$(<"$synthetic_completion_data/zsh/site-functions/_uv")" != preserved ]]; then
   fail_test "failed completion marker step replaced the previous valid asset"
 fi
