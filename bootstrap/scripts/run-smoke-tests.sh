@@ -1300,17 +1300,73 @@ for consumer in \
 done
 # 30-install-mise.sh.tmpl is the only consumer inside a chezmoi template. On
 # Linux the installer URL must honor the mirror override; on macOS mise comes
-# from Homebrew. The default URL itself is owned by the template.
+# from Homebrew. Both platform renders are exercised regardless of the host so
+# the Linux behavior is covered on macOS too. The default URL itself is owned
+# by the template and is deliberately not asserted here.
 assert_file_contains "$tmp_dir/run_onchange_after_30-install-mise.sh" "dotfiles_apply_mirror_env"
-if grep -Fq 'curl -fsSL' "$tmp_dir/run_onchange_after_30-install-mise.sh"; then
-  assert_file_matches "$tmp_dir/run_onchange_after_30-install-mise.sh" \
-    '^  mise_install_url="\$\{DOTFILES_MISE_INSTALL_URL:-[^}]+\}"$'
-  # shellcheck disable=SC2016
-  assert_file_contains "$tmp_dir/run_onchange_after_30-install-mise.sh" 'curl -fsSL "$mise_install_url" | sh'
-else
-  assert_file_not_contains "$tmp_dir/run_onchange_after_30-install-mise.sh" "DOTFILES_MISE_INSTALL_URL"
-  assert_file_contains "$tmp_dir/run_onchange_after_30-install-mise.sh" "\"\$BREW_CMD\" install mise"
+mise_hook_template="$repo_root/.chezmoiscripts/run_onchange_after_30-install-mise.sh.tmpl"
+synthetic_linux_mise_hook="$tmp_dir/run_onchange_after_30-install-mise.linux.sh"
+synthetic_macos_mise_hook="$tmp_dir/run_onchange_after_30-install-mise.macos.sh"
+chezmoi --source="$repo_root" \
+  --override-data "{\"chezmoi\":$supported_linux_chezmoi_data}" \
+  execute-template --file "$mise_hook_template" >"$synthetic_linux_mise_hook"
+chezmoi --source="$repo_root" \
+  --override-data "{\"chezmoi\":$darwin_chezmoi_data}" \
+  execute-template --file "$mise_hook_template" >"$synthetic_macos_mise_hook"
+for synthetic_mise_hook in "$synthetic_linux_mise_hook" "$synthetic_macos_mise_hook"; do
+  syntax_check bash "$synthetic_mise_hook"
+  shellcheck_rendered_bash "$synthetic_mise_hook"
+  assert_file_contains "$synthetic_mise_hook" "dotfiles_apply_mirror_env"
+done
+assert_file_not_contains "$synthetic_macos_mise_hook" "DOTFILES_MISE_INSTALL_URL"
+assert_file_contains "$synthetic_macos_mise_hook" "\"\$BREW_CMD\" install mise"
+assert_file_not_contains "$synthetic_linux_mise_hook" "install mise"
+
+# Behavioral fixture: run the rendered Linux hook with a stubbed curl and no
+# mise on PATH. The stub records its arguments and emits a fake installer
+# that drops a stub mise into the fake HOME, so the `curl ... | sh` pipeline
+# runs end to end without touching the network, the real HOME, or a real
+# installer. Any curl call other than the installer download fails loudly.
+mise_stub_bin="$tmp_dir/mise-stub-bin"
+mise_fake_home="$tmp_dir/mise-fake-home"
+mise_curl_log="$tmp_dir/mise-curl.log"
+mise_hook_output="$tmp_dir/mise-hook.out"
+synthetic_mise_install_url="https://mise-install.smoke.example/install.sh"
+mkdir -p "$mise_stub_bin" "$mise_fake_home"
+cat >"$mise_stub_bin/curl" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+if [[ $# -ne 2 || "$1" != "-fsSL" ]]; then
+  printf 'unexpected curl invocation: %s\n' "$*" >&2
+  exit 1
 fi
+printf '%s\n' "$2" >>"$SMOKE_MISE_CURL_LOG"
+cat <<'INSTALLER'
+#!/bin/sh
+set -eu
+mkdir -p "$HOME/.local/bin"
+printf '%s\n' '#!/bin/sh' 'echo "mise smoke-stub"' >"$HOME/.local/bin/mise"
+chmod +x "$HOME/.local/bin/mise"
+INSTALLER
+EOF
+chmod +x "$mise_stub_bin/curl"
+if env -i PATH="$mise_stub_bin:/usr/bin:/bin" HOME="$mise_fake_home" \
+  bash -c 'command -v mise' >/dev/null 2>&1; then
+  fail_test "mise fixture PATH must not already provide mise"
+fi
+env -i PATH="$mise_stub_bin:/usr/bin:/bin" HOME="$mise_fake_home" \
+  SMOKE_MISE_CURL_LOG="$mise_curl_log" \
+  DOTFILES_MISE_INSTALL_URL="$synthetic_mise_install_url" \
+  bash "$synthetic_linux_mise_hook" >"$mise_hook_output" 2>&1 \
+  || fail_test "rendered Linux mise hook failed: $(<"$mise_hook_output")"
+if [[ ! -f "$mise_curl_log" || "$(<"$mise_curl_log")" != "$synthetic_mise_install_url" ]]; then
+  fail_test "Linux mise hook must download exactly DOTFILES_MISE_INSTALL_URL once (log: $(cat "$mise_curl_log" 2>/dev/null))"
+fi
+if [[ ! -x "$mise_fake_home/.local/bin/mise" ]]; then
+  fail_test "Linux mise hook did not pipe the downloaded installer into sh"
+fi
+assert_file_contains "$mise_hook_output" "mise smoke-stub"
+assert_file_contains "$mise_hook_output" "mise installed successfully."
 
 log_step "🧬" "Verifying chezmoi init template renders..."
 
