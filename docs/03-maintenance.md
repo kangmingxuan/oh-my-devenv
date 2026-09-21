@@ -9,7 +9,7 @@ The repository is maintained on a **best-effort** basis by a single maintainer. 
 1. **Single opinionated baseline.** This repository ships the maintainer's current preferred design. There is no `personal` vs. `work` mode and no attempt to satisfy every workflow.
 2. **Current design only.** Replace superseded paths and behavior directly. Do not retain compatibility aliases, fallback loaders, or legacy branches.
 3. **No private data.** No personal emails, usernames, internal IP ranges, or credentials. Host-specific corporate or private infrastructure details stay in overlays or user-owned config.
-4. **Reproducible bootstrap.** Every change must keep `bash bootstrap/scripts/run-smoke-tests.sh` passing and keep a clean-machine bootstrap working on macOS, Ubuntu/Debian, and WSL.
+4. **Reproducible bootstrap.** Changes to executable bootstrap behavior must keep the appropriate checks in the canonical [`CONTRIBUTING.md` validation policy](../CONTRIBUTING.md#local-validation) passing and keep a clean-machine bootstrap working on macOS, Ubuntu/Debian, and WSL.
 5. **Validate behavior, not duplicated facts.** Tests enforce parsing, rendering, syntax, permissions, boundaries, and behavior. They do not restate literal configuration values that already have a canonical source file.
 
 ## Roles
@@ -46,12 +46,12 @@ When adding new documentation, pick one canonical home and make other pages link
 A reviewable change is ready to merge when all of the following hold:
 
 - The CI pipeline is green. Every reviewable change runs these GitHub Actions jobs:
-  - `smoke-tests-linux` — renders and syntax-checks the baseline on `ubuntu-latest`.
-  - `smoke-tests-macos` — the same smoke suite on `macos-latest`, so the `darwin` template arms are rendered and shell-checked instead of going untested.
-  - `apply-linux` — a real `chezmoi init --apply` end to end on `ubuntu-latest`, asserting the final environment check prints `All checks passed.`
+  - `smoke-tests-linux` — renders and syntax-checks the baseline, validates contracts and deployment boundaries, and exercises selected behavior with stubs and temporary roots on `ubuntu-latest`.
+  - `smoke-tests-macos` — the same smoke suite on `macos-latest`, so the `darwin` template arms and platform-sensitive checks are exercised instead of going untested.
+  - `apply-linux` — renders initialization configuration, runs a real `chezmoi apply` on `ubuntu-latest`, and asserts the final environment check prints `All checks passed.`
   - `secret-scan` — a full `gitleaks` scan of the repository tree.
 
-  Full macOS *install* validation (Brewfile parity, mise runtimes, Go/uv tools) still relies on the manual [`docs/04-macos-preflight.md`](04-macos-preflight.md) checklist and a pasted signoff; the `smoke-tests-macos` job only covers rendering and syntax.
+  Full macOS *install* validation still relies on the manual [`docs/04-macos-preflight.md`](04-macos-preflight.md) checklist and a pasted signoff when the [validation policy](../CONTRIBUTING.md#local-validation) requires it. The macOS smoke job does not install Homebrew dependencies, mise runtimes, or Go/uv tools.
 - At least one maintainer has approved the change.
 - The review description follows the repository's normal template and the change is in scope for the baseline.
 - No unresolved review threads remain.
@@ -179,15 +179,15 @@ Mirror mode currently covers the consumers wired through `dotfiles_apply_mirror_
 
 The repository CI pipeline is intentionally lightweight:
 
-- `smoke-tests-linux` and `smoke-tests-macos` render and syntax-check the baseline on `ubuntu-latest` and `macos-latest`; running on both means the `darwin` template arms are exercised, not just the Linux ones.
-- `apply-linux` runs a real `chezmoi init --apply` end to end on `ubuntu-latest` and asserts the final environment check passes, covering installer semantics the render-only smoke suite cannot. Its fixture explicitly disables the desktop choice because the hosted runner is not a supported workstation.
+- `smoke-tests-linux` and `smoke-tests-macos` render and syntax-check the baseline, validate contracts and deployment boundaries, test completion installation against stub commands, apply the nested XDG source under temporary roots, and run ShellCheck. Running on both operating systems also exercises the `darwin` template arms.
+- `apply-linux` renders initialization configuration, runs a real `chezmoi apply` on `ubuntu-latest`, and asserts the final environment check passes. It exercises the Linux package and runtime installers selected by its fixture; `desktopBaseline=false` excludes the desktop bundle because the hosted runner is not a supported workstation.
 - `secret-scan` runs `gitleaks` over the repository tree to catch committed secrets.
 - The pipeline is allowed to be simple and occasionally imperfect. It should catch obvious repo regressions, not model every clean-machine install path on every platform.
 
-The smoke suite is scoped to executable bootstrap behavior: template rendering,
-shell syntax, manifest parsing, the canonical overlay table, deployability
-boundaries, mirror mode, and `shellcheck`. Other documentation prose remains
-governed by review.
+The smoke suite is scoped to source-level bootstrap behavior and safe fixture
+operations. The [validation policy](../CONTRIBUTING.md#local-validation)
+identifies the documentation fixtures that are part of that contract; other
+documentation prose remains governed by targeted review.
 
 If a change needs heavier confidence than the smoke jobs provide, validate it manually on a real machine or disposable VM and record that in the review description.
 

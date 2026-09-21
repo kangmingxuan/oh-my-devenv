@@ -12,9 +12,13 @@
 
 ## Validation
 
-- [ ] `bash bootstrap/scripts/run-smoke-tests.sh` passes locally
-- [ ] `pre-commit run --all-files` passes locally
-- [ ] GitHub Actions is green on this branch
+Select checks using `CONTRIBUTING.md`, "Local Validation." Use pass, fail, not
+run, or not applicable, and include a reason for anything other than pass.
+
+- Smoke suite: `<pass | fail | not run | not applicable — reason>`
+- Pre-commit: `<pass | fail | not run | not applicable — reason>`
+- macOS full preflight: `<pass | fail | not run | not applicable — reason>`
+- GitHub Actions: `<pass | fail | not run — reason>`
 
 ## Notes
 

@@ -34,19 +34,32 @@ history, not runtime branches.
 
 1. Create a feature branch from `main`.
 2. Make focused changes. Prefer one topic per pull request.
-3. Run the smoke tests locally before opening a pull request:
-
-   ```bash
-   bash bootstrap/scripts/run-smoke-tests.sh
-   ```
-
-4. If you modify templates, bootstrap scripts, or manifest files, also run:
-
-   ```bash
-   pre-commit run --all-files
-   ```
-
+3. Select and run the checks in [Local Validation](#local-validation).
+4. Record each check as passed, failed, not run, or not applicable, with a reason
+   for anything other than passed.
 5. Open a pull request against `main` using the repository's review template when one is provided.
+
+## Local Validation
+
+Use this table as the canonical local validation policy. Select checks from the
+behavior changed, not from the operating system named in prose. Once the
+appropriate checks pass, do not repeat them unless the source changes, a check
+fails, or an unresolved concern needs more evidence.
+
+| Change | Required local validation |
+| --- | --- |
+| Prose, links, or comments only, excluding documentation fixtures consumed by smoke tests | Targeted review of the changed text, links, and formatting. Smoke tests and `pre-commit` may be reported as not applicable. Documentation that discusses macOS does not by itself require a real macOS install. |
+| Bootstrap scripts, chezmoi templates, manifests, deployment or ignore boundaries, or documentation fixtures consumed by smoke tests (the local-overlay table and examples) | Run `bash bootstrap/scripts/run-smoke-tests.sh`. The suite renders and syntax-checks templates, checks contracts and deployment boundaries, exercises completion installers with stubs, applies the nested XDG source under temporary roots, and runs ShellCheck. It does not install system packages or runtimes, run a complete bootstrap, or apply to the real home directory. |
+| Executable or configuration behavior, including workflow, pre-commit, or scan configuration | Run `pre-commit run --all-files`. The ShellCheck hook covers `bootstrap/scripts/*.sh`; the gitleaks hook scans staged changes only, so a pass before staging does not cover the unstaged diff. CI performs the separate repository-wide secret scan. Also run smoke tests when the change falls in the preceding row. |
+| Changed macOS-specific installation, package, or runtime behavior, or a shared change with a concrete Mac installation concern that lighter checks cannot resolve | Complete the checks above first, then follow the manual [macOS preflight](docs/04-macos-preflight.md). A shared version-pin, configuration, installer, or post-install-check change is not an automatic trigger unless it changes a macOS-specific path or leaves such a concern. Pure prose, links, comments, and render-only configuration changes do not require the full preflight. |
+
+The smoke suite is source verification and is safe to run locally: its write
+operations use temporary fixture directories and stub commands. A real
+`chezmoi apply`, bootstrap installer, or full macOS preflight can change the
+user's home directory or installed toolchain and therefore requires explicit
+authorization. If that authorization is pending, finish the requested source
+changes and safe checks, record the manual signoff as not run, and hold merge
+readiness until the signoff is available.
 
 ## Commit Style
 
@@ -58,7 +71,7 @@ history, not runtime branches.
 ## Templates And Rendering
 
 - Shell and application templates (`dot_*.tmpl`, `dot_*/env.*.tmpl`, and `xdg_config/**/*.tmpl`) must render on macOS and Linux/WSL, with and without optional integrations.
-- The templates are smoke-tested by rendering them with `chezmoi execute-template` and syntax-checking the output with the corresponding shell.
+- The smoke suite renders templates with `chezmoi execute-template`, syntax-checks the output with the corresponding shell, and exercises selected behavior in temporary fixture directories.
 - When you add a new template, add it to `bootstrap/scripts/run-smoke-tests.sh` so rendering and syntax checks are enforced on every change.
 - Tests verify parsing, rendering, syntax, permissions, management boundaries, and user-visible behavior. Do not duplicate literal configuration values in test code; the configuration file is their source of truth.
 
@@ -89,7 +102,7 @@ If you add, rename, or remove an entry, confirm that:
 
 ## CI
 
-The repository CI runs on GitHub Actions for every push and pull request: `run-smoke-tests.sh` on both `ubuntu-latest` and `macos-latest`, a real `chezmoi init --apply` (`apply-linux`), and a `gitleaks` secret scan. A change should not be merged while the pipeline is failing.
+The repository CI runs on GitHub Actions for every push and pull request: `run-smoke-tests.sh` on both `ubuntu-latest` and `macos-latest`, a real `chezmoi apply` with rendered initialization configuration (`apply-linux`), and a `gitleaks` secret scan. A change should not be merged while the pipeline is failing.
 
 ## Reporting Issues
 
