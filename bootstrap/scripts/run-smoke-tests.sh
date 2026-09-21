@@ -737,6 +737,25 @@ if find "$synthetic_completion_data" -name '*.tmp.*' | grep -q .; then
   fail_test "failed completion generation left temporary files behind"
 fi
 
+# A failure inside the marker step happens after the generated temp exists and
+# a second marked temp was created; the installer's EXIT trap must remove both
+# and leave the previous asset alone. `tail` is stubbed to fail only for this
+# run because the marker step uses it to copy the body after `#compdef`.
+completion_failing_tail_bin="$tmp_dir/completion-failing-tail-bin"
+mkdir -p "$completion_failing_tail_bin"
+printf '#!/usr/bin/env bash\nexit 1\n' >"$completion_failing_tail_bin/tail"
+chmod +x "$completion_failing_tail_bin/tail"
+if PATH="$completion_failing_tail_bin:$completion_stub_bin:/usr/bin:/bin" XDG_DATA_HOME="$synthetic_completion_data" \
+  bash "$completion_installer" install darwin "$synthetic_completion_manifest" >/dev/null 2>&1; then
+  fail_test "completion installation must fail when the marker step fails"
+fi
+if [[ "$(<"$synthetic_completion_data/zsh/site-functions/_uv")" != preserved ]]; then
+  fail_test "failed completion marker step replaced the previous valid asset"
+fi
+if find "$synthetic_completion_data" -name '*.tmp.*' | grep -q .; then
+  fail_test "failed completion marker step left temporary files behind"
+fi
+
 # Argument and manifest validation.
 completion_errors="$tmp_dir/completion.err"
 expect_failure "$completion_errors" run_completion_installer "$synthetic_completion_data" install darwin
