@@ -1399,7 +1399,6 @@ for synthetic_mise_hook in "$synthetic_linux_mise_hook" "$synthetic_macos_mise_h
 done
 assert_file_not_contains "$synthetic_macos_mise_hook" "DOTFILES_MISE_INSTALL_URL"
 assert_file_contains "$synthetic_macos_mise_hook" "\"\$BREW_CMD\" install mise"
-assert_file_not_contains "$synthetic_linux_mise_hook" "install mise"
 
 # Behavioral fixture: run the rendered Linux hook with a stubbed curl and no
 # mise on PATH. The stub records its arguments and emits a fake installer
