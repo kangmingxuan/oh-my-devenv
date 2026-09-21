@@ -99,7 +99,7 @@ The baseline also defaults `mise` GitHub attestation verification to off during 
 The last hook runs `run_onchange_after_60-check.sh`. On success you should see:
 
 - The line **`All checks passed.`**
-- A block titled **`Core tools in this environment:`** listing versions for `chezmoi`, `git`, `mise`, `go`, `node`, `python`, `uv`, and `golangci-lint`.
+- A block titled **`Core tools in this environment:`** listing versions for `chezmoi`, `git`, `mise`, and every tool in the current mise configuration (for example `go`, `node`, `python`, `uv`, and `golangci-lint`).
 - A short **`Next steps:`** list at the very end (shell reload hint, this onboarding doc, `docs/local-overlay-examples/`, corporate-network + `DOTFILES_MIRROR_MODE`, and the Bug issue template) so you are not dropped back to a silent prompt after a long apply.
 
 If anything fails, the script exits non-zero and prints diagnostic hints — see **Something broke** below.

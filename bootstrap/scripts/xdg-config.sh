@@ -62,10 +62,16 @@ desktop_platform_supported="$(
 )"
 
 if [[ "$desktop_platform_supported" == "true" ]]; then
-  override_data='{"desktopPlatformSupported":true}'
+  desktop_platform_supported_json=true
 else
-  override_data='{"desktopPlatformSupported":false}'
+  desktop_platform_supported_json=false
 fi
+
+# The managed Ghostty and Fontconfig templates read the desktop font family
+# from the same manifest the installer and the environment check consume.
+desktop_font_manifest_load "$repo_root/bootstrap/manifests/desktop/maple-mono-nf-cn.env"
+override_data="$(printf '{"desktopPlatformSupported":%s,"desktopFontFamily":"%s"}' \
+  "$desktop_platform_supported_json" "$MAPLE_MONO_FAMILY")"
 
 xdg_chezmoi=(
   chezmoi
@@ -86,7 +92,8 @@ case "$action" in
   managed)
     "${xdg_chezmoi[@]}" managed \
       --include=files,symlinks \
-      --path-style=absolute
+      --path-style=absolute \
+      --format=
     ;;
   status)
     "${xdg_chezmoi[@]}" status --path-style=absolute

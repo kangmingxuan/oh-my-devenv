@@ -22,10 +22,8 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091
 source "$script_dir/common.sh"
 
-# Honor mirror-mode overrides for UV_INDEX_URL before calling `uv tool
-# install`. A no-op in external mode; in internal mode, exports
-# UV_INDEX_URL iff the user supplied DOTFILES_UV_INDEX_URL.
-# See bootstrap/scripts/mirrors.sh.
+# Export the internal UV_INDEX_URL override before `uv tool install`; external
+# mode leaves the environment untouched. See bootstrap/scripts/mirrors.sh.
 dotfiles_apply_mirror_env
 
 # When DOTFILES_FORCE_REINSTALL=1 the script skips the idempotency probe and

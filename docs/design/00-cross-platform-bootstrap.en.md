@@ -110,10 +110,12 @@ Recommended structure:
 │   │   │   ├── Brewfile
 │   │   │   └── maple-mono-nf-cn.env
 │   │   ├── shell/
+│   │   │   ├── completions.txt
 │   │   │   └── oh-my-zsh-plugins.txt
 │   │   ├── system/
 │   │   │   ├── apt-packages.txt
-│   │   │   └── Brewfile
+│   │   │   ├── Brewfile
+│   │   │   └── mirrors.env
 │   │   └── ecosystem/
 │   │       ├── go-tools.txt
 │   │       └── uv-tools.txt
@@ -125,7 +127,9 @@ Recommended structure:
 │       ├── install-maple-mono-font.sh
 │       ├── install-go-tools.sh
 │       ├── install-oh-my-zsh-assets.sh
+│       ├── install-shell-completions.sh
 │       ├── install-uv-tools.sh
+│       ├── mirrors.sh
 │       └── xdg-config.sh
 ├── dot_local/share/oh-my-devenv/
 │   └── xdg.sh
@@ -304,7 +308,7 @@ uv = "0.11.28"
 ### `install-maple-mono-font`
 
 - Run only from the supported Ubuntu desktop path
-- Read a pinned release URL and SHA-256 digest from `bootstrap/manifests/desktop/maple-mono-nf-cn.env`
+- Load the font family, required PostScript faces, pinned release URL, and SHA-256 digest from `bootstrap/manifests/desktop/maple-mono-nf-cn.env` through the shared loader in `common.sh`; the same manifest feeds the environment check and, through `xdg-config.sh` template data, the Ghostty and Fontconfig templates
 - Reuse a compatible existing font installation instead of creating a duplicate
 - Resume interrupted downloads, verify the digest and required PostScript names, and only replace a directory marked as baseline-owned
 - Install under `${XDG_DATA_HOME:-$HOME/.local/share}/fonts` and refresh Fontconfig
@@ -318,14 +322,24 @@ uv = "0.11.28"
 - Skip updates for directories that contain local modifications to avoid overwriting user changes
 - `dot_zshrc.tmpl` uses the same manifest to generate the enabled oh-my-zsh plugin list; keep `zsh-completions` as a special `fpath` case instead of adding it to `plugins=()`
 
+### `install-shell-completions`
+
+- Read `bootstrap/manifests/shell/completions.txt`, whose rows declare a command and the comma-separated platforms (`linux`, `darwin`) that generate its completion; leave a platform out when its package manager already ships the asset
+- Apply one shell policy per platform: Linux receives Bash and Zsh assets, macOS receives Zsh assets only
+- Keep the command-specific generator adapters in the script, because the CLIs expose completion generation through different subcommands and flags; `bat` wraps the Debian package-owned `batcat` completion instead of running a generator
+- Write each asset atomically so a failing generator leaves the previous valid file in place
+- Stamp each generated file with a stable ownership marker (after `#compdef` in Zsh files); after every current entry installs, prune marked files in the two completion directories that no current entry targets, and never delete unmarked files or follow symlinks
+- Serve `install`, `check`, and `list` from the same inventory; `check` reports obsolete owned files as stale, `list` appends them to the current targets, and `uninstall.sh` enumerates the assets through `list`
+
 ### `install-go-tools`
 
 - Validate `go` is available
 - Read `go-tools.txt` from a source-only manifest path under `bootstrap/manifests/`
 - Source `bootstrap/scripts/go-env.sh` to keep Go tools on a stable install path
 - Default `GOBIN` to `$HOME/go/bin` when no override is provided
-- Run `go install`
-- Fail fast if `golangci-lint` appears in the manifest and require managing it via `mise`
+- Require every entry to pin an exact `module@vX.Y.Z` version and fail before installing anything otherwise
+- Skip tools already installed at the pinned version unless `DOTFILES_FORCE_REINSTALL=1`
+- Tool ownership follows the manifest that declares the tool: the mise configuration owns binary-distributed tools such as `golangci-lint`, and `go-tools.txt` owns `go install` tools
 
 ### `install-uv-tools`
 
@@ -333,6 +347,13 @@ uv = "0.11.28"
 - Install tools from the manifest using the declared requirement specifiers
 - Reinstall tools so version changes in the manifest take effect on the next bootstrap run
 - Repeated execution must be safe
+
+### `run_onchange_after_60-check`
+
+- Consume the same declared inventories as the installers instead of a second hard-coded tool list
+- Validate apt manifests with `dpkg-query`, Brewfiles with `brew bundle check`, and the mise configuration with `mise ls --missing`
+- Check ecosystem manifests by binary name, the completion manifest through the installer's `check` action, and the font manifest's family and faces through Fontconfig on Linux or the user font directory on macOS
+- Print the mise-managed toolchain from `mise current` so the summary follows the configuration
 
 ## 11. PATH and Compatibility
 

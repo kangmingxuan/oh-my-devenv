@@ -105,6 +105,55 @@ assert_file_not_contains() {
   fi
 }
 
+assert_file_matches() {
+  local file_path="$1"
+  local pattern="$2"
+
+  if ! grep -Eq -- "$pattern" "$file_path"; then
+    fail_test "$file_path does not match expected pattern: $pattern"
+  fi
+}
+
+# Run a command that must fail and keep its stderr for follow-up assertions.
+expect_failure() {
+  local error_file="$1"
+  shift
+
+  if "$@" >/dev/null 2>"$error_file"; then
+    fail_test "command unexpectedly succeeded: $*"
+  fi
+}
+
+# Override data for synthetic desktop renders. The font family always comes
+# from the desktop manifest, matching what xdg-config.sh injects at apply time.
+desktop_override_data() {
+  local platform_supported="$1"
+  local chezmoi_data="$2"
+
+  printf '{"desktopBaseline":true,"desktopPlatformSupported":%s,"desktopFontFamily":"%s","chezmoi":%s}' \
+    "$platform_supported" "$MAPLE_MONO_FAMILY" "$chezmoi_data"
+}
+
+# Rendered hooks must call the completion installer with the host platform
+# and the shared manifest.
+assert_completion_hook_call() {
+  local file_path="$1"
+  local action="$2"
+
+  assert_file_matches "$file_path" \
+    "install-shell-completions\\.sh\" $action '(linux|darwin)' \"\\\$manifests_dir/shell/completions\\.txt\""
+}
+
+# Run the completion installer against stubbed generators and a fixture data
+# directory. Globals are assigned in the completion section below.
+run_completion_installer() {
+  local data_home="$1"
+  shift
+
+  PATH="$completion_stub_bin:/usr/bin:/bin" XDG_DATA_HOME="$data_home" \
+    bash "$completion_installer" "$@"
+}
+
 assert_toml_section_contains() {
   local file_path="$1"
   local section_name="$2"
@@ -187,6 +236,10 @@ fi
 #     non-interactively. Desktop rendering stays enabled in smoke tests; the
 #     real apply CI explicitly disables it because hosted runners are not
 #     desktop workstations.
+#   - `desktopFontFamily` is what xdg-config.sh injects from the desktop font
+#     manifest; the managed Ghostty and Fontconfig templates require it.
+desktop_font_manifest="$repo_root/bootstrap/manifests/desktop/maple-mono-nf-cn.env"
+desktop_font_manifest_load "$desktop_font_manifest"
 tmp_data_file="$tmp_dir/chezmoi-data.toml"
 cat >"$tmp_data_file" <<EOF
 name = "Smoke Tests"
@@ -195,7 +248,13 @@ gitName = "Smoke Tests"
 gitEmail = "smoke@example.com"
 desktopBaseline = true
 desktopPlatformSupported = $desktop_platform_supported_data
+desktopFontFamily = "$MAPLE_MONO_FAMILY"
 EOF
+
+# Synthetic chezmoi platform data for boundary renders.
+darwin_chezmoi_data='{"os":"darwin","osRelease":null,"kernel":null}'
+supported_linux_chezmoi_data='{"os":"linux","osRelease":{"id":"ubuntu","versionID":"26.04"},"kernel":{"osrelease":"linux"}}'
+unsupported_linux_chezmoi_data='{"os":"linux","osRelease":{"id":"ubuntu","versionID":"24.04"},"kernel":{"osrelease":"linux"}}'
 
 # Literal strings asserted against rendered templates.
 shared_secrets_literal="$(local_overlay_location secrets)"
@@ -212,12 +271,6 @@ ssh_include_literal="Include ~/${ssh_overlay_literal#\$HOME/}"
 ghostty_include_literal="config-file = ?${ghostty_overlay_literal##*/}"
 # shellcheck disable=SC2016
 xdg_source_literal='source "$HOME/.local/share/oh-my-devenv/xdg.sh"'
-# shellcheck disable=SC2016
-backup_mise_literal='xdg-config/mise/config.toml|$XDG_CONFIG_HOME/mise/config.toml'
-# shellcheck disable=SC2016
-backup_fontconfig_literal='xdg-config/fontconfig/conf.d/99-oh-my-devenv-maple-mono-nf-cn.conf|$XDG_CONFIG_HOME/fontconfig/conf.d/99-oh-my-devenv-maple-mono-nf-cn.conf'
-# shellcheck disable=SC2016
-backup_ghostty_literal='xdg-config/ghostty/config.ghostty|$XDG_CONFIG_HOME/ghostty/config.ghostty'
 # shellcheck disable=SC2016
 xdg_apply_literal='bash "$scripts_dir/xdg-config.sh" apply "$config_file"'
 # shellcheck disable=SC2016
@@ -388,12 +441,17 @@ syntax_check bash "$tmp_dir/run_once_before_10-bootstrap.sh"
 shellcheck_rendered_bash "$tmp_dir/run_once_before_10-bootstrap.sh"
 assert_file_contains "$tmp_dir/run_once_before_10-bootstrap.sh" "backup_existing_managed_configs()"
 assert_file_contains "$tmp_dir/run_once_before_10-bootstrap.sh" "chezmoi-first-run-backup"
-assert_file_contains "$tmp_dir/run_once_before_10-bootstrap.sh" ".ssh/config"
-assert_file_contains "$tmp_dir/run_once_before_10-bootstrap.sh" "$backup_mise_literal"
-assert_file_contains "$tmp_dir/run_once_before_10-bootstrap.sh" "$backup_fontconfig_literal"
-assert_file_contains "$tmp_dir/run_once_before_10-bootstrap.sh" "$backup_ghostty_literal"
-assert_file_contains "$tmp_dir/run_once_before_10-bootstrap.sh" ".zshrc"
-assert_file_contains "$tmp_dir/run_once_before_10-bootstrap.sh" ".gitconfig"
+# Every file the main source manages under HOME must be backed up before the
+# first apply overwrites it. The nested XDG files are checked after the
+# fixture apply below, once their inventory is known.
+main_managed_relative="$(chezmoi --source="$repo_root" --override-data-file "$tmp_data_file" \
+  managed --include=files,symlinks --path-style=relative)"
+if [[ -z "$main_managed_relative" ]]; then
+  fail_test "main chezmoi source manages no files"
+fi
+while IFS= read -r managed_relative; do
+  assert_file_contains "$tmp_dir/run_once_before_10-bootstrap.sh" "\"$managed_relative|\$HOME/$managed_relative\""
+done <<<"$main_managed_relative"
 assert_file_contains "$tmp_dir/run_once_before_10-bootstrap.sh" "cp -Lp \"\$existing_path\" \"\$backup_path\""
 assert_file_contains "$tmp_dir/run_once_before_10-bootstrap.sh" "install_error_trap"
 
@@ -407,10 +465,12 @@ render_template .chezmoiscripts/run_onchange_after_20-install-system-packages.sh
 syntax_check bash "$tmp_dir/run_onchange_after_20-install-system-packages.sh"
 shellcheck_rendered_bash "$tmp_dir/run_onchange_after_20-install-system-packages.sh"
 assert_file_contains "$tmp_dir/run_onchange_after_20-install-system-packages.sh" "install_error_trap"
-if grep -Fq "Installing system packages via Homebrew" "$tmp_dir/run_onchange_after_20-install-system-packages.sh"; then
+if grep -Fq "install-brew-packages.sh" "$tmp_dir/run_onchange_after_20-install-system-packages.sh"; then
   assert_file_contains "$tmp_dir/run_onchange_after_20-install-system-packages.sh" "\"\$manifests_dir/system/Brewfile\""
+  assert_file_not_contains "$tmp_dir/run_onchange_after_20-install-system-packages.sh" "install-apt-packages.sh"
 else
-  assert_file_contains "$tmp_dir/run_onchange_after_20-install-system-packages.sh" "Installing system packages via apt"
+  assert_file_contains "$tmp_dir/run_onchange_after_20-install-system-packages.sh" "install-apt-packages.sh"
+  assert_file_contains "$tmp_dir/run_onchange_after_20-install-system-packages.sh" "\"\$manifests_dir/system/apt-packages.txt\""
 fi
 
 render_template .chezmoiscripts/run_onchange_after_22-install-desktop-assets.sh.tmpl "$tmp_dir/run_onchange_after_22-install-desktop-assets.sh"
@@ -419,35 +479,37 @@ shellcheck_rendered_bash "$tmp_dir/run_onchange_after_22-install-desktop-assets.
 assert_file_contains "$tmp_dir/run_onchange_after_22-install-desktop-assets.sh" "install_error_trap"
 desktop_platform_supported=0
 linux_fontconfig_alias_enabled=0
-if grep -Fq "desktop baseline via Homebrew" "$tmp_dir/run_onchange_after_22-install-desktop-assets.sh"; then
+if grep -Fq "install-brew-packages.sh" "$tmp_dir/run_onchange_after_22-install-desktop-assets.sh"; then
   desktop_platform_supported=1
   assert_file_contains "$tmp_dir/run_onchange_after_22-install-desktop-assets.sh" 'manifests_dir/desktop/Brewfile'
-elif grep -Fq "Ubuntu desktop baseline" "$tmp_dir/run_onchange_after_22-install-desktop-assets.sh"; then
+elif grep -Fq "install-maple-mono-font.sh" "$tmp_dir/run_onchange_after_22-install-desktop-assets.sh"; then
   desktop_platform_supported=1
   linux_fontconfig_alias_enabled=1
+  assert_file_contains "$tmp_dir/run_onchange_after_22-install-desktop-assets.sh" 'install-apt-packages.sh'
   assert_file_contains "$tmp_dir/run_onchange_after_22-install-desktop-assets.sh" 'manifests_dir/desktop/apt-packages.txt'
-  assert_file_contains "$tmp_dir/run_onchange_after_22-install-desktop-assets.sh" 'install-maple-mono-font.sh'
-  assert_file_contains "$tmp_dir/run_onchange_after_22-install-desktop-assets.sh" 'maple-mono-nf-cn.env'
+  assert_file_contains "$tmp_dir/run_onchange_after_22-install-desktop-assets.sh" 'manifests_dir/desktop/maple-mono-nf-cn.env'
 else
-  assert_file_contains "$tmp_dir/run_onchange_after_22-install-desktop-assets.sh" "supported only on macOS and Ubuntu 26.04+ outside WSL"
+  assert_file_contains "$tmp_dir/run_onchange_after_22-install-desktop-assets.sh" "log_warning"
+  assert_file_not_contains "$tmp_dir/run_onchange_after_22-install-desktop-assets.sh" 'manifests_dir='
 fi
 
 unsupported_desktop_hook="$tmp_dir/run_onchange_after_22-install-desktop-assets.unsupported-linux.sh"
 chezmoi --source="$repo_root" \
-  --override-data '{"desktopBaseline":true,"chezmoi":{"os":"linux","osRelease":{"id":"ubuntu","versionID":"24.04"},"kernel":{"osrelease":"linux"}}}' \
+  --override-data "{\"desktopBaseline\":true,\"chezmoi\":$unsupported_linux_chezmoi_data}" \
   execute-template \
   --file "$repo_root/.chezmoiscripts/run_onchange_after_22-install-desktop-assets.sh.tmpl" \
   >"$unsupported_desktop_hook"
 syntax_check bash "$unsupported_desktop_hook"
 shellcheck_rendered_bash "$unsupported_desktop_hook"
-assert_file_contains "$unsupported_desktop_hook" "supported only on macOS and Ubuntu 26.04+ outside WSL"
+# An unsupported platform must warn and must not reach any installer.
+assert_file_contains "$unsupported_desktop_hook" "log_warning"
 assert_file_not_contains "$unsupported_desktop_hook" 'manifests_dir='
-assert_file_not_contains "$unsupported_desktop_hook" "Desktop baseline installation complete."
+# shellcheck disable=SC2016
+assert_file_not_contains "$unsupported_desktop_hook" '$scripts_dir/install-'
 
 render_template xdg_config/ghostty/config.ghostty.tmpl "$tmp_dir/config.ghostty"
 if (( desktop_platform_supported == 1 )); then
-  assert_file_contains "$tmp_dir/config.ghostty" "font-family = Maple Mono NF CN"
-  assert_file_contains "$tmp_dir/config.ghostty" "notify-on-command-finish = unfocused"
+  assert_file_contains "$tmp_dir/config.ghostty" "font-family = $MAPLE_MONO_FAMILY"
   assert_file_contains "$tmp_dir/config.ghostty" "$ghostty_include_literal"
 elif [[ -s "$tmp_dir/config.ghostty" ]]; then
   fail_test "Ghostty config must render zero bytes on unsupported platforms"
@@ -461,10 +523,10 @@ assert_file_contains "$tmp_dir/99-oh-my-devenv-maple-mono-nf-cn.conf" "<fontconf
 assert_file_contains "$tmp_dir/99-oh-my-devenv-maple-mono-nf-cn.conf" "</fontconfig>"
 if (( linux_fontconfig_alias_enabled == 1 )); then
   assert_file_contains "$tmp_dir/99-oh-my-devenv-maple-mono-nf-cn.conf" '<edit name="family" mode="prepend" binding="strong">'
-  assert_file_contains "$tmp_dir/99-oh-my-devenv-maple-mono-nf-cn.conf" "Maple Mono NF CN"
+  assert_file_contains "$tmp_dir/99-oh-my-devenv-maple-mono-nf-cn.conf" "<string>$MAPLE_MONO_FAMILY</string>"
 else
   assert_file_not_contains "$tmp_dir/99-oh-my-devenv-maple-mono-nf-cn.conf" 'binding="strong"'
-  assert_file_not_contains "$tmp_dir/99-oh-my-devenv-maple-mono-nf-cn.conf" "Maple Mono NF CN"
+  assert_file_not_contains "$tmp_dir/99-oh-my-devenv-maple-mono-nf-cn.conf" "$MAPLE_MONO_FAMILY"
 fi
 
 disabled_desktop_hook="$tmp_dir/run_onchange_after_22-install-desktop-assets.disabled"
@@ -490,7 +552,7 @@ if [[ -s "$disabled_desktop_hook" || -s "$disabled_ghostty_config" ]]; then
 fi
 assert_file_contains "$disabled_fontconfig_fragment" "<fontconfig>"
 assert_file_not_contains "$disabled_fontconfig_fragment" 'binding="strong"'
-assert_file_not_contains "$disabled_fontconfig_fragment" "Maple Mono NF CN"
+assert_file_not_contains "$disabled_fontconfig_fragment" "$MAPLE_MONO_FAMILY"
 
 render_template .chezmoiscripts/run_onchange_after_25-install-shell-assets.sh.tmpl "$tmp_dir/run_onchange_after_25-install-shell-assets.sh"
 syntax_check bash "$tmp_dir/run_onchange_after_25-install-shell-assets.sh"
@@ -506,9 +568,15 @@ render_template .chezmoiscripts/run_onchange_after_40-install-runtimes.sh.tmpl "
 syntax_check bash "$tmp_dir/run_onchange_after_40-install-runtimes.sh"
 shellcheck_rendered_bash "$tmp_dir/run_onchange_after_40-install-runtimes.sh"
 assert_file_contains "$tmp_dir/run_onchange_after_40-install-runtimes.sh" "install_error_trap"
-assert_file_contains "$tmp_dir/run_onchange_after_40-install-runtimes.sh" "MISE_GITHUB_ATTESTATIONS=\"\${MISE_GITHUB_ATTESTATIONS:-false}\""
-assert_file_contains "$tmp_dir/run_onchange_after_40-install-runtimes.sh" "MISE_AQUA_GITHUB_ATTESTATIONS=\"\${MISE_AQUA_GITHUB_ATTESTATIONS:-false}\""
-assert_file_contains "$tmp_dir/run_onchange_after_40-install-runtimes.sh" "MISE_PYTHON_GITHUB_ATTESTATIONS=\"\${MISE_PYTHON_GITHUB_ATTESTATIONS:-\$MISE_GITHUB_ATTESTATIONS}\""
+# Attestation switches must honor a caller-provided value; the default itself
+# is configuration owned by the hook.
+assert_file_matches "$tmp_dir/run_onchange_after_40-install-runtimes.sh" \
+  '^export MISE_GITHUB_ATTESTATIONS="\$\{MISE_GITHUB_ATTESTATIONS:-'
+assert_file_matches "$tmp_dir/run_onchange_after_40-install-runtimes.sh" \
+  '^export MISE_AQUA_GITHUB_ATTESTATIONS="\$\{MISE_AQUA_GITHUB_ATTESTATIONS:-'
+# shellcheck disable=SC2016
+assert_file_matches "$tmp_dir/run_onchange_after_40-install-runtimes.sh" \
+  '^export MISE_PYTHON_GITHUB_ATTESTATIONS="\$\{MISE_PYTHON_GITHUB_ATTESTATIONS:-\$MISE_GITHUB_ATTESTATIONS\}"'
 assert_file_contains "$tmp_dir/run_onchange_after_40-install-runtimes.sh" "mise install --yes"
 
 render_template .chezmoiscripts/run_onchange_after_50-sync-ecosystem-tools.sh.tmpl "$tmp_dir/run_onchange_after_50-sync-ecosystem-tools.sh"
@@ -519,10 +587,11 @@ assert_file_contains "$tmp_dir/run_onchange_after_50-sync-ecosystem-tools.sh" "i
 render_template .chezmoiscripts/run_onchange_after_55-install-shell-completions.sh.tmpl "$tmp_dir/run_onchange_after_55-install-shell-completions.sh"
 syntax_check bash "$tmp_dir/run_onchange_after_55-install-shell-completions.sh"
 shellcheck_rendered_bash "$tmp_dir/run_onchange_after_55-install-shell-completions.sh"
-assert_file_contains "$tmp_dir/run_onchange_after_55-install-shell-completions.sh" "install-shell-completions.sh\" install"
+assert_completion_hook_call "$tmp_dir/run_onchange_after_55-install-shell-completions.sh" install
 
 log_step "🧩" "Testing generated shell completion assets..."
 completion_installer="$repo_root/bootstrap/scripts/install-shell-completions.sh"
+completion_manifest="$repo_root/bootstrap/manifests/shell/completions.txt"
 completion_stub_bin="$tmp_dir/completion-stub-bin"
 completion_linux_data="$tmp_dir/completion-linux-data"
 completion_macos_data="$tmp_dir/completion-macos-data"
@@ -544,75 +613,306 @@ else
 fi
 EOF
 chmod +x "$completion_stub_bin/completion-generator"
-for completion_command in uv uvx golangci-lint dlv ruff chezmoi mise; do
+# Stub every command the production manifest lists. A command without a
+# generator adapter fails the install below, which is the documented contract.
+production_completion_commands="$(manifest_entries "$completion_manifest" | awk '{ print $1 }')"
+if [[ -z "$production_completion_commands" ]]; then
+  fail_test "completion manifest declares no commands"
+fi
+while IFS= read -r completion_command; do
   ln -s completion-generator "$completion_stub_bin/$completion_command"
+done <<<"$production_completion_commands"
+
+# `list` names every asset a platform manages under XDG_DATA_HOME. Linux owns
+# Bash and Zsh assets; macOS stays Zsh-only.
+completion_list_data="$tmp_dir/completion-list-data"
+for completion_platform in linux darwin; do
+  completion_listing="$(run_completion_installer "$completion_list_data" \
+    list "$completion_platform" "$completion_manifest")"
+  if [[ -z "$completion_listing" ]]; then
+    fail_test "completion manifest lists no commands for $completion_platform"
+  fi
+  while IFS= read -r completion_target; do
+    case "$completion_target" in
+      "$completion_list_data/zsh/site-functions/_"*) ;;
+      "$completion_list_data/bash-completion/completions/"*.bash)
+        [[ "$completion_platform" == linux ]] \
+          || fail_test "macOS completion inventory must stay Zsh-only: $completion_target"
+        ;;
+      *) fail_test "unexpected completion target for $completion_platform: $completion_target" ;;
+    esac
+  done <<<"$completion_listing"
 done
 
+# The Linux inventory may wrap Debian package-owned batcat completions, so the
+# production Linux install runs only where those files can exist.
 if [[ "$(uname -s)" != Darwin ]]; then
-  PATH="$completion_stub_bin:/usr/bin:/bin" XDG_DATA_HOME="$completion_linux_data" \
-    bash "$completion_installer" install linux
-  PATH="$completion_stub_bin:/usr/bin:/bin" XDG_DATA_HOME="$completion_linux_data" \
-    bash "$completion_installer" check linux
-  for completion_command in uv uvx golangci-lint dlv ruff chezmoi mise bat; do
-    [[ -s "$completion_linux_data/zsh/site-functions/_$completion_command" ]] || \
-      fail_test "missing Linux Zsh completion for $completion_command"
-    [[ -s "$completion_linux_data/bash-completion/completions/$completion_command.bash" ]] || \
-      fail_test "missing Linux Bash completion for $completion_command"
-  done
-  assert_file_contains "$completion_linux_data/bash-completion/completions/bat.bash" "complete -F _bat bat"
-  assert_file_contains "$completion_linux_data/zsh/site-functions/_bat" "#compdef bat"
-  bash -c 'source "$1"; complete -p uv' \
-    _ "$completion_linux_data/bash-completion/completions/uv.bash" >/dev/null
-  zsh -fc 'fpath=("$1" ${fpath:#/usr/share/zsh/vendor-completions}); autoload -Uz compinit; compinit -D -i; [[ "${_comps[uv]}" == _uv ]]' \
-    _ "$completion_linux_data/zsh/site-functions"
+  run_completion_installer "$completion_linux_data" install linux "$completion_manifest"
+  run_completion_installer "$completion_linux_data" check linux "$completion_manifest"
+  linux_completion_listing="$(run_completion_installer "$completion_linux_data" list linux "$completion_manifest")"
+  while IFS= read -r completion_target; do
+    [[ -s "$completion_target" ]] || fail_test "missing Linux completion asset: $completion_target"
+  done <<<"$linux_completion_listing"
+  if grep -Fxq bat <<<"$production_completion_commands"; then
+    assert_file_contains "$completion_linux_data/bash-completion/completions/bat.bash" "complete -F _bat bat"
+    assert_file_contains "$completion_linux_data/zsh/site-functions/_bat" "#compdef bat"
+  fi
 fi
 
-PATH="$completion_stub_bin:/usr/bin:/bin" XDG_DATA_HOME="$completion_macos_data" \
-  bash "$completion_installer" install darwin
-PATH="$completion_stub_bin:/usr/bin:/bin" XDG_DATA_HOME="$completion_macos_data" \
-  bash "$completion_installer" check darwin
-if [[ -e "$completion_macos_data/bash-completion" \
-  || -e "$completion_macos_data/zsh/site-functions/_mise" \
-  || -e "$completion_macos_data/zsh/site-functions/_bat" ]]; then
-  fail_test "macOS completion install must remain Zsh-only and leave package-owned mise/bat completions alone"
+run_completion_installer "$completion_macos_data" install darwin "$completion_manifest"
+run_completion_installer "$completion_macos_data" check darwin "$completion_manifest"
+macos_completion_listing="$(run_completion_installer "$completion_macos_data" list darwin "$completion_manifest" | sort)"
+macos_installed_files="$(find "$completion_macos_data" -type f | sort)"
+if [[ "$macos_installed_files" != "$macos_completion_listing" ]]; then
+  fail_test "macOS completion install must create exactly the listed targets; got: $macos_installed_files"
+fi
+if run_completion_installer "$tmp_dir/completion-empty-data" check darwin "$completion_manifest" >/dev/null 2>&1; then
+  fail_test "completion check must fail while the listed assets are missing"
 fi
 
-printf '%s\n' preserved >"$completion_macos_data/zsh/site-functions/_uv"
-if PATH="$completion_stub_bin:/usr/bin:/bin" XDG_DATA_HOME="$completion_macos_data" \
-  FAIL_COMPLETION_FOR=uv bash "$completion_installer" install darwin >/dev/null 2>&1; then
+# A synthetic manifest exercises platform membership, adapters, and failure
+# handling independently of the commands the baseline currently selects.
+synthetic_completion_manifest="$tmp_dir/completions.synthetic.txt"
+synthetic_completion_data="$tmp_dir/completion-synthetic-data"
+cat >"$synthetic_completion_manifest" <<'EOF'
+# command   platforms
+uv          linux,darwin
+ruff        linux
+chezmoi     darwin
+EOF
+# Stub the synthetic commands from that manifest's own rows so this fixture
+# stays independent of what the production manifest currently selects.
+while IFS= read -r completion_command; do
+  if [[ ! -e "$completion_stub_bin/$completion_command" ]]; then
+    ln -s completion-generator "$completion_stub_bin/$completion_command"
+  fi
+done <<<"$(manifest_entries "$synthetic_completion_manifest" | awk '{ print $1 }')"
+synthetic_darwin_listing="$(run_completion_installer "$synthetic_completion_data" list darwin "$synthetic_completion_manifest")"
+expected_darwin_listing="$synthetic_completion_data/zsh/site-functions/_uv
+$synthetic_completion_data/zsh/site-functions/_chezmoi"
+if [[ "$synthetic_darwin_listing" != "$expected_darwin_listing" ]]; then
+  fail_test "synthetic darwin completion inventory was: $synthetic_darwin_listing"
+fi
+synthetic_linux_listing="$(run_completion_installer "$synthetic_completion_data" list linux "$synthetic_completion_manifest")"
+expected_linux_listing="$synthetic_completion_data/zsh/site-functions/_uv
+$synthetic_completion_data/bash-completion/completions/uv.bash
+$synthetic_completion_data/zsh/site-functions/_ruff
+$synthetic_completion_data/bash-completion/completions/ruff.bash"
+if [[ "$synthetic_linux_listing" != "$expected_linux_listing" ]]; then
+  fail_test "synthetic linux completion inventory was: $synthetic_linux_listing"
+fi
+
+run_completion_installer "$synthetic_completion_data" install linux "$synthetic_completion_manifest"
+run_completion_installer "$synthetic_completion_data" check linux "$synthetic_completion_manifest"
+while IFS= read -r completion_target; do
+  [[ -s "$completion_target" ]] || fail_test "missing synthetic completion asset: $completion_target"
+done <<<"$synthetic_linux_listing"
+if [[ -e "$synthetic_completion_data/zsh/site-functions/_chezmoi" ]]; then
+  fail_test "linux completion install generated an asset the manifest reserves for darwin"
+fi
+if [[ "$(uname -s)" == Darwin ]]; then
+  synthetic_completion_mode="$(stat -f '%Lp' "$synthetic_completion_data/zsh/site-functions/_uv")"
+else
+  synthetic_completion_mode="$(stat -c '%a' "$synthetic_completion_data/zsh/site-functions/_uv")"
+fi
+if [[ "$synthetic_completion_mode" != 644 ]]; then
+  fail_test "generated completion assets must be installed with mode 0644 (got $synthetic_completion_mode)"
+fi
+bash -c 'source "$1"; complete -p ruff' \
+  _ "$synthetic_completion_data/bash-completion/completions/ruff.bash" >/dev/null
+zsh -fc 'fpath=("$1" ${fpath:#/usr/share/zsh/vendor-completions}); autoload -Uz compinit; compinit -D -i; [[ "${_comps[uv]}" == _uv ]]' \
+  _ "$synthetic_completion_data/zsh/site-functions"
+
+# A failing generator must not replace the previous valid asset or leave
+# temporary files behind.
+printf '%s\n' preserved >"$synthetic_completion_data/zsh/site-functions/_uv"
+if PATH="$completion_stub_bin:/usr/bin:/bin" XDG_DATA_HOME="$synthetic_completion_data" FAIL_COMPLETION_FOR=uv \
+  bash "$completion_installer" install darwin "$synthetic_completion_manifest" >/dev/null 2>&1; then
   fail_test "completion installation must fail when a generator fails"
 fi
-if [[ "$(<"$completion_macos_data/zsh/site-functions/_uv")" != preserved ]]; then
+if [[ "$(<"$synthetic_completion_data/zsh/site-functions/_uv")" != preserved ]]; then
   fail_test "failed completion generation replaced the previous valid asset"
+fi
+if find "$synthetic_completion_data" -name '*.tmp.*' | grep -q .; then
+  fail_test "failed completion generation left temporary files behind"
+fi
+
+# A failure inside the marker step happens after the generated temp exists and
+# a second marked temp was created; the installer's EXIT trap must remove both
+# and leave the previous asset alone. `tail` is stubbed to fail only for this
+# run because the marker step uses it to copy the body after `#compdef`. The
+# stub fails only for the expected `tail -n +2 <file>` call and prints a unique
+# marker, so the assertions below prove the run actually reached that step; any
+# other invocation is reported distinctly.
+completion_failing_tail_bin="$tmp_dir/completion-failing-tail-bin"
+completion_marker_failure_log="$tmp_dir/completion-marker-failure.log"
+mkdir -p "$completion_failing_tail_bin"
+cat >"$completion_failing_tail_bin/tail" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+if [[ $# -eq 3 && "$1" == "-n" && "$2" == "+2" ]]; then
+  printf 'smoke-marker-copy-failure\n' >&2
+  exit 1
+fi
+printf 'unexpected tail invocation in marker-failure fixture: %s\n' "$*" >&2
+exit 2
+EOF
+chmod +x "$completion_failing_tail_bin/tail"
+if PATH="$completion_failing_tail_bin:$completion_stub_bin:/usr/bin:/bin" XDG_DATA_HOME="$synthetic_completion_data" \
+  bash "$completion_installer" install darwin "$synthetic_completion_manifest" >"$completion_marker_failure_log" 2>&1; then
+  fail_test "completion installation must fail when the marker step fails"
+fi
+assert_file_not_contains "$completion_marker_failure_log" "unexpected tail invocation in marker-failure fixture"
+assert_file_contains "$completion_marker_failure_log" "smoke-marker-copy-failure"
+if [[ "$(<"$synthetic_completion_data/zsh/site-functions/_uv")" != preserved ]]; then
+  fail_test "failed completion marker step replaced the previous valid asset"
+fi
+if find "$synthetic_completion_data" -name '*.tmp.*' | grep -q .; then
+  fail_test "failed completion marker step left temporary files behind"
+fi
+
+# Argument and manifest validation.
+completion_errors="$tmp_dir/completion.err"
+expect_failure "$completion_errors" run_completion_installer "$synthetic_completion_data" install darwin
+assert_file_contains "$completion_errors" "Usage:"
+expect_failure "$completion_errors" run_completion_installer "$synthetic_completion_data" \
+  install plan9 "$synthetic_completion_manifest"
+assert_file_contains "$completion_errors" "Usage:"
+expect_failure "$completion_errors" run_completion_installer "$synthetic_completion_data" \
+  list darwin "$tmp_dir/missing-completions.txt"
+assert_file_contains "$completion_errors" "completion manifest not found"
+invalid_completion_manifest="$tmp_dir/completions.invalid.txt"
+while IFS='|' read -r invalid_rows expected_error; do
+  printf '%b\n' "$invalid_rows" >"$invalid_completion_manifest"
+  expect_failure "$completion_errors" run_completion_installer "$synthetic_completion_data" \
+    list linux "$invalid_completion_manifest"
+  assert_file_contains "$completion_errors" "$expected_error"
+done <<'EOF'
+uv|must be "<command> <platforms>"
+uv linux extra|must be "<command> <platforms>"
+uv plan9|unsupported completion platform
+uv linux\nuv darwin|duplicate completion command
+/bin/uv linux|invalid completion command name
+EOF
+# A manifest command without a generator adapter lists fine but cannot install.
+printf '%s\n' 'no-adapter linux' >"$invalid_completion_manifest"
+ln -s completion-generator "$completion_stub_bin/no-adapter"
+run_completion_installer "$synthetic_completion_data" list linux "$invalid_completion_manifest" >/dev/null
+expect_failure "$completion_errors" run_completion_installer "$synthetic_completion_data" \
+  install linux "$invalid_completion_manifest"
+assert_file_contains "$completion_errors" "unsupported completion generator: no-adapter"
+
+# Reconciliation: files this installer wrote for commands that later left the
+# manifest or this platform are pruned only after every current entry installs,
+# while unmarked files and symlinks in the same directories are left alone.
+reconcile_completion_manifest="$tmp_dir/completions.reconcile.txt"
+reconcile_completion_data="$tmp_dir/completion-reconcile-data"
+reconcile_zsh_dir="$reconcile_completion_data/zsh/site-functions"
+reconcile_bash_dir="$reconcile_completion_data/bash-completion/completions"
+cat >"$reconcile_completion_manifest" <<'EOF'
+uv          linux,darwin
+ruff        linux,darwin
+chezmoi     linux,darwin
+EOF
+while IFS= read -r completion_command; do
+  if [[ ! -e "$completion_stub_bin/$completion_command" ]]; then
+    ln -s completion-generator "$completion_stub_bin/$completion_command"
+  fi
+done <<<"$(manifest_entries "$reconcile_completion_manifest" | awk '{ print $1 }')"
+run_completion_installer "$reconcile_completion_data" install linux "$reconcile_completion_manifest"
+if [[ "$(head -n 1 "$reconcile_zsh_dir/_uv")" != "#compdef uv" ]]; then
+  fail_test "ownership marker must not displace the #compdef line of generated Zsh completions"
+fi
+# Unrelated neighbors: an unmarked user file per directory, and a symlink to an
+# owned-looking file the installer must neither follow nor delete.
+printf '#compdef custom\n' >"$reconcile_zsh_dir/_custom"
+printf 'complete -W stub custom\n' >"$reconcile_bash_dir/custom.bash"
+cp "$reconcile_zsh_dir/_ruff" "$tmp_dir/completion-linked-owned"
+ln -s "$tmp_dir/completion-linked-owned" "$reconcile_zsh_dir/_linked"
+
+# ruff leaves the linux platform and chezmoi leaves the manifest entirely.
+cat >"$reconcile_completion_manifest" <<'EOF'
+uv          linux,darwin
+ruff        darwin
+EOF
+reconcile_current_targets="$reconcile_zsh_dir/_uv
+$reconcile_bash_dir/uv.bash"
+reconcile_obsolete_targets="$reconcile_zsh_dir/_ruff
+$reconcile_bash_dir/ruff.bash
+$reconcile_zsh_dir/_chezmoi
+$reconcile_bash_dir/chezmoi.bash"
+expect_failure "$completion_errors" run_completion_installer "$reconcile_completion_data" \
+  check linux "$reconcile_completion_manifest"
+while IFS= read -r completion_target; do
+  assert_file_contains "$completion_errors" "[stale] shell completion: $completion_target"
+done <<<"$reconcile_obsolete_targets"
+reconcile_listing="$(run_completion_installer "$reconcile_completion_data" \
+  list linux "$reconcile_completion_manifest" | sort)"
+expected_reconcile_listing="$(printf '%s\n%s\n' "$reconcile_current_targets" "$reconcile_obsolete_targets" | sort)"
+if [[ "$reconcile_listing" != "$expected_reconcile_listing" ]]; then
+  fail_test "completion list must include obsolete owned files before reinstall; got: $reconcile_listing"
+fi
+# A failing current entry must leave the obsolete files for the next attempt.
+if PATH="$completion_stub_bin:/usr/bin:/bin" XDG_DATA_HOME="$reconcile_completion_data" FAIL_COMPLETION_FOR=uv \
+  bash "$completion_installer" install linux "$reconcile_completion_manifest" >/dev/null 2>&1; then
+  fail_test "completion installation must fail when a generator fails"
+fi
+while IFS= read -r completion_target; do
+  [[ -f "$completion_target" ]] \
+    || fail_test "failed completion install must not prune obsolete files: $completion_target"
+done <<<"$reconcile_obsolete_targets"
+
+run_completion_installer "$reconcile_completion_data" install linux "$reconcile_completion_manifest" >/dev/null
+while IFS= read -r completion_target; do
+  [[ ! -e "$completion_target" ]] \
+    || fail_test "completion install must prune obsolete owned files: $completion_target"
+done <<<"$reconcile_obsolete_targets"
+for completion_target in "$reconcile_zsh_dir/_custom" "$reconcile_bash_dir/custom.bash"; do
+  [[ -f "$completion_target" ]] \
+    || fail_test "completion install must preserve unmarked files: $completion_target"
+done
+if [[ ! -L "$reconcile_zsh_dir/_linked" || ! -f "$tmp_dir/completion-linked-owned" ]]; then
+  fail_test "completion install must neither remove nor follow symlinks in completion directories"
+fi
+run_completion_installer "$reconcile_completion_data" check linux "$reconcile_completion_manifest" >/dev/null
+reconcile_listing="$(run_completion_installer "$reconcile_completion_data" \
+  list linux "$reconcile_completion_manifest" | sort)"
+if [[ "$reconcile_listing" != "$(sort <<<"$reconcile_current_targets")" ]]; then
+  fail_test "completion list must converge on current targets after reconcile; got: $reconcile_listing"
 fi
 
 render_template .chezmoiscripts/run_onchange_after_60-check.sh.tmpl "$tmp_dir/run_onchange_after_60-check.sh"
 syntax_check bash "$tmp_dir/run_onchange_after_60-check.sh"
 shellcheck_rendered_bash "$tmp_dir/run_onchange_after_60-check.sh"
 assert_file_contains "$tmp_dir/run_onchange_after_60-check.sh" "install_error_trap"
-assert_file_contains "$tmp_dir/run_onchange_after_60-check.sh" "Core tools in this environment"
-assert_file_contains "$tmp_dir/run_onchange_after_60-check.sh" "print_version_line chezmoi"
-assert_file_contains "$tmp_dir/run_onchange_after_60-check.sh" "print_version_line git"
 assert_file_contains "$tmp_dir/run_onchange_after_60-check.sh" "print_diagnostic_hints"
-assert_file_contains "$tmp_dir/run_onchange_after_60-check.sh" "Maple Mono NF CN monospace alias"
-assert_file_contains "$tmp_dir/run_onchange_after_60-check.sh" "fc-conflist"
-assert_file_contains "$tmp_dir/run_onchange_after_60-check.sh" "fc-match -f '%{postscriptname}\\n' monospace"
-assert_file_contains "$tmp_dir/run_onchange_after_60-check.sh" "check_cmd usage"
-assert_file_contains "$tmp_dir/run_onchange_after_60-check.sh" "install-shell-completions.sh\" check"
+# The check consumes the native package and runtime inventories instead of a
+# duplicated tool list.
+# shellcheck disable=SC2016
+if grep -Fq 'check_brewfile "$manifests_dir/system/Brewfile"' "$tmp_dir/run_onchange_after_60-check.sh"; then
+  assert_file_contains "$tmp_dir/run_onchange_after_60-check.sh" "brew_command"
+  assert_file_contains "$tmp_dir/run_onchange_after_60-check.sh" "bundle check --file="
+else
+  # shellcheck disable=SC2016
+  assert_file_contains "$tmp_dir/run_onchange_after_60-check.sh" 'check_apt_packages "$manifests_dir/system/apt-packages.txt"'
+  assert_file_contains "$tmp_dir/run_onchange_after_60-check.sh" "dpkg-query"
+fi
+assert_file_matches "$tmp_dir/run_onchange_after_60-check.sh" '^check_mise_toolchain$'
+assert_file_contains "$tmp_dir/run_onchange_after_60-check.sh" "mise ls --current --missing"
+assert_completion_hook_call "$tmp_dir/run_onchange_after_60-check.sh" check
+if (( desktop_platform_supported == 1 )); then
+  # shellcheck disable=SC2016
+  assert_file_contains "$tmp_dir/run_onchange_after_60-check.sh" 'desktop_font_manifest_load "$manifests_dir/desktop/maple-mono-nf-cn.env"'
+  assert_file_matches "$tmp_dir/run_onchange_after_60-check.sh" '^check_desktop_font_(macos|fontconfig)$'
+else
+  assert_file_not_contains "$tmp_dir/run_onchange_after_60-check.sh" 'desktop_font_manifest_load "'
+fi
 
 log_step "🤖" "Verifying docs and repo-only files stay undeployed..."
-managed_listing="$(chezmoi managed --source="$repo_root" --path-style=absolute)"
+managed_listing="$(chezmoi managed --source="$repo_root" --override-data-file "$tmp_data_file" --path-style=absolute)"
 if grep -Fq "$HOME/xdg_config" <<<"$managed_listing"; then
   fail_test "main chezmoi source must not deploy the nested xdg_config source under HOME"
 fi
-for nested_target in \
-  "$HOME/.config/mise/config.toml" \
-  "$HOME/.config/ghostty/config.ghostty" \
-  "$HOME/.config/fontconfig/conf.d/99-oh-my-devenv-maple-mono-nf-cn.conf"; do
-  if grep -Fxq "$nested_target" <<<"$managed_listing"; then
-    fail_test "main chezmoi source must not manage nested XDG target: $nested_target"
-  fi
-done
 if grep -Fq 'local-overlay-examples' <<<"$managed_listing"; then
   fail_test "chezmoi managed lists something under docs/local-overlay-examples/ (examples must stay undeployed)"
 fi
@@ -742,19 +1042,52 @@ chezmoi --config="$xdg_test_config" --source="$repo_root" execute-template \
   >"$tmp_dir/run_after_35-custom-xdg.sh"
 XDG_CONFIG_HOME="$xdg_test_home" XDG_STATE_HOME="$xdg_test_state" \
   bash "$tmp_dir/run_after_35-custom-xdg.sh"
-assert_file_contains "$xdg_test_home/mise/config.toml" "[tools]"
-assert_file_contains "$xdg_test_home/fontconfig/conf.d/99-oh-my-devenv-maple-mono-nf-cn.conf" "<fontconfig>"
-
 xdg_managed_listing="$(XDG_CONFIG_HOME="$xdg_test_home" XDG_STATE_HOME="$xdg_test_state" \
   bash "$repo_root/bootstrap/scripts/xdg-config.sh" managed "$xdg_test_config")"
-if ! grep -Fxq "$xdg_test_home/mise/config.toml" <<<"$xdg_managed_listing"; then
-  fail_test "nested XDG source does not manage mise/config.toml under XDG_CONFIG_HOME"
+if [[ -z "$xdg_managed_listing" ]]; then
+  fail_test "nested XDG source manages no files"
 fi
-if grep -Fxq "$xdg_test_home/mise/config.local.toml" <<<"$xdg_managed_listing"; then
-  fail_test "nested XDG source must not manage the mise local overlay"
+while IFS= read -r xdg_managed_path; do
+  case "$xdg_managed_path" in
+    "$xdg_test_home"/*) ;;
+    *) fail_test "nested XDG source manages a path outside XDG_CONFIG_HOME: $xdg_managed_path" ;;
+  esac
+  xdg_managed_relative="${xdg_managed_path#"$xdg_test_home"/}"
+  # The main source must not manage the same target, and the first-run backup
+  # must cover it.
+  if grep -Fxq "$HOME/.config/$xdg_managed_relative" <<<"$managed_listing"; then
+    fail_test "main chezmoi source must not manage nested XDG target: $xdg_managed_relative"
+  fi
+  assert_file_contains "$tmp_dir/run_once_before_10-bootstrap.sh" \
+    "\"xdg-config/$xdg_managed_relative|\$XDG_CONFIG_HOME/$xdg_managed_relative\""
+done <<<"$xdg_managed_listing"
+# Local overlays under XDG_CONFIG_HOME stay user-owned.
+while IFS=$'\t' read -r -a overlay_fields; do
+  [[ "${overlay_fields[3]}" == "exact" ]] || continue
+  overlay_target="$(XDG_CONFIG_HOME="$xdg_test_home" local_overlay_resolve_location "${overlay_fields[2]}")"
+  if grep -Fxq "$overlay_target" <<<"$xdg_managed_listing"; then
+    fail_test "nested XDG source must not manage the local overlay ${overlay_fields[0]}"
+  fi
+done < <(local_overlay_inventory "$overlay_manifest")
+
+# With the desktop baseline enabled, the desktop templates receive the font
+# family from the manifest through xdg-config.sh.
+xdg_desktop_home="$tmp_dir/xdg-desktop-config-home"
+xdg_desktop_config="$tmp_dir/xdg-desktop-chezmoi.toml"
+cat >"$xdg_desktop_config" <<'EOF'
+[data]
+desktopBaseline = true
+EOF
+XDG_CONFIG_HOME="$xdg_desktop_home" XDG_STATE_HOME="$tmp_dir/xdg-desktop-state-home" \
+  bash "$repo_root/bootstrap/scripts/xdg-config.sh" apply "$xdg_desktop_config"
+if [[ "$desktop_platform_supported_data" == true ]]; then
+  assert_file_contains "$xdg_desktop_home/ghostty/config.ghostty" "font-family = $MAPLE_MONO_FAMILY"
+elif [[ -s "$xdg_desktop_home/ghostty/config.ghostty" ]]; then
+  fail_test "nested XDG apply wrote a Ghostty config on an unsupported desktop platform"
 fi
-if ! grep -Fxq "$xdg_test_home/fontconfig/conf.d/99-oh-my-devenv-maple-mono-nf-cn.conf" <<<"$xdg_managed_listing"; then
-  fail_test "nested XDG source does not manage the Fontconfig fragment under XDG_CONFIG_HOME"
+if (( linux_fontconfig_alias_enabled == 1 )); then
+  assert_file_contains "$xdg_desktop_home/fontconfig/conf.d/99-oh-my-devenv-maple-mono-nf-cn.conf" \
+    "<string>$MAPLE_MONO_FAMILY</string>"
 fi
 
 xdg_status="$(XDG_CONFIG_HOME="$xdg_test_home" XDG_STATE_HOME="$xdg_test_state" \
@@ -767,8 +1100,16 @@ fi
 # arrays), so execute its dynamic preview where that existing requirement holds.
 if (( BASH_VERSINFO[0] >= 4 )); then
   uninstall_data_home="$tmp_dir/uninstall-data-home"
-  mkdir -p "$uninstall_data_home/zsh/site-functions"
-  touch "$uninstall_data_home/zsh/site-functions/_uv"
+  case "$(uname -s)" in
+    Darwin) uninstall_completion_platform=darwin ;;
+    *) uninstall_completion_platform=linux ;;
+  esac
+  # uninstall.sh derives completion candidates from the installer inventory.
+  uninstall_completion_fixture="$(run_completion_installer "$uninstall_data_home" \
+    list "$uninstall_completion_platform" "$completion_manifest" | sed -n '1p')"
+  mkdir -p "$(dirname "$uninstall_completion_fixture")"
+  touch "$uninstall_completion_fixture"
+  uninstall_xdg_fixture="$(head -n 1 <<<"$xdg_managed_listing")"
   overlay_fixture_listing="$(
     export HOME="$tmp_dir/uninstall-home"
     export XDG_CONFIG_HOME="$xdg_test_home"
@@ -784,32 +1125,40 @@ if (( BASH_VERSINFO[0] >= 4 )); then
   )"
   uninstall_preview="$(HOME="$tmp_dir/uninstall-home" XDG_CONFIG_HOME="$xdg_test_home" XDG_DATA_HOME="$uninstall_data_home" \
     bash "$repo_root/bootstrap/scripts/uninstall.sh")"
-  if ! grep -Fq "[would-remove] file: $xdg_test_home/mise/config.toml" <<<"$uninstall_preview"; then
-    fail_test "uninstall preview does not include the custom-XDG mise config"
+  if ! grep -Fq "[would-remove] file: $uninstall_xdg_fixture" <<<"$uninstall_preview"; then
+    fail_test "uninstall preview does not include the custom-XDG managed file $uninstall_xdg_fixture"
   fi
   while IFS= read -r overlay_fixture; do
     if ! grep -Fq "[would-skip] overlay-protected: $overlay_fixture" <<<"$uninstall_preview"; then
       fail_test "uninstall preview does not protect overlay: $overlay_fixture"
     fi
   done <<<"$overlay_fixture_listing"
-  if grep -Fq "$tmp_dir/uninstall-home/.config/mise/config.toml" <<<"$uninstall_preview"; then
+  if grep -Fq "$tmp_dir/uninstall-home/.config/${uninstall_xdg_fixture#"$xdg_test_home"/}" <<<"$uninstall_preview"; then
     fail_test "uninstall preview fell back to HOME/.config instead of custom XDG_CONFIG_HOME"
   fi
   if ! grep -Fq "$tmp_dir/uninstall-home/.local/state/chezmoi/oh-my-devenv-xdg.boltdb" <<<"$uninstall_preview"; then
     fail_test "uninstall preview does not include the nested chezmoi state file"
   fi
-  if ! grep -Fq "[would-remove] file: $uninstall_data_home/zsh/site-functions/_uv" <<<"$uninstall_preview"; then
+  if ! grep -Fq "[would-remove] file: $uninstall_completion_fixture" <<<"$uninstall_preview"; then
     fail_test "uninstall preview does not include generated shell completion files"
   fi
 fi
 
 log_step "🧩" "Running manifest contract checks..."
-assert_file_contains "$repo_root/bootstrap/manifests/desktop/Brewfile" 'cask "ghostty"'
-assert_file_contains "$repo_root/bootstrap/manifests/desktop/Brewfile" 'cask "font-maple-mono-nf-cn"'
-assert_file_contains "$repo_root/bootstrap/manifests/desktop/Brewfile" 'cask "orbstack"'
-assert_desktop_platform_support '{"chezmoi":{"os":"darwin","osRelease":null,"kernel":null}}' true
-assert_desktop_platform_support '{"chezmoi":{"os":"linux","osRelease":{"id":"ubuntu","versionID":"26.04"},"kernel":{"osrelease":"linux"}}}' true
-assert_desktop_platform_support '{"chezmoi":{"os":"linux","osRelease":{"id":"ubuntu","versionID":"24.04"},"kernel":{"osrelease":"linux"}}}' ''
+# Brewfiles must hold only Homebrew bundle directives; the selected packages
+# and casks are owned by the manifests themselves.
+for brewfile in "$repo_root/bootstrap/manifests/system/Brewfile" "$repo_root/bootstrap/manifests/desktop/Brewfile"; do
+  brewfile_entries="$(manifest_entries "$brewfile")"
+  if [[ -z "$brewfile_entries" ]]; then
+    fail_test "$brewfile declares no packages"
+  fi
+  if grep -Evq '^(tap|brew|cask|mas|vscode) "[^"]+"' <<<"$brewfile_entries"; then
+    fail_test "$brewfile contains a line that is not a Homebrew bundle directive"
+  fi
+done
+assert_desktop_platform_support "{\"chezmoi\":$darwin_chezmoi_data}" true
+assert_desktop_platform_support "{\"chezmoi\":$supported_linux_chezmoi_data}" true
+assert_desktop_platform_support "{\"chezmoi\":$unsupported_linux_chezmoi_data}" ''
 assert_desktop_platform_support '{"chezmoi":{"os":"linux","osRelease":{"id":"ubuntu","versionID":"26.04"},"kernel":{"osrelease":"microsoft-standard-WSL2"}}}' ''
 assert_desktop_platform_support '{"chezmoi":{"os":"linux","osRelease":{"id":"debian","versionID":"26.04"},"kernel":{"osrelease":"linux"}}}' ''
 synthetic_fontconfig_template="$repo_root/xdg_config/fontconfig/conf.d/99-oh-my-devenv-maple-mono-nf-cn.conf.tmpl"
@@ -817,66 +1166,108 @@ synthetic_supported_fontconfig="$tmp_dir/fontconfig-supported-linux.conf"
 synthetic_unsupported_fontconfig="$tmp_dir/fontconfig-unsupported-linux.conf"
 synthetic_macos_fontconfig="$tmp_dir/fontconfig-macos.conf"
 chezmoi --source="$repo_root" \
-  --override-data '{"desktopBaseline":true,"desktopPlatformSupported":true,"chezmoi":{"os":"linux","osRelease":{"id":"ubuntu","versionID":"26.04"},"kernel":{"osrelease":"linux"}}}' \
+  --override-data "$(desktop_override_data true "$supported_linux_chezmoi_data")" \
   execute-template --file "$synthetic_fontconfig_template" \
   >"$synthetic_supported_fontconfig"
 chezmoi --source="$repo_root" \
-  --override-data '{"desktopBaseline":true,"desktopPlatformSupported":false,"chezmoi":{"os":"linux","osRelease":{"id":"ubuntu","versionID":"24.04"},"kernel":{"osrelease":"linux"}}}' \
+  --override-data "$(desktop_override_data false "$unsupported_linux_chezmoi_data")" \
   execute-template --file "$synthetic_fontconfig_template" \
   >"$synthetic_unsupported_fontconfig"
 chezmoi --source="$repo_root" \
-  --override-data '{"desktopBaseline":true,"desktopPlatformSupported":true,"chezmoi":{"os":"darwin","osRelease":null,"kernel":null}}' \
+  --override-data "$(desktop_override_data true "$darwin_chezmoi_data")" \
   execute-template --file "$synthetic_fontconfig_template" \
   >"$synthetic_macos_fontconfig"
 assert_file_contains "$synthetic_supported_fontconfig" '<edit name="family" mode="prepend" binding="strong">'
-assert_file_contains "$synthetic_supported_fontconfig" "Maple Mono NF CN"
+assert_file_contains "$synthetic_supported_fontconfig" "<string>$MAPLE_MONO_FAMILY</string>"
 assert_file_not_contains "$synthetic_unsupported_fontconfig" 'binding="strong"'
-assert_file_not_contains "$synthetic_unsupported_fontconfig" "Maple Mono NF CN"
+assert_file_not_contains "$synthetic_unsupported_fontconfig" "$MAPLE_MONO_FAMILY"
 assert_file_not_contains "$synthetic_macos_fontconfig" 'binding="strong"'
-assert_file_not_contains "$synthetic_macos_fontconfig" "Maple Mono NF CN"
+assert_file_not_contains "$synthetic_macos_fontconfig" "$MAPLE_MONO_FAMILY"
 synthetic_macos_ghostty="$tmp_dir/ghostty-macos.conf"
 synthetic_linux_ghostty="$tmp_dir/ghostty-linux.conf"
 chezmoi --source="$repo_root" \
-  --override-data '{"desktopBaseline":true,"desktopPlatformSupported":true,"chezmoi":{"os":"darwin","osRelease":null,"kernel":null}}' \
+  --override-data "$(desktop_override_data true "$darwin_chezmoi_data")" \
   execute-template --file "$repo_root/xdg_config/ghostty/config.ghostty.tmpl" \
   >"$synthetic_macos_ghostty"
 chezmoi --source="$repo_root" \
-  --override-data '{"desktopBaseline":true,"desktopPlatformSupported":true,"chezmoi":{"os":"linux","osRelease":{"id":"ubuntu","versionID":"26.04"},"kernel":{"osrelease":"linux"}}}' \
+  --override-data "$(desktop_override_data true "$supported_linux_chezmoi_data")" \
   execute-template --file "$repo_root/xdg_config/ghostty/config.ghostty.tmpl" \
   >"$synthetic_linux_ghostty"
-assert_file_contains "$synthetic_macos_ghostty" "macos-titlebar-style = native"
-assert_file_not_contains "$synthetic_linux_ghostty" "macos-titlebar-style"
-assert_file_contains "$synthetic_macos_ghostty" "window-save-state = always"
-assert_file_not_contains "$synthetic_linux_ghostty" "window-save-state"
-assert_file_contains "$synthetic_macos_ghostty" "macos-option-as-alt = left"
-assert_file_not_contains "$synthetic_linux_ghostty" "macos-option-as-alt"
-assert_file_contains "$synthetic_macos_ghostty" "mouse-shift-capture = never"
-assert_file_contains "$synthetic_linux_ghostty" "mouse-shift-capture = never"
-assert_file_contains "$synthetic_macos_ghostty" "copy-on-select = clipboard"
-assert_file_contains "$synthetic_linux_ghostty" "copy-on-select = clipboard"
-assert_file_contains "$synthetic_macos_ghostty" "split-preserve-zoom = navigation"
-assert_file_contains "$synthetic_linux_ghostty" "split-preserve-zoom = navigation"
-check_tool_manifest_parser "$repo_root/bootstrap/manifests/ecosystem/go-tools.txt" go_tool_binary_name
-check_tool_manifest_parser "$repo_root/bootstrap/manifests/ecosystem/uv-tools.txt" uv_tool_binary_name
-if grep -Eq '@latest([[:space:]]|$)' "$repo_root/bootstrap/manifests/ecosystem/go-tools.txt"; then
-  fail_test "go-tools.txt must pin exact versions instead of @latest"
-fi
-
-mise_config="$repo_root/xdg_config/mise/config.toml.tmpl"
-for runtime in go node python; do
-  if ! grep -Eq "^${runtime} = \"v?[0-9]+\.[0-9]+\.[0-9]+\"$" "$mise_config"; then
-    fail_test "mise config must pin $runtime to a complete major.minor.patch version"
+# Both platforms share the manifest font and the local overlay hook; macOS-only
+# options must never leak into the Linux render. The remaining preferences are
+# owned by the template.
+for synthetic_ghostty in "$synthetic_macos_ghostty" "$synthetic_linux_ghostty"; do
+  assert_file_contains "$synthetic_ghostty" "font-family = $MAPLE_MONO_FAMILY"
+  assert_file_contains "$synthetic_ghostty" "$ghostty_include_literal"
+  if [[ "$(grep -Ec '^font-family = ' "$synthetic_ghostty")" != 1 ]]; then
+    fail_test "$synthetic_ghostty must set font-family exactly once"
   fi
 done
-check_oh_my_zsh_manifest_contract "$repo_root/bootstrap/manifests/shell/oh-my-zsh-plugins.txt" "$tmp_dir/dot_zshrc"
-desktop_font_manifest="$repo_root/bootstrap/manifests/desktop/maple-mono-nf-cn.env"
-desktop_font_sha="$(sed -n 's/^MAPLE_MONO_SHA256=//p' "$desktop_font_manifest")"
-if [[ ! "$desktop_font_sha" =~ ^[0-9a-f]{64}$ ]]; then
-  fail_test "Maple Mono desktop manifest must pin a lowercase SHA-256 digest"
+if grep -Eq '^macos-' "$synthetic_linux_ghostty"; then
+  fail_test "Linux Ghostty render must not contain macOS-only options"
 fi
-assert_file_contains "$desktop_font_manifest" "MAPLE_MONO_VERSION=7.9"
-assert_file_contains "$desktop_font_manifest" "/releases/download/v7.9/MapleMono-NF-CN-unhinted.zip"
-assert_file_contains "$repo_root/bootstrap/manifests/desktop/apt-packages.txt" "fontconfig"
+check_tool_manifest_parser "$repo_root/bootstrap/manifests/ecosystem/go-tools.txt" go_tool_binary_name
+check_tool_manifest_parser "$repo_root/bootstrap/manifests/ecosystem/uv-tools.txt" uv_tool_binary_name
+# Every Go tool entry must pin an exact module version; the installer refuses
+# anything else before running `go install`.
+while IFS= read -r go_tool_entry; do
+  go_tool_version "$go_tool_entry" >/dev/null \
+    || fail_test "go-tools.txt entry is not pinned to an exact version: $go_tool_entry"
+done < <(manifest_entries "$repo_root/bootstrap/manifests/ecosystem/go-tools.txt")
+for valid_go_pin in \
+  'example.com/tool/cmd/tool@v1.2.3' \
+  'example.com/tool@v1.2.3-rc.1' \
+  'example.com/tool@v0.0.0-20240101000000-abcdef123456'; do
+  if [[ "$(go_tool_version "$valid_go_pin")" != "${valid_go_pin##*@}" ]]; then
+    fail_test "go_tool_version rejected a valid pin: $valid_go_pin"
+  fi
+  if [[ "$(go_tool_binary_name "$valid_go_pin")" != tool ]]; then
+    fail_test "go_tool_binary_name derived the wrong binary for $valid_go_pin"
+  fi
+done
+go_pin_errors="$tmp_dir/go-pin.err"
+for invalid_go_pin in 'example.com/tool@latest' 'example.com/tool' 'example.com/tool@v1.2' 'example.com/tool@1.2.3'; do
+  expect_failure "$go_pin_errors" go_tool_version "$invalid_go_pin"
+  assert_file_contains "$go_pin_errors" "must pin an exact module version"
+done
+
+# Every tool declared under [tools] pins a complete major.minor.patch version.
+# The rendered TOML is parsed instead of pattern-matching source lines, so
+# quoted and backend-prefixed tool keys stay valid.
+render_template xdg_config/mise/config.toml.tmpl "$tmp_dir/mise-config.toml"
+# shellcheck disable=SC2016
+mise_tools_template='{{ range $tool, $version := (.chezmoi.stdin | fromToml).tools }}{{ $tool }}{{ "\t" }}{{ $version }}{{ "\n" }}{{ end }}'
+mise_tool_entries="$(chezmoi --source="$repo_root" execute-template --with-stdin \
+  "$mise_tools_template" <"$tmp_dir/mise-config.toml")" \
+  || fail_test "mise config does not parse as TOML with a [tools] table"
+if [[ -z "$mise_tool_entries" ]]; then
+  fail_test "mise config declares no tools"
+fi
+if grep -Evq $'^[^\t]+\tv?[0-9]+\\.[0-9]+\\.[0-9]+$' <<<"$mise_tool_entries"; then
+  fail_test "every mise tool must pin a complete major.minor.patch version"
+fi
+check_oh_my_zsh_manifest_contract "$repo_root/bootstrap/manifests/shell/oh-my-zsh-plugins.txt" "$tmp_dir/dot_zshrc"
+# The desktop font manifest already passed schema validation while loading the
+# smoke data; the loader must reject missing and malformed manifests.
+font_manifest_errors="$tmp_dir/font-manifest.err"
+# shellcheck disable=SC2016
+font_manifest_load_command='source "$1"; desktop_font_manifest_load "$2"'
+expect_failure "$font_manifest_errors" bash -c "$font_manifest_load_command" _ "$script_dir/common.sh" "$tmp_dir/missing-font.env"
+assert_file_contains "$font_manifest_errors" "not found"
+invalid_font_manifest="$tmp_dir/font-manifest.invalid.env"
+while IFS='|' read -r invalid_assignment expected_error; do
+  {
+    sed -e "/^${invalid_assignment%%=*}=/d" "$desktop_font_manifest"
+    printf '%s\n' "$invalid_assignment"
+  } >"$invalid_font_manifest"
+  expect_failure "$font_manifest_errors" bash -c "$font_manifest_load_command" _ "$script_dir/common.sh" "$invalid_font_manifest"
+  assert_file_contains "$font_manifest_errors" "$expected_error"
+done <<'EOF'
+MAPLE_MONO_FAMILY=|does not define MAPLE_MONO_FAMILY
+MAPLE_MONO_FAMILY="Bad; Family"|must contain only letters, digits, spaces, and hyphens
+MAPLE_MONO_POSTSCRIPT_NAMES="Good-Face bad.face"|invalid PostScript name
+MAPLE_MONO_SHA256=ABC|not a lowercase SHA-256 digest
+EOF
 assert_file_contains "$tmp_dir/run_onchange_after_60-check.sh" "check_manifest_cmds \"\$manifests_dir/ecosystem/go-tools.txt\" go_tool_binary_name"
 assert_file_contains "$tmp_dir/run_onchange_after_60-check.sh" "check_manifest_cmds \"\$manifests_dir/ecosystem/uv-tools.txt\" uv_tool_binary_name"
 assert_file_contains "$tmp_dir/run_onchange_after_60-check.sh" "check_oh_my_zsh_plugins \"\$manifests_dir/shell/oh-my-zsh-plugins.txt\" \"\${ZSH_CUSTOM:-\$HOME/.oh-my-zsh/custom}\""
@@ -898,19 +1289,11 @@ fi
 bash -c 'set -euo pipefail; source "$1"' _ "$repo_root/bootstrap/scripts/common.sh" ||
   fail_test "common.sh fails to source under set -euo pipefail (likely broken by mirrors.sh)"
 
-# Protect the external defaults: these are the values today's baseline
-# has always handed to downstream tooling. If someone changes them, the
-# byte-for-byte guarantee for external mode is at risk.
-expected_external_goproxy="proxy.golang.org,direct"
-if ! grep -Eq "^external[[:space:]]+GOPROXY[[:space:]]+${expected_external_goproxy}[[:space:]]*$" "$mirrors_env"; then
-  fail_test "mirrors.env: external GOPROXY default drifted from $expected_external_goproxy"
-fi
-
-# Every <placeholder-...> the manifest ships must live only under the
-# `internal` mode. If a placeholder leaks into the `external` rows we'd
-# silently export it in default installs.
-if awk '$1 == "external" && $3 ~ /<placeholder/ { found=1 } END { exit found?0:1 }' "$mirrors_env"; then
-  fail_test "mirrors.env: an external row contains a <placeholder> value (would leak into default installs)"
+# The manifest must parse as <ENV_VAR_NAME> <value> rows; the endpoints
+# themselves are owned by the manifest.
+mirror_entries="$(dotfiles_mirrors_entries "$mirrors_env")" || fail_test "mirrors.env failed schema validation"
+if [[ -z "$mirror_entries" ]]; then
+  fail_test "mirrors.env declares no mirror keys"
 fi
 
 # Mode resolution: unset mode + unset probe URL => external, no curl.
@@ -954,38 +1337,67 @@ if [[ -n "$external_leak" ]]; then
   fail_test "external mode exported unexpected vars: $external_leak"
 fi
 
-# Internal mode + user override actually exports the real key.
+# Synthetic manifest: verbatim values export, placeholders stay inert until a
+# DOTFILES_<KEY> override arrives, and keys that already carry the prefix are
+# overridden directly.
+synthetic_mirrors_env="$tmp_dir/mirrors.synthetic.env"
+cat >"$synthetic_mirrors_env" <<'EOF'
+# key value
+SMOKE_VERBATIM        https://verbatim.smoke.example/
+SMOKE_PLACEHOLDER     <placeholder-smoke>
+DOTFILES_SMOKE_DIRECT <placeholder-smoke-direct>
+EOF
 # shellcheck disable=SC2016
-internal_export_check="$(env -i PATH="/usr/bin:/bin" HOME="$tmp_dir/fake-home" \
-  DOTFILES_MIRROR_MODE=internal \
-  DOTFILES_GOPROXY="https://goproxy.smoke.example/" \
-  bash -c '
-    set -euo pipefail
-    source "$1"
-    dotfiles_apply_mirror_env 2>/dev/null
-    printf "%s\n" "${GOPROXY:-<unset>}"
-  ' _ "$repo_root/bootstrap/scripts/common.sh")"
-if [[ "$internal_export_check" != "https://goproxy.smoke.example/" ]]; then
-  fail_test "internal mode + DOTFILES_GOPROXY override did not export GOPROXY (got '$internal_export_check')"
+mirror_probe_command='set -euo pipefail; source "$1"; dotfiles_apply_mirror_env "$2" 2>"$3"; printf "%s|%s|%s\n" "${SMOKE_VERBATIM:-<unset>}" "${SMOKE_PLACEHOLDER:-<unset>}" "${DOTFILES_SMOKE_DIRECT:-<unset>}"'
+internal_defaults="$(env -i PATH="/usr/bin:/bin" HOME="$tmp_dir/fake-home" DOTFILES_MIRROR_MODE=internal \
+  bash -c "$mirror_probe_command" _ "$repo_root/bootstrap/scripts/common.sh" "$synthetic_mirrors_env" "$tmp_dir/internal-warn.err")"
+if [[ "$internal_defaults" != "https://verbatim.smoke.example/|<unset>|<unset>" ]]; then
+  fail_test "internal mode exported '$internal_defaults'; expected only the verbatim value"
+fi
+assert_file_contains "$tmp_dir/internal-warn.err" \
+  "WARNING: internal mirror value for SMOKE_PLACEHOLDER is still <placeholder>; set DOTFILES_SMOKE_PLACEHOLDER"
+assert_file_contains "$tmp_dir/internal-warn.err" \
+  "WARNING: internal mirror value for DOTFILES_SMOKE_DIRECT is still <placeholder>; set DOTFILES_SMOKE_DIRECT"
+internal_overrides="$(env -i PATH="/usr/bin:/bin" HOME="$tmp_dir/fake-home" DOTFILES_MIRROR_MODE=internal \
+  DOTFILES_SMOKE_VERBATIM="https://override.smoke.example/" \
+  DOTFILES_SMOKE_PLACEHOLDER="https://placeholder.smoke.example/" \
+  DOTFILES_SMOKE_DIRECT="https://direct.smoke.example/" \
+  bash -c "$mirror_probe_command" _ "$repo_root/bootstrap/scripts/common.sh" "$synthetic_mirrors_env" "$tmp_dir/internal-override.err")"
+if [[ "$internal_overrides" != "https://override.smoke.example/|https://placeholder.smoke.example/|https://direct.smoke.example/" ]]; then
+  fail_test "internal mode overrides exported '$internal_overrides'"
+fi
+if [[ -s "$tmp_dir/internal-override.err" ]]; then
+  fail_test "internal mode warned although every key was overridden: $(<"$tmp_dir/internal-override.err")"
 fi
 
-# Internal mode without any override must warn (not silently export a
-# <placeholder>) and must leave GOPROXY unset.
+# External mode is a no-op that preserves whatever the caller exported.
+external_preserved="$(env -i PATH="/usr/bin:/bin" HOME="$tmp_dir/fake-home" SMOKE_VERBATIM=caller \
+  bash -c "$mirror_probe_command" _ "$repo_root/bootstrap/scripts/common.sh" "$synthetic_mirrors_env" "$tmp_dir/external.err")"
+if [[ "$external_preserved" != "caller|<unset>|<unset>" ]]; then
+  fail_test "external mode changed the caller environment: '$external_preserved'"
+fi
+
+# An unknown mode warns and falls back to external.
 # shellcheck disable=SC2016
-internal_no_override="$(env -i PATH="/usr/bin:/bin" HOME="$tmp_dir/fake-home" \
-  DOTFILES_MIRROR_MODE=internal \
-  bash -c '
-    set -euo pipefail
-    source "$1"
-    dotfiles_apply_mirror_env 2>"$2"
-    printf "GOPROXY=%s\n" "${GOPROXY:-<unset>}"
-  ' _ "$repo_root/bootstrap/scripts/common.sh" "$tmp_dir/internal-warn.err")"
-if [[ "$internal_no_override" != "GOPROXY=<unset>" ]]; then
-  fail_test "internal mode without override should leave GOPROXY unset (got '$internal_no_override')"
+resolved_unknown="$(env -i PATH="/usr/bin:/bin" HOME="$tmp_dir/fake-home" DOTFILES_MIRROR_MODE=bogus \
+  bash -c 'source "$1"; dotfiles_resolve_mirror_mode' _ "$repo_root/bootstrap/scripts/common.sh" 2>"$tmp_dir/unknown-mode.err")"
+if [[ "$resolved_unknown" != "external" ]]; then
+  fail_test "unknown DOTFILES_MIRROR_MODE must fall back to external (got '$resolved_unknown')"
 fi
-if ! grep -Fq "WARNING: internal mirror value for GOPROXY is still <placeholder>" "$tmp_dir/internal-warn.err"; then
-  fail_test "internal mode without override did not emit the expected placeholder warning"
-fi
+assert_file_contains "$tmp_dir/unknown-mode.err" "unknown DOTFILES_MIRROR_MODE=bogus"
+
+# Malformed or missing manifests fail internal mode instead of skipping keys.
+# shellcheck disable=SC2016
+mirror_fail_command='set -euo pipefail; source "$1"; dotfiles_apply_mirror_env "$2"'
+for malformed_row in 'lowercase_key value' 'ONLY_KEY' 'KEY value extra'; do
+  printf '%s\n' "$malformed_row" >"$tmp_dir/mirrors.malformed.env"
+  expect_failure "$tmp_dir/mirror-malformed.err" env -i PATH="/usr/bin:/bin" HOME="$tmp_dir/fake-home" DOTFILES_MIRROR_MODE=internal \
+    bash -c "$mirror_fail_command" _ "$repo_root/bootstrap/scripts/common.sh" "$tmp_dir/mirrors.malformed.env"
+  assert_file_contains "$tmp_dir/mirror-malformed.err" "invalid mirror manifest entry"
+done
+expect_failure "$tmp_dir/mirror-missing.err" env -i PATH="/usr/bin:/bin" HOME="$tmp_dir/fake-home" DOTFILES_MIRROR_MODE=internal \
+  bash -c "$mirror_fail_command" _ "$repo_root/bootstrap/scripts/common.sh" "$tmp_dir/mirrors.missing.env"
+assert_file_contains "$tmp_dir/mirror-missing.err" "not found"
 
 # Every consumer that should honor mirror mode actually calls
 # dotfiles_apply_mirror_env. If we forget to wire one, the module is
@@ -999,19 +1411,74 @@ for consumer in \
     fail_test "$consumer is missing dotfiles_apply_mirror_env (mirror mode would be silently bypassed)"
   fi
 done
-# 30-install-mise.sh.tmpl is the only consumer we touched inside a
-# chezmoi template; assert its rendered form also wired the helper.
-mise_install_line="mise_install_url=\"\${DOTFILES_MISE_INSTALL_URL:-https://mise.run}\""
-mise_curl_line="curl -fsSL \"\$mise_install_url\" | sh"
+# 30-install-mise.sh.tmpl is the only consumer inside a chezmoi template. On
+# Linux the installer URL must honor the mirror override; on macOS mise comes
+# from Homebrew. Both platform renders are exercised regardless of the host so
+# the Linux behavior is covered on macOS too. The default URL itself is owned
+# by the template and is deliberately not asserted here.
 assert_file_contains "$tmp_dir/run_onchange_after_30-install-mise.sh" "dotfiles_apply_mirror_env"
-if grep -Fq 'curl -fsSL' "$tmp_dir/run_onchange_after_30-install-mise.sh"; then
-  assert_file_contains "$tmp_dir/run_onchange_after_30-install-mise.sh" "$mise_install_line"
-  assert_file_contains "$tmp_dir/run_onchange_after_30-install-mise.sh" "$mise_curl_line"
-else
-  assert_file_not_contains "$tmp_dir/run_onchange_after_30-install-mise.sh" "$mise_install_line"
-  assert_file_not_contains "$tmp_dir/run_onchange_after_30-install-mise.sh" "$mise_curl_line"
-  assert_file_contains "$tmp_dir/run_onchange_after_30-install-mise.sh" "\"\$BREW_CMD\" install mise"
+mise_hook_template="$repo_root/.chezmoiscripts/run_onchange_after_30-install-mise.sh.tmpl"
+synthetic_linux_mise_hook="$tmp_dir/run_onchange_after_30-install-mise.linux.sh"
+synthetic_macos_mise_hook="$tmp_dir/run_onchange_after_30-install-mise.macos.sh"
+chezmoi --source="$repo_root" \
+  --override-data "{\"chezmoi\":$supported_linux_chezmoi_data}" \
+  execute-template --file "$mise_hook_template" >"$synthetic_linux_mise_hook"
+chezmoi --source="$repo_root" \
+  --override-data "{\"chezmoi\":$darwin_chezmoi_data}" \
+  execute-template --file "$mise_hook_template" >"$synthetic_macos_mise_hook"
+for synthetic_mise_hook in "$synthetic_linux_mise_hook" "$synthetic_macos_mise_hook"; do
+  syntax_check bash "$synthetic_mise_hook"
+  shellcheck_rendered_bash "$synthetic_mise_hook"
+  assert_file_contains "$synthetic_mise_hook" "dotfiles_apply_mirror_env"
+done
+assert_file_not_contains "$synthetic_macos_mise_hook" "DOTFILES_MISE_INSTALL_URL"
+assert_file_contains "$synthetic_macos_mise_hook" "\"\$BREW_CMD\" install mise"
+
+# Behavioral fixture: run the rendered Linux hook with a stubbed curl and no
+# mise on PATH. The stub records its arguments and emits a fake installer
+# that drops a stub mise into the fake HOME, so the `curl ... | sh` pipeline
+# runs end to end without touching the network, the real HOME, or a real
+# installer. Any curl call other than the installer download fails loudly.
+mise_stub_bin="$tmp_dir/mise-stub-bin"
+mise_fake_home="$tmp_dir/mise-fake-home"
+mise_curl_log="$tmp_dir/mise-curl.log"
+mise_hook_output="$tmp_dir/mise-hook.out"
+synthetic_mise_install_url="https://mise-install.smoke.example/install.sh"
+mkdir -p "$mise_stub_bin" "$mise_fake_home"
+cat >"$mise_stub_bin/curl" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+if [[ $# -ne 2 || "$1" != "-fsSL" ]]; then
+  printf 'unexpected curl invocation: %s\n' "$*" >&2
+  exit 1
 fi
+printf '%s\n' "$2" >>"$SMOKE_MISE_CURL_LOG"
+cat <<'INSTALLER'
+#!/bin/sh
+set -eu
+mkdir -p "$HOME/.local/bin"
+printf '%s\n' '#!/bin/sh' 'echo "mise smoke-stub"' >"$HOME/.local/bin/mise"
+chmod +x "$HOME/.local/bin/mise"
+INSTALLER
+EOF
+chmod +x "$mise_stub_bin/curl"
+if env -i PATH="$mise_stub_bin:/usr/bin:/bin" HOME="$mise_fake_home" \
+  bash -c 'command -v mise' >/dev/null 2>&1; then
+  fail_test "mise fixture PATH must not already provide mise"
+fi
+env -i PATH="$mise_stub_bin:/usr/bin:/bin" HOME="$mise_fake_home" \
+  SMOKE_MISE_CURL_LOG="$mise_curl_log" \
+  DOTFILES_MISE_INSTALL_URL="$synthetic_mise_install_url" \
+  bash "$synthetic_linux_mise_hook" >"$mise_hook_output" 2>&1 \
+  || fail_test "rendered Linux mise hook failed: $(<"$mise_hook_output")"
+if [[ ! -f "$mise_curl_log" || "$(<"$mise_curl_log")" != "$synthetic_mise_install_url" ]]; then
+  fail_test "Linux mise hook must download exactly DOTFILES_MISE_INSTALL_URL once (log: $(cat "$mise_curl_log" 2>/dev/null))"
+fi
+if [[ ! -x "$mise_fake_home/.local/bin/mise" ]]; then
+  fail_test "Linux mise hook did not pipe the downloaded installer into sh"
+fi
+assert_file_contains "$mise_hook_output" "mise smoke-stub"
+assert_file_contains "$mise_hook_output" "mise installed successfully."
 
 log_step "🧬" "Verifying chezmoi init template renders..."
 
@@ -1030,10 +1497,9 @@ assert_toml_section_contains "$tmp_chezmoi_toml" "diff" 'exclude = ["scripts"]'
 assert_file_contains "$tmp_chezmoi_toml" 'name = "Smoke Tests"'
 assert_file_contains "$tmp_chezmoi_toml" 'email = "smoke@example.com"'
 assert_file_contains "$tmp_chezmoi_toml" 'desktopBaseline = true'
-assert_file_contains "$repo_root/.chezmoi.toml.tmpl" "Install macOS desktop baseline (Ghostty + Maple Mono NF CN + OrbStack)"
-assert_file_contains "$repo_root/xdg_config/mise/config.toml.tmpl" "[settings]"
-assert_file_contains "$repo_root/xdg_config/mise/config.toml.tmpl" "github_attestations = false"
-assert_file_contains "$repo_root/xdg_config/mise/config.toml.tmpl" "[settings.aqua]"
+# The init template asks for the desktop baseline once; the prompt text and
+# the platform default are owned by the template.
+assert_file_contains "$repo_root/.chezmoi.toml.tmpl" 'promptBoolOnce . "desktopBaseline"'
 
 log_step "🔍" "Running shellcheck on bootstrap scripts..."
 shellcheck "$repo_root/bootstrap/scripts/common.sh" \

@@ -18,21 +18,11 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091
 source "$script_dir/common.sh"
 
-# Honor mirror-mode overrides for HOMEBREW_API_DOMAIN /
-# HOMEBREW_BOTTLE_DOMAIN. A no-op in external mode; in internal mode,
-# exports these iff the user supplied DOTFILES_HOMEBREW_* overrides.
+# Export the internal HOMEBREW_API_DOMAIN / HOMEBREW_BOTTLE_DOMAIN overrides
+# before `brew bundle`; external mode leaves the environment untouched.
 dotfiles_apply_mirror_env
 
-if command -v brew >/dev/null 2>&1; then
-  BREW_CMD="$(command -v brew)"
-elif [[ -x /opt/homebrew/bin/brew ]]; then
-  BREW_CMD="/opt/homebrew/bin/brew"
-elif [[ -x /usr/local/bin/brew ]]; then
-  BREW_CMD="/usr/local/bin/brew"
-else
-  echo "ERROR: brew not found in PATH or common install locations" >&2
-  exit 1
-fi
+BREW_CMD="$(brew_command)"
 
 # Load Homebrew environment for this script invocation.
 eval "$($BREW_CMD shellenv)"

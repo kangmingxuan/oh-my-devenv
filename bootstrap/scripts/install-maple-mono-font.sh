@@ -17,29 +17,7 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091
 source "$script_dir/common.sh"
 
-MAPLE_MONO_VERSION=""
-MAPLE_MONO_ARCHIVE=""
-MAPLE_MONO_URL=""
-MAPLE_MONO_SHA256=""
-# This repository-owned manifest contains only fixed scalar assignments.
-# shellcheck disable=SC1090
-source "$MANIFEST"
-
-for required_value in \
-  MAPLE_MONO_VERSION \
-  MAPLE_MONO_ARCHIVE \
-  MAPLE_MONO_URL \
-  MAPLE_MONO_SHA256; do
-  if [[ -z "${!required_value:-}" ]]; then
-    echo "ERROR: $MANIFEST does not define $required_value" >&2
-    exit 1
-  fi
-done
-
-if [[ ! "$MAPLE_MONO_SHA256" =~ ^[0-9a-f]{64}$ ]]; then
-  echo "ERROR: MAPLE_MONO_SHA256 is not a lowercase SHA-256 digest" >&2
-  exit 1
-fi
+desktop_font_manifest_load "$MANIFEST"
 
 for required_command in curl fc-cache fc-list fc-scan sha256sum unzip; do
   if ! command -v "$required_command" >/dev/null 2>&1; then
@@ -48,18 +26,16 @@ for required_command in curl fc-cache fc-list fc-scan sha256sum unzip; do
   fi
 done
 
-required_postscript_names=(
-  MapleMono-NF-CN-Regular
-  MapleMono-NF-CN-Bold
-  MapleMono-NF-CN-Italic
-  MapleMono-NF-CN-BoldItalic
-)
+required_postscript_names=()
+for postscript_name in $MAPLE_MONO_POSTSCRIPT_NAMES; do
+  required_postscript_names+=("$postscript_name")
+done
 
 font_family_complete() {
   local installed_names=""
   local postscript_name=""
 
-  installed_names="$(fc-list -f '%{postscriptname}\n' ':family=Maple Mono NF CN')"
+  installed_names="$(fc-list -f '%{postscriptname}\n' ":family=$MAPLE_MONO_FAMILY")"
   for postscript_name in "${required_postscript_names[@]}"; do
     if ! grep -Fxq "$postscript_name" <<<"$installed_names"; then
       return 1
@@ -82,12 +58,12 @@ expected_marker="version=$MAPLE_MONO_VERSION sha256=$MAPLE_MONO_SHA256"
 if [[ -f "$managed_marker" ]] && \
   grep -Fxq "$expected_marker" "$managed_marker" && \
   font_family_complete; then
-  echo "Maple Mono NF CN $MAPLE_MONO_VERSION is already installed."
+  echo "$MAPLE_MONO_FAMILY $MAPLE_MONO_VERSION is already installed."
   exit 0
 fi
 
 if [[ ! -f "$managed_marker" ]] && font_family_complete; then
-  echo "A compatible Maple Mono NF CN installation already exists; leaving it untouched."
+  echo "A compatible $MAPLE_MONO_FAMILY installation already exists; leaving it untouched."
   exit 0
 fi
 
@@ -97,7 +73,7 @@ font_url="${DOTFILES_MAPLE_MONO_URL:-$MAPLE_MONO_URL}"
 mkdir -p "$download_dir"
 
 if ! checksum_matches "$archive_path"; then
-  echo "==> Downloading Maple Mono NF CN $MAPLE_MONO_VERSION"
+  echo "==> Downloading $MAPLE_MONO_FAMILY $MAPLE_MONO_VERSION"
   curl_args=(
     --fail
     --location
@@ -205,7 +181,7 @@ installed_new_dir=1
 
 fc-cache -f "$font_dir" >/dev/null
 if ! font_family_complete; then
-  echo "ERROR: Maple Mono NF CN did not register with Fontconfig" >&2
+  echo "ERROR: $MAPLE_MONO_FAMILY did not register with Fontconfig" >&2
   exit 1
 fi
 
@@ -215,4 +191,4 @@ if [[ -n "$previous_dir" && -d "$previous_dir" ]]; then
   previous_dir=""
 fi
 
-echo "==> Maple Mono NF CN $MAPLE_MONO_VERSION installed successfully."
+echo "==> $MAPLE_MONO_FAMILY $MAPLE_MONO_VERSION installed successfully."

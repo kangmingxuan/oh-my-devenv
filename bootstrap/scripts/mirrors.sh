@@ -2,19 +2,19 @@
 #
 # Mirror-mode helpers sourced by common.sh.
 #
-# Design:
-#   - `external` (the implicit default) never touches the environment.
-#     This keeps today's install behavior byte-for-byte.
-#   - `internal` pulls per-key values from bootstrap/manifests/system/mirrors.env
-#     and exports them, unless the user already set a matching
-#     DOTFILES_<KEY> override (user env wins).
-#   - `auto` probes DOTFILES_INTERNAL_PROBE_URL; if that env var is empty
-#     or unset, `auto` collapses to `external` WITHOUT any network call.
-#     No corporate hostname is ever baked in.
+# Modes:
+#   - `external` (the default) leaves the caller environment untouched.
+#     Downstream tools use their own defaults or whatever the caller exported.
+#   - `internal` exports each key declared in
+#     bootstrap/manifests/system/mirrors.env. A caller-provided DOTFILES_<KEY>
+#     override always wins; a <placeholder-...> manifest value is inert and
+#     only warns, so this public manifest never carries a private hostname.
+#   - `auto` probes DOTFILES_INTERNAL_PROBE_URL and selects `internal` when the
+#     probe succeeds. An empty or unset probe URL selects `external` without a
+#     network call.
 #
 # All functions are idempotent and safe to source twice.
 
-# Path to this file's directory, resolved once when sourced.
 if [[ -z "${_DOTFILES_MIRRORS_SH_DIR:-}" ]]; then
   _DOTFILES_MIRRORS_SH_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 fi
@@ -28,10 +28,7 @@ dotfiles_mirror_mode() {
   printf '%s\n' "${DOTFILES_MIRROR_MODE:-external}"
 }
 
-# Echo the concrete mode (`external` or `internal`). Resolves `auto` by
-# probing DOTFILES_INTERNAL_PROBE_URL when that variable is non-empty.
-# When the probe URL is empty/unset, `auto` collapses to `external` and
-# no curl is invoked.
+# Echo the concrete mode (`external` or `internal`).
 dotfiles_resolve_mirror_mode() {
   local mode=""
   local probe_url="${DOTFILES_INTERNAL_PROBE_URL:-}"
@@ -39,7 +36,7 @@ dotfiles_resolve_mirror_mode() {
   mode="$(dotfiles_mirror_mode)"
 
   case "$mode" in
-    external|internal)
+    external | internal)
       printf '%s\n' "$mode"
       return 0
       ;;
@@ -49,7 +46,7 @@ dotfiles_resolve_mirror_mode() {
         return 0
       fi
       if command -v curl >/dev/null 2>&1 \
-           && curl --max-time 3 -fsS -o /dev/null "$probe_url" 2>/dev/null; then
+        && curl --max-time 3 -fsS -o /dev/null "$probe_url" 2>/dev/null; then
         printf 'internal\n'
       else
         printf 'external\n'
@@ -64,45 +61,44 @@ dotfiles_resolve_mirror_mode() {
   esac
 }
 
-# Echo the mirrors.env value for the given mode+key, or empty if no row
-# matches. Never fails (missing manifest returns empty so callers can
-# degrade gracefully).
-_dotfiles_mirrors_lookup() {
-  local mode="$1"
-  local key="$2"
-  local manifest=""
-  local entry_mode=""
-  local entry_key=""
-  local entry_value=""
+# Print one `<ENV_VAR_NAME> <value>` line per manifest entry. Fails on a
+# missing manifest or a malformed row so consumers never silently skip a key.
+dotfiles_mirrors_entries() {
+  local manifest="${1:-$(_dotfiles_mirrors_manifest)}"
+  local entries=""
+  local entry=""
+  local key=""
+  local value=""
+  local extra=""
+  local key_pattern='^[A-Z][A-Z0-9_]*$'
 
-  manifest="$(_dotfiles_mirrors_manifest)"
+  entries="$(manifest_entries "$manifest")" || return 1
 
-  if [[ ! -f "$manifest" ]]; then
-    return 0
-  fi
-
-  while read -r entry_mode entry_key entry_value; do
-    if [[ "$entry_mode" == "$mode" ]] && [[ "$entry_key" == "$key" ]]; then
-      printf '%s\n' "$entry_value"
-      return 0
+  while IFS= read -r entry; do
+    if [[ -z "$entry" ]]; then
+      continue
     fi
-  done < <(sed -e 's/#.*//' -e '/^[[:space:]]*$/d' "$manifest" | awk 'NF>=3 { mode=$1; key=$2; $1=""; $2=""; sub(/^ +/,""); print mode, key, $0 }')
+    read -r key value extra <<<"$entry"
+    if [[ ! "$key" =~ $key_pattern || -z "$value" || -n "$extra" ]]; then
+      printf 'ERROR: invalid mirror manifest entry in %s: %s\n' "$manifest" "$entry" >&2
+      return 1
+    fi
+    printf '%s %s\n' "$key" "$value"
+  done <<<"$entries"
 }
 
-# Apply mirror-env exports for the resolved mode.
+# Export the internal mirror environment for the resolved mode.
 #
-# - external: no-op. The environment is not touched, so a baseline run
-#   behaves exactly as before mirrors.sh existed.
-# - internal: for each key declared in mirrors.env, export the manifest
-#   value UNLESS the caller already exported a matching DOTFILES_<KEY>
-#   override (user-provided values always win).
+# - external: no-op; the caller environment is preserved as is.
+# - internal: export every manifest key. A caller-provided DOTFILES_<KEY>
+#   override wins, a <placeholder-...> value only warns, and any other value
+#   is exported verbatim.
 #
-# Returns 0 in all normal paths. Unknown modes trigger a warning in
-# dotfiles_resolve_mirror_mode and fall back to external behavior here.
+# An optional manifest path argument replaces the repository manifest.
 dotfiles_apply_mirror_env() {
+  local manifest="${1:-$(_dotfiles_mirrors_manifest)}"
   local resolved=""
-  local manifest=""
-  local mode=""
+  local entries=""
   local key=""
   local value=""
   local override_name=""
@@ -114,24 +110,14 @@ dotfiles_apply_mirror_env() {
     return 0
   fi
 
-  manifest="$(_dotfiles_mirrors_manifest)"
+  entries="$(dotfiles_mirrors_entries "$manifest")" || return 1
 
-  if [[ ! -f "$manifest" ]]; then
-    return 0
-  fi
-
-  while read -r mode key value; do
-    if [[ "$mode" != "internal" ]]; then
-      continue
-    fi
+  while read -r key value; do
     if [[ -z "$key" ]]; then
       continue
     fi
 
-    # Allow per-key opt-out via DOTFILES_<KEY>. User env beats manifest.
-    # The DOTFILES_ prefix is honored even when the key already starts
-    # with DOTFILES_ (e.g. DOTFILES_DOTFILES_OH_MY_ZSH_GIT_URL would be
-    # absurd, so in that case we just consult the key itself).
+    # Keys that already carry the DOTFILES_ prefix are overridden directly.
     if [[ "$key" == DOTFILES_* ]]; then
       override_name="$key"
     else
@@ -140,15 +126,10 @@ dotfiles_apply_mirror_env() {
     override_value="${!override_name:-}"
 
     if [[ -n "$override_value" ]]; then
-      # User told us the value; export it verbatim under the real key.
       export "$key=$override_value"
       continue
     fi
 
-    # No user override: fall back to whatever the manifest says.
-    # Refuse to export placeholder-shaped values; they exist to remind
-    # users that they still need to provide a real mirror, not to be
-    # silently propagated to downstream tooling.
     if [[ "$value" == '<placeholder'*'>' ]]; then
       printf 'WARNING: internal mirror value for %s is still <placeholder>; set %s to activate\n' \
         "$key" "$override_name" >&2
@@ -156,5 +137,5 @@ dotfiles_apply_mirror_env() {
     fi
 
     export "$key=$value"
-  done < <(sed -e 's/#.*//' -e '/^[[:space:]]*$/d' "$manifest" | awk 'NF>=3 { mode=$1; key=$2; $1=""; $2=""; sub(/^ +/,""); print mode, key, $0 }')
+  done <<<"$entries"
 }

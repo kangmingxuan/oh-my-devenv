@@ -29,11 +29,9 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091
 source "$script_dir/common.sh"
 
-# Honor mirror-mode override for the oh-my-zsh repo URL. A no-op in
-# external mode; in internal mode, exports DOTFILES_OH_MY_ZSH_GIT_URL
-# iff the user supplied it. Plugin repos still come from github.com —
-# the mirror override in this release covers oh-my-zsh itself, not the
-# plugin fleet. See bootstrap/scripts/mirrors.sh.
+# Export the internal DOTFILES_OH_MY_ZSH_GIT_URL override; external mode leaves
+# the environment untouched. Mirror mode covers the oh-my-zsh repository only;
+# plugin repositories are cloned from github.com. See bootstrap/scripts/mirrors.sh.
 dotfiles_apply_mirror_env
 
 OH_MY_ZSH_REPO="${DOTFILES_OH_MY_ZSH_GIT_URL:-https://github.com/ohmyzsh/ohmyzsh.git}"
