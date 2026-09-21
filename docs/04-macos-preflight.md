@@ -79,13 +79,15 @@ Expected outcome: `.chezmoiscripts/run_onchange_after_60-check.sh` runs last and
 
 ## 3. Hand-Validate Brewfile Dependencies
 
-`60-check.sh` only checks that the binaries the baseline installs are callable.
-Verify that the dependencies declared by each Brewfile are satisfied:
+`60-check.sh` already runs `brew bundle check --no-upgrade` natively against
+each Brewfile the baseline selects and fails when a declared dependency is
+missing. This step re-runs the same validation by hand so the signoff records
+the native verbose output rather than relying on the hook's pass/fail summary:
 
 ```bash
 cd "$(chezmoi source-path)"
-brew bundle check --file=bootstrap/manifests/system/Brewfile --verbose
-brew bundle check --file=bootstrap/manifests/desktop/Brewfile --verbose
+brew bundle check --no-upgrade --file=bootstrap/manifests/system/Brewfile --verbose
+brew bundle check --no-upgrade --file=bootstrap/manifests/desktop/Brewfile --verbose
 ```
 
 Expected outcome: both commands report `The Brewfile's dependencies are
@@ -112,10 +114,13 @@ first-launch setup remains a user action.
 
 ## 5. Hand-Validate mise Runtime State
 
-`60-check.sh` checks that each runtime binary is on PATH. On a Mac, mise itself
-is installed via Homebrew rather than `https://mise.run`. Validate the deployed
-managed baseline separately from mise's effective configuration, which may also
-include the supported machine-local overlay and project configuration:
+`60-check.sh` already asks mise natively which configured tools are not
+installed (`mise ls --current --missing`) and fails when any are reported. On a
+Mac, mise itself is installed via Homebrew rather than `https://mise.run`. The
+commands below record the underlying diagnostics for the signoff and validate
+the deployed managed baseline separately from mise's effective configuration,
+which may also include the supported machine-local overlay and project
+configuration:
 
 ```bash
 bash bootstrap/scripts/xdg-config.sh status  # empty means the managed files match this checkout

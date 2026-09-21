@@ -1,0 +1,29 @@
+# Shell completion inventory.
+#
+# Each non-comment line is exactly two whitespace-separated fields:
+#
+#   <command>  <platforms>
+#
+# <platforms> is a comma-separated subset of `linux` and `darwin` naming where
+# this baseline generates the command's completion assets. Leave a platform out
+# when its package manager already ships the completion (for example Homebrew
+# on macOS).
+#
+# The shell policy is fixed by platform, not per command: Linux receives Bash
+# and Zsh assets, macOS receives Zsh assets only. The generator adapter for each
+# command lives in bootstrap/scripts/install-shell-completions.sh because the
+# CLIs expose completion generation through different subcommands or flags;
+# `bat` wraps the Debian package-owned `batcat` completions instead of running
+# a generator.
+#
+# Readers: install-shell-completions.sh (install/check/list), uninstall.sh
+# (through `list`), the 55 and 60 hooks, and run-smoke-tests.sh.
+
+uv             linux,darwin
+uvx            linux,darwin
+golangci-lint  linux,darwin
+dlv            linux,darwin
+ruff           linux,darwin
+chezmoi        linux,darwin
+mise           linux
+bat            linux

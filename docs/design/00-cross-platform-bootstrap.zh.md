@@ -110,10 +110,12 @@
 │   │   │   ├── Brewfile
 │   │   │   └── maple-mono-nf-cn.env
 │   │   ├── shell/
+│   │   │   ├── completions.txt
 │   │   │   └── oh-my-zsh-plugins.txt
 │   │   ├── system/
 │   │   │   ├── apt-packages.txt
-│   │   │   └── Brewfile
+│   │   │   ├── Brewfile
+│   │   │   └── mirrors.env
 │   │   └── ecosystem/
 │   │       ├── go-tools.txt
 │   │       └── uv-tools.txt
@@ -125,7 +127,9 @@
 │       ├── install-maple-mono-font.sh
 │       ├── install-go-tools.sh
 │       ├── install-oh-my-zsh-assets.sh
+│       ├── install-shell-completions.sh
 │       ├── install-uv-tools.sh
+│       ├── mirrors.sh
 │       └── xdg-config.sh
 ├── dot_local/share/oh-my-devenv/
 │   └── xdg.sh
@@ -304,7 +308,7 @@ uv = "0.11.28"
 ### `install-maple-mono-font`
 
 - 仅由受支持的 Ubuntu 桌面路径调用
-- 从 `bootstrap/manifests/desktop/maple-mono-nf-cn.env` 读取固定版本的发布 URL 与 SHA-256 摘要
+- 通过 `common.sh` 中的共享加载函数，从 `bootstrap/manifests/desktop/maple-mono-nf-cn.env` 读取字体族、所需 PostScript 字面、固定版本的发布 URL 与 SHA-256 摘要；同一份清单也供环境检查使用，并经由 `xdg-config.sh` 作为模板数据传给 Ghostty 与 Fontconfig 模板
 - 复用兼容的已有字体安装，避免制造副本
 - 支持断点续传，校验摘要与所需 PostScript 名称，并且只替换带 baseline 所有权标记的目录
 - 安装到 `${XDG_DATA_HOME:-$HOME/.local/share}/fonts` 并刷新 Fontconfig
@@ -318,14 +322,23 @@ uv = "0.11.28"
 - 对已有本地改动的目录跳过更新，避免覆盖用户修改
 - `dot_zshrc.tmpl` 使用同一份 manifest 生成启用的 oh-my-zsh 插件列表；`zsh-completions` 继续以 `fpath` 特殊处理，而不是加入 `plugins=()`
 
+### `install-shell-completions`
+
+- 读取 `bootstrap/manifests/shell/completions.txt`，每行声明一个命令以及以逗号分隔、需要生成补全的平台（`linux`、`darwin`）；当平台的包管理器已经提供补全时不列出该平台
+- 按平台应用统一的 shell 策略：Linux 生成 Bash 与 Zsh 资产，macOS 仅生成 Zsh 资产
+- 各命令的生成适配器保留在脚本中，因为各 CLI 通过不同的子命令或参数暴露补全生成；`bat` 包装 Debian 包自带的 `batcat` 补全，而不运行生成器
+- 以原子方式写入每个资产，生成失败时保留先前有效的文件
+- `install`、`check`、`list` 共用同一份清单；`uninstall.sh` 通过 `list` 枚举资产
+
 ### `install-go-tools`
 
 - 校验 `go` 可用
 - 从 `bootstrap/manifests/` 中的 source-only manifest 路径读取 `go-tools.txt`
 - 通过 `bootstrap/scripts/go-env.sh` 固定 Go 工具安装路径
 - 在未显式覆盖时，将 `GOBIN` 默认设置为 `$HOME/go/bin`
-- 执行 `go install`
-- 如果清单中包含 `golangci-lint`，直接报错并要求改由 `mise` 管理
+- 要求每一项都固定为精确的 `module@vX.Y.Z` 版本，否则在安装任何工具之前直接失败
+- 已安装版本与固定版本一致时跳过，除非设置 `DOTFILES_FORCE_REINSTALL=1`
+- 工具归属由声明它的清单决定：mise 配置负责 `golangci-lint` 等二进制分发工具，`go-tools.txt` 负责 `go install` 工具
 
 ### `install-uv-tools`
 
@@ -333,6 +346,13 @@ uv = "0.11.28"
 - 按 manifest 中声明的 requirement 安装工具
 - 使用重装模式确保版本变更在下一次 bootstrap 时生效
 - 重复执行必须安全
+
+### `run_onchange_after_60-check`
+
+- 复用安装器消费的同一份清单，而不是维护第二份硬编码工具列表
+- 用 `dpkg-query` 校验 apt 清单，用 `brew bundle check` 校验 Brewfile，用 `mise ls --missing` 校验 mise 配置
+- 按二进制名称检查生态工具清单，通过安装器的 `check` 动作检查补全清单，并在 Linux 上通过 Fontconfig、在 macOS 上通过用户字体目录检查字体清单声明的字体族与字面
+- 用 `mise current` 输出 mise 管理的工具链，使摘要跟随配置变化
 
 ## 11. PATH 与兼容性
 

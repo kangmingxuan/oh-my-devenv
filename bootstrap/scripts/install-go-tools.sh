@@ -24,9 +24,8 @@ source "$script_dir/common.sh"
 # shellcheck disable=SC1091
 source "$script_dir/go-env.sh"
 
-# Honor mirror-mode overrides for GOPROXY before calling `go install`.
-# A no-op in external mode; in internal mode, exports GOPROXY iff the
-# user supplied DOTFILES_GOPROXY. See bootstrap/scripts/mirrors.sh.
+# Export the internal GOPROXY override before `go install`; external mode
+# leaves the environment untouched. See bootstrap/scripts/mirrors.sh.
 dotfiles_apply_mirror_env
 
 setup_go_env
@@ -45,18 +44,10 @@ if [[ ${#tools[@]} -eq 0 ]]; then
   exit 0
 fi
 
-blocked_tools=()
+# Every entry must pin an exact module version before anything is installed.
 for tool in "${tools[@]}"; do
-  if [[ "$tool" == *"golangci-lint"* ]]; then
-    blocked_tools+=("$tool")
-  fi
+  go_tool_version "$tool" >/dev/null || exit 1
 done
-
-if [[ ${#blocked_tools[@]} -gt 0 ]]; then
-  echo "ERROR: golangci-lint must be managed by mise, not go install. Remove these entries from $MANIFEST:" >&2
-  printf '  - %s\n' "${blocked_tools[@]}" >&2
-  exit 1
-fi
 
 installed_go_tool_version() {
   local binary="$1"
@@ -77,25 +68,14 @@ echo "==> Using GOBIN=$GOBIN"
 
 for tool in "${tools[@]}"; do
   binary="$(go_tool_binary_name "$tool")"
-  requested_version="${tool##*@}"
-
-  if [[ "$requested_version" == "$tool" ]]; then
-    requested_version=""
-  fi
+  requested_version="$(go_tool_version "$tool")"
 
   current_version=""
   if [[ "$force_reinstall" != "1" ]]; then
     current_version="$(installed_go_tool_version "$binary" || true)"
   fi
 
-  # Skip when we know the exact version and it already matches. `@latest`
-  # intentionally re-runs `go install` so upstream moves are picked up; `go
-  # install` is cache-aware so this is cheap when nothing changed.
-  if [[ "$force_reinstall" != "1" \
-        && -n "$current_version" \
-        && -n "$requested_version" \
-        && "$requested_version" != "latest" \
-        && "$current_version" == "$requested_version" ]]; then
+  if [[ "$force_reinstall" != "1" && "$current_version" == "$requested_version" ]]; then
     echo "  == $tool (already at $current_version, skipping)"
     continue
   fi

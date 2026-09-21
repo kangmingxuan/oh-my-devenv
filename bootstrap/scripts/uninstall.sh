@@ -124,84 +124,33 @@ add_candidate() {
   seen["$p"]=1
 }
 
-# Output format also varies by environment: some builds emit newline-delimited
-# paths, others emit JSON when stdout is not a TTY. Capture raw output, then
-# decode JSON when needed or split newline records otherwise.
-read_managed_paths_from() {
+# chezmoi prints one absolute path per line with `--format=`; a failing producer
+# aborts the run instead of yielding an empty candidate list.
+list_managed_paths() {
   local label="$1"
-  local cap err first
 
   shift
 
-  cap="$(mktemp)"
-  err="$(mktemp)"
-  if ! "$@" >"$cap" 2>"$err"; then
-    printf 'ERROR: %s failed:\n' "$label" >&2
-    cat "$err" >&2
-    rm -f "$cap" "$err"
-    exit 1
+  if ! "$@"; then
+    printf 'ERROR: %s failed.\n' "$label" >&2
+    return 1
   fi
-  if [[ -s "$err" ]]; then
-    # Managed paths still went to stdout; keep stderr visible for debugging.
-    cat "$err" >&2
-  fi
-  rm -f "$err"
-
-  if [[ ! -s "$cap" ]]; then
-    rm -f "$cap"
-    return 0
-  fi
-
-  first="$(head -c1 "$cap")"
-  if [[ "$first" == '[' ]]; then
-    if command -v python3 >/dev/null 2>&1; then
-      python3 -c '
-import json, sys
-path = sys.argv[1]
-with open(path, encoding="utf-8") as fh:
-    data = json.load(fh)
-if not isinstance(data, list):
-    print("chezmoi managed JSON is not a list", file=sys.stderr)
-    sys.exit(1)
-for item in data:
-    if isinstance(item, str) and item:
-        print(item)
-' "$cap" || {
-        rm -f "$cap"
-        printf 'ERROR: failed to parse chezmoi managed JSON output.\n' >&2
-        exit 1
-      }
-    else
-      rm -f "$cap"
-      printf 'ERROR: %s emitted JSON but python3 is not on PATH.\n' "$label" >&2
-      exit 1
-    fi
-  else
-    sed '/^$/d' "$cap"
-  fi
-  rm -f "$cap"
 }
 
-read_managed_paths() {
-  # Always point chezmoi at the repo that contains this script. A bare command
-  # can resolve to an empty default source on CI or a source checkout.
-  read_managed_paths_from \
-    "chezmoi managed" \
-    chezmoi --source="$repo_root" managed \
-    --include=files,symlinks \
-    --path-style=absolute
-}
-
-read_xdg_managed_paths() {
-  read_managed_paths_from \
-    "XDG chezmoi managed" \
-    bash "$script_dir/xdg-config.sh" managed
-}
+# Always point chezmoi at the repo that contains this script. A bare command
+# can resolve to an empty default source on CI or a source checkout.
+managed_output="$(list_managed_paths "chezmoi managed" \
+  chezmoi --source="$repo_root" managed \
+  --include=files,symlinks \
+  --path-style=absolute \
+  --format=)" || exit 1
+xdg_managed_output="$(list_managed_paths "XDG chezmoi managed" \
+  bash "$script_dir/xdg-config.sh" managed)" || exit 1
 
 # --- Build candidate list -------------------------------------------------
 
-mapfile -t managed_lines < <(read_managed_paths)
-mapfile -t xdg_managed_lines < <(read_xdg_managed_paths)
+mapfile -t managed_lines <<<"$managed_output"
+mapfile -t xdg_managed_lines <<<"$xdg_managed_output"
 
 for line in "${managed_lines[@]}" "${xdg_managed_lines[@]}"; do
   add_candidate "$line"
@@ -213,10 +162,13 @@ case "$(uname -s)" in
   Darwin) completion_platform=darwin ;;
   *) completion_platform=linux ;;
 esac
+completion_output="$(list_managed_paths "shell completion inventory" \
+  bash "$script_dir/install-shell-completions.sh" list "$completion_platform" \
+  "$repo_root/bootstrap/manifests/shell/completions.txt")" || exit 1
 while IFS= read -r completion_file; do
   add_candidate "$completion_file"
-done < <(bash "$script_dir/install-shell-completions.sh" list "$completion_platform")
-unset completion_file completion_platform
+done <<<"$completion_output"
+unset completion_file completion_platform completion_output
 
 if [[ -d "$HOME/.oh-my-zsh" ]]; then
   add_candidate "$HOME/.oh-my-zsh"

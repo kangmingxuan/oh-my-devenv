@@ -71,13 +71,15 @@ Milestones cut annotated git tags (`v0.<M>.0`). After a milestone's final MR mer
 Third-party dependencies pulled in by this repository fall into these categories:
 
 - **System packages** (`apt`, Homebrew): bump the manifest files (`bootstrap/manifests/system/apt-packages.txt`, `bootstrap/manifests/system/Brewfile`). Prefer stable distro names over version pins.
-- **Desktop assets**: keep the explicit, all-or-nothing platform bundle in `bootstrap/manifests/desktop/`. The macOS Brewfile owns Ghostty, its font cask, and OrbStack; the Ubuntu 26.04+ apt manifest owns Ghostty; `maple-mono-nf-cn.env` pins the Linux font archive URL and SHA-256 digest; and the managed Fontconfig fragment keeps Linux font selection aligned with Ghostty's configured family. Other GUI apps and personal CLIs stay outside this repository's bootstrap contract.
+- **Desktop assets**: keep the explicit, all-or-nothing platform bundle in `bootstrap/manifests/desktop/`. The macOS Brewfile owns Ghostty, its font cask, and OrbStack; the Ubuntu 26.04+ apt manifest owns Ghostty; `maple-mono-nf-cn.env` declares the font family and required faces shared by the Linux installer, the environment check, and the managed Ghostty and Fontconfig templates, and pins the Linux font archive URL and SHA-256 digest. Other GUI apps and personal CLIs stay outside this repository's bootstrap contract.
 - **Shell assets** (oh-my-zsh and plugins): managed by explicit Git clone/update. The upstream repository is captured in `bootstrap/manifests/shell/oh-my-zsh-plugins.txt`. That manifest uses a strict two-field, order-sensitive contract shared by four readers (`dot_zshrc.tmpl`, `install-oh-my-zsh-assets.sh`, the `60-check` hook, and `run-smoke-tests.sh`); adding a field or special case means updating all four.
-- **Shell completions**: package-manager assets stay package-owned. Official CLI-generated assets are atomically refreshed by `install-shell-completions.sh` in the standard XDG Bash and Zsh directories, checked by the 60 hook, and enumerated exactly by uninstall. Keep `zsh-completions` last in `fpath` as fallback precedence.
+- **Shell completions**: `bootstrap/manifests/shell/completions.txt` is the single inventory of generated completion commands and the platforms that generate them. `install-shell-completions.sh` reads it for install, check, and list; uninstall enumerates assets through `list`; the 55 and 60 hooks hash it. Package-manager assets stay package-owned. Generator adapters stay in the installer because the CLIs differ; a new command needs an adapter only when no existing one fits. Keep `zsh-completions` last in `fpath` as fallback precedence.
 - **Runtimes** (mise): pinned to complete versions in `xdg_config/mise/config.toml.tmpl`. Bump intentionally.
-- **Binary-distributed tools** (for example `golangci-lint` and `uv`): pinned via mise alongside the runtimes.
-- **Go tools** (`bootstrap/manifests/ecosystem/go-tools.txt`): pin exact module versions so clean installs and existing machines converge.
+- **Binary-distributed tools** (for example `golangci-lint` and `uv`): pinned via mise alongside the runtimes. Ownership follows the manifest that declares a tool; nothing else polices the split.
+- **Go tools** (`bootstrap/manifests/ecosystem/go-tools.txt`): every entry pins an exact `module@vX.Y.Z` version so clean installs and existing machines converge; the installer rejects anything else.
 - **Python tools** (`bootstrap/manifests/ecosystem/uv-tools.txt`): prefer pinned versions.
+
+The final `60-check` hook validates the same declared inventories the installers consumed instead of a second tool list: apt manifests through `dpkg-query`, Brewfiles through `brew bundle check`, the mise configuration through `mise ls --missing`, the ecosystem manifests by binary name, the completion manifest through the installer's `check` action, and the font manifest's family and faces through Fontconfig on Linux or the user font directory on macOS. Adding an ordinary manifest entry therefore extends the check without editing it.
 
 Related low-risk dependency updates may share a merge request when they use the
 same validation path and remain easy to review and roll back. Keep major,
@@ -150,7 +152,7 @@ Mirror mode currently covers the consumers wired through `dotfiles_apply_mirror_
    env | grep -E '^(GOPROXY|UV_INDEX_URL|HOMEBREW_|DOTFILES_)'
    ```
 
-   Only the keys you overrode should appear. Keys without a `DOTFILES_*` override will emit a `WARNING` line instead of exporting the manifest's `<placeholder>` value.
+   Only the keys you overrode should appear. `bootstrap/manifests/system/mirrors.env` lists the internal keys only; a key whose manifest value is still a `<placeholder>` and has no `DOTFILES_*` override emits a `WARNING` line instead of being exported. External mode never reads the manifest, so downstream tools keep their own defaults.
 
 4. Exercise the one consumer whose endpoint you changed. Example for `GOPROXY`:
 
@@ -163,7 +165,7 @@ Mirror mode currently covers the consumers wired through `dotfiles_apply_mirror_
 5. When done, unset the overrides or close the shell. The next `chezmoi apply`
    returns to the mode encoded in `bootstrap.env`.
 
-`bash bootstrap/scripts/run-smoke-tests.sh` still runs only under the implicit `external` mode, because the CI runner has no way to reach any internal endpoint. The assertions verify the mode-switch logic and defend the `external` defaults in the manifest; they do not try to dial the mirrors themselves.
+`bash bootstrap/scripts/run-smoke-tests.sh` still runs only under the implicit `external` mode, because the CI runner has no way to reach any internal endpoint. The assertions verify the mode-switch logic with fixture manifests and caller overrides, validate the manifest schema, and confirm external mode leaves the environment untouched; they do not dial the mirrors or freeze any endpoint value.
 
 ## Security
 
@@ -193,7 +195,7 @@ If a change needs heavier confidence than the smoke jobs provide, validate it ma
 
 ## Disposable environment reset
 
-Use `bootstrap/scripts/uninstall.sh` when you need to tear down **only** what this baseline's `chezmoi apply` put on disk — for example a throwaway Linux container, a CI scratch image, or a VM you are about to re-image. The script is intentionally narrow: it does **not** remove apt/Homebrew packages, mise shims, or language runtimes the bootstrap installed; it only reverses chezmoi-managed destination files, the nested source's dedicated state file, plus a short whitelist of bootstrap-owned directories (`~/.oh-my-zsh`, `~/.local/state/chezmoi-first-run-backup/`, the marker-owned Maple Mono user-font directory, and the chezmoi source tree under `~/.local/share/` when that is the canonical data path).
+Use `bootstrap/scripts/uninstall.sh` when you need to tear down **only** what this baseline's `chezmoi apply` put on disk — for example a throwaway Linux container, a CI scratch image, or a VM you are about to re-image. The script is intentionally narrow: it does **not** remove apt/Homebrew packages, mise shims, or language runtimes the bootstrap installed; it only reverses chezmoi-managed destination files, the nested source's dedicated state file, the completion assets enumerated by `install-shell-completions.sh list`, plus a short whitelist of bootstrap-owned directories (`~/.oh-my-zsh`, `~/.local/state/chezmoi-first-run-backup/`, the marker-owned Maple Mono user-font directory, and the chezmoi source tree under `~/.local/share/` when that is the canonical data path). Both `chezmoi managed` calls request plain line output explicitly with `--format=`, and a failing producer aborts the run rather than shrinking the candidate list.
 
 **Defaults and flags**
 

@@ -246,6 +246,102 @@ uv_tool_binary_name() {
   printf '%s\n' "$tool"
 }
 
+# Print the exact module version pinned by a go-tools.txt entry. Every entry
+# must use `module@vX.Y.Z` (pre-release and pseudo-version suffixes allowed).
+go_tool_version() {
+  local tool="$1"
+  local version=""
+  local version_pattern='^v[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.-]+)?$'
+
+  tool="${tool%%[[:space:]]*}"
+  version="${tool##*@}"
+
+  if [[ "$version" == "$tool" || ! "$version" =~ $version_pattern ]]; then
+    printf 'ERROR: Go tool entry must pin an exact module version (module@vX.Y.Z): %s\n' "$1" >&2
+    return 1
+  fi
+
+  printf '%s\n' "$version"
+}
+
+# Resolve the Homebrew executable from PATH or its standard install prefixes.
+brew_command() {
+  if command -v brew >/dev/null 2>&1; then
+    command -v brew
+  elif [[ -x /opt/homebrew/bin/brew ]]; then
+    printf '/opt/homebrew/bin/brew\n'
+  elif [[ -x /usr/local/bin/brew ]]; then
+    printf '/usr/local/bin/brew\n'
+  else
+    printf 'ERROR: brew not found in PATH or common install locations\n' >&2
+    return 1
+  fi
+}
+
+# Load the desktop font manifest into MAPLE_MONO_* variables and validate its
+# schema. The manifest is a repository-owned file of fixed scalar assignments.
+desktop_font_manifest_load() {
+  local manifest="$1"
+  local required_value=""
+  local postscript_name=""
+  local family_pattern='^[A-Za-z0-9][A-Za-z0-9 -]*$'
+  local postscript_pattern='^[A-Za-z0-9-]+$'
+  local sha256_pattern='^[0-9a-f]{64}$'
+
+  if [[ ! -f "$manifest" ]]; then
+    printf 'ERROR: %s not found\n' "$manifest" >&2
+    return 1
+  fi
+
+  MAPLE_MONO_FAMILY=""
+  MAPLE_MONO_POSTSCRIPT_NAMES=""
+  # MAPLE_MONO_VERSION, MAPLE_MONO_ARCHIVE, and MAPLE_MONO_URL are public
+  # outputs of this loader. This file only checks them for presence through
+  # the ${!required_value} indirection below; install-maple-mono-font.sh reads
+  # them after calling this function, so ShellCheck cannot see the consumers.
+  # shellcheck disable=SC2034
+  MAPLE_MONO_VERSION=""
+  # shellcheck disable=SC2034
+  MAPLE_MONO_ARCHIVE=""
+  # shellcheck disable=SC2034
+  MAPLE_MONO_URL=""
+  MAPLE_MONO_SHA256=""
+  # shellcheck disable=SC1090
+  source "$manifest"
+
+  for required_value in \
+    MAPLE_MONO_FAMILY \
+    MAPLE_MONO_POSTSCRIPT_NAMES \
+    MAPLE_MONO_VERSION \
+    MAPLE_MONO_ARCHIVE \
+    MAPLE_MONO_URL \
+    MAPLE_MONO_SHA256; do
+    if [[ -z "${!required_value:-}" ]]; then
+      printf 'ERROR: %s does not define %s\n' "$manifest" "$required_value" >&2
+      return 1
+    fi
+  done
+
+  if [[ ! "$MAPLE_MONO_FAMILY" =~ $family_pattern ]]; then
+    printf 'ERROR: MAPLE_MONO_FAMILY must contain only letters, digits, spaces, and hyphens: %s\n' \
+      "$MAPLE_MONO_FAMILY" >&2
+    return 1
+  fi
+
+  for postscript_name in $MAPLE_MONO_POSTSCRIPT_NAMES; do
+    if [[ ! "$postscript_name" =~ $postscript_pattern ]]; then
+      printf 'ERROR: MAPLE_MONO_POSTSCRIPT_NAMES contains an invalid PostScript name: %s\n' \
+        "$postscript_name" >&2
+      return 1
+    fi
+  done
+
+  if [[ ! "$MAPLE_MONO_SHA256" =~ $sha256_pattern ]]; then
+    printf 'ERROR: MAPLE_MONO_SHA256 is not a lowercase SHA-256 digest\n' >&2
+    return 1
+  fi
+}
+
 common_script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 common_repo_root="$(cd "$common_script_dir/../.." && pwd)"
 

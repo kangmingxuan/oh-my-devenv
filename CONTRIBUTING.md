@@ -80,6 +80,7 @@ readiness until the signoff is available.
 The following source manifests are consumed by both the installer scripts and the post-install check script. Keep both sides in sync:
 
 - `bootstrap/manifests/shell/oh-my-zsh-plugins.txt`
+- `bootstrap/manifests/shell/completions.txt`
 - `bootstrap/manifests/system/apt-packages.txt`
 - `bootstrap/manifests/system/Brewfile`
 - `bootstrap/manifests/desktop/apt-packages.txt`
@@ -87,11 +88,12 @@ The following source manifests are consumed by both the installer scripts and th
 - `bootstrap/manifests/desktop/maple-mono-nf-cn.env`
 - `bootstrap/manifests/ecosystem/go-tools.txt`
 - `bootstrap/manifests/ecosystem/uv-tools.txt`
+- `xdg_config/mise/config.toml.tmpl` (validated natively by `mise`)
 
 If you add, rename, or remove an entry, confirm that:
 
-- The corresponding installer script handles the new entry.
-- `run-smoke-tests.sh` still passes locally.
+- The corresponding installer script handles the new entry. A new completion command also needs a generator adapter in `install-shell-completions.sh` unless it reuses an existing one.
+- `run-smoke-tests.sh` still passes locally. Ordinary entry changes must not require test edits; the suite validates schemas, rendering, and behavior rather than current values.
 - The post-install environment check continues to recognize the tool.
 
 ## Secret Hygiene

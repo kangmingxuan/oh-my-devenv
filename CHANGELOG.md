@@ -28,10 +28,17 @@ This repository versions the baseline with [Semantic Versioning 2.0](https://sem
 - `docs/02-reference.md`: a single lookup page for the bootstrap hooks, what gets installed, day-to-day commands, and every environment variable / flag the baseline understands.
 - Centrally generated CLI completions in the standard Bash and Zsh user data directories, including `uvx` and Linux `bat` adapters.
 - A documented, uninstall-protected mise local overlay for machine-only global tools and settings.
+- `bootstrap/manifests/shell/completions.txt`: one declarative inventory of completion commands and platforms shared by the installer, the environment check, uninstall, and the smoke suite.
 
 ### Changed
 
 - Defined oh-my-devenv as the maintainer's public, opinionated current design: validation checks behavior and safety boundaries without duplicating configuration facts, and superseded designs are replaced without compatibility logic.
+- The final environment check validates the same manifests the installers consumed: apt manifests through `dpkg-query`, Brewfiles through `brew bundle check`, the mise configuration through `mise ls --missing`, the completion manifest through the installer, and the font manifest's declared family and faces. Its version card lists the mise-managed toolchain from `mise current`.
+- `maple-mono-nf-cn.env` now declares the font family and required PostScript faces; the Linux installer, the check, and the managed Ghostty and Fontconfig templates read that single source.
+- `mirrors.env` lists only the internal keys in one `<ENV_VAR_NAME> <value>` format. External mode leaves the caller environment untouched and downstream tools keep their own defaults.
+- `install-go-tools.sh` requires every entry to pin an exact `module@vX.Y.Z` version and rejects anything else before installing.
+- `uninstall.sh` requests plain line output from both `chezmoi managed` calls with `--format=` and aborts when a producer fails.
+- The smoke suite validates manifest schemas, template rendering and syntax, platform contracts, and fixture behavior instead of asserting current package names, versions, URLs, or preference values, so ordinary manifest changes no longer require test edits.
 - Expanded the selected macOS desktop bundle to include OrbStack. Existing macOS machines with `desktopBaseline = true` install it the next time the desktop manifest hook runs.
 - Moved JetBrains Toolbox PATH setup and OrbStack shell/SSH initialization out of managed templates and into documented local overlays.
 - Split persistent shell environment from bootstrap-only settings: shells read `env.sh`, bootstrap reads `bootstrap.env`, and one inventory now defines every supported local overlay and its uninstall protection.
@@ -48,3 +55,5 @@ This repository versions the baseline with [Semantic Versioning 2.0](https://sem
 - The pre-bootstrap `Brewfile.local` extension point. Machine-local applications outside the selected desktop baseline are no longer part of this repository's bootstrap contract.
 - The overlapping repo-owned optional Homebrew catalog and environment-variable selectors.
 - The unused `isWsl` chezmoi data flag and the `DOTFILES_FORCE_WSL` escape hatch, plus the redundant `smoke-tests-wsl-shaped` CI job. WSL continues to work through the standard Linux path.
+- The `golangci-lint` name veto in `install-go-tools.sh`; tool ownership follows the manifest that declares the tool.
+- The `external` rows in `mirrors.env`, the unused mirror lookup helper, the JSON and `python3` fallback in `uninstall.sh`, and `@latest` handling in the Go tool installer.

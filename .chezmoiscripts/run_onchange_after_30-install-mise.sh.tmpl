@@ -8,9 +8,8 @@ scripts_dir="$bootstrap_dir/scripts"
 source "$scripts_dir/common.sh"
 install_error_trap "$0"
 
-# Honor mirror-mode override for the mise installer URL. A no-op in
-# external mode; in internal mode, exports DOTFILES_MISE_INSTALL_URL
-# iff the user supplied it. See bootstrap/scripts/mirrors.sh.
+# Export the internal mise installer URL override; external mode leaves the
+# environment untouched. See bootstrap/scripts/mirrors.sh.
 dotfiles_apply_mirror_env
 
 mise_bin=""
@@ -21,19 +20,7 @@ if command -v mise >/dev/null 2>&1; then
 else
   log_step "🛠️" "Installing mise..."
 {{ if eq .chezmoi.os "darwin" -}}
-  BREW_CMD=""
-
-  if command -v brew >/dev/null 2>&1; then
-    BREW_CMD="$(command -v brew)"
-  elif [[ -x /opt/homebrew/bin/brew ]]; then
-    BREW_CMD="/opt/homebrew/bin/brew"
-  elif [[ -x /usr/local/bin/brew ]]; then
-    BREW_CMD="/usr/local/bin/brew"
-  else
-    echo "ERROR: brew not found in PATH or common install locations on macOS" >&2
-    exit 1
-  fi
-
+  BREW_CMD="$(brew_command)"
   eval "$($BREW_CMD shellenv)"
   "$BREW_CMD" install mise
 {{ else -}}

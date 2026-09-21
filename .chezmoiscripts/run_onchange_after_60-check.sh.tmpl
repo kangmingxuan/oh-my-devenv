@@ -11,17 +11,18 @@
 {{ end -}}
 {{ if and $desktopBaseline $isSupportedDesktop -}}
 # Ghostty config hash: {{ include "xdg_config/ghostty/config.ghostty.tmpl" | sha256sum }}
+# Maple Mono manifest hash: {{ include "bootstrap/manifests/desktop/maple-mono-nf-cn.env" | sha256sum }}
 {{ if eq .chezmoi.os "darwin" -}}
 # Desktop Brewfile hash: {{ include "bootstrap/manifests/desktop/Brewfile" | sha256sum }}
 {{ else -}}
 # Desktop apt manifest hash: {{ include "bootstrap/manifests/desktop/apt-packages.txt" | sha256sum }}
-# Maple Mono manifest hash: {{ include "bootstrap/manifests/desktop/maple-mono-nf-cn.env" | sha256sum }}
 # Maple Mono Fontconfig hash: {{ include "xdg_config/fontconfig/conf.d/99-oh-my-devenv-maple-mono-nf-cn.conf.tmpl" | sha256sum }}
 {{ end -}}
 {{ end -}}
 # go-tools.txt hash: {{ include "bootstrap/manifests/ecosystem/go-tools.txt" | sha256sum }}
 # uv-tools.txt hash: {{ include "bootstrap/manifests/ecosystem/uv-tools.txt" | sha256sum }}
 # oh-my-zsh-plugins.txt hash: {{ include "bootstrap/manifests/shell/oh-my-zsh-plugins.txt" | sha256sum }}
+# completions.txt hash: {{ include "bootstrap/manifests/shell/completions.txt" | sha256sum }}
 # mise config hash: {{ include "xdg_config/mise/config.toml.tmpl" | sha256sum }}
 
 set -euo pipefail
@@ -64,6 +65,87 @@ check_path() {
   fi
 }
 
+# Every package declared in an apt manifest must be installed according to dpkg.
+check_apt_packages() {
+  local manifest="$1"
+  local entries=""
+  local package=""
+  local status=""
+
+  if ! entries="$(manifest_entries "$manifest")"; then
+    errors=$((errors + 1))
+    return 0
+  fi
+
+  while IFS= read -r package; do
+    if [[ -z "$package" ]]; then
+      continue
+    fi
+    status="$(dpkg-query -W -f='${Status}' "$package" 2>/dev/null || true)"
+    if [[ "$status" == *"install ok installed"* ]]; then
+      log_check_ok "$package"
+    else
+      log_check_missing "$package"
+      errors=$((errors + 1))
+    fi
+  done <<<"$entries"
+}
+
+# Homebrew validates a Brewfile natively; presence is checked, upgrades are not.
+check_brewfile() {
+  local brewfile="$1"
+  local brew_bin=""
+  local output=""
+
+  if ! brew_bin="$(brew_command)"; then
+    errors=$((errors + 1))
+    return 0
+  fi
+
+  if output="$("$brew_bin" bundle check --file="$brewfile" --no-upgrade --verbose 2>&1)"; then
+    log_check_ok "${brewfile#"$manifests_dir/"}"
+  else
+    log_warning "Homebrew bundle is not satisfied: $brewfile"
+    printf '%s\n' "$output" >&2
+    errors=$((errors + 1))
+  fi
+}
+
+# mise reports which tools its configuration declares but has not installed.
+check_mise_toolchain() {
+  local missing=""
+  local tool=""
+  local version=""
+
+  if ! command -v mise >/dev/null 2>&1; then
+    log_check_missing "mise"
+    errors=$((errors + 1))
+    return 0
+  fi
+  log_check_ok "mise"
+  check_path "$XDG_CONFIG_HOME/mise/config.toml" "mise config"
+
+  # Only stdout is parsed; mise warnings stay visible on stderr without being
+  # mistaken for missing tools.
+  if ! missing="$(mise ls --current --missing --no-header)"; then
+    log_warning "mise could not inspect the configured toolchain"
+    errors=$((errors + 1))
+    return 0
+  fi
+
+  if [[ -n "$missing" ]]; then
+    while read -r tool version _; do
+      if [[ -n "$tool" ]]; then
+        log_check_missing "$tool $version"
+      fi
+    done <<<"$missing"
+    errors=$((errors + 1))
+    return 0
+  fi
+
+  log_check_ok "mise toolchain"
+}
+
 resolve_ghostty_bin() {
   local candidate=""
 
@@ -104,18 +186,14 @@ check_ghostty_config() {
   fi
 }
 
-check_maple_mono_fontconfig() {
+# Linux: the declared faces are registered and the managed fragment makes the
+# generic monospace family resolve to the configured font.
+check_desktop_font_fontconfig() {
   local active_configs=""
   local config_path="$XDG_CONFIG_HOME/fontconfig/conf.d/99-oh-my-devenv-maple-mono-nf-cn.conf"
   local installed_names=""
   local matched_postscript_name=""
   local postscript_name=""
-  local required_names=(
-    MapleMono-NF-CN-Regular
-    MapleMono-NF-CN-Bold
-    MapleMono-NF-CN-Italic
-    MapleMono-NF-CN-BoldItalic
-  )
 
   if ! command -v fc-list >/dev/null 2>&1 \
     || ! command -v fc-match >/dev/null 2>&1 \
@@ -125,8 +203,8 @@ check_maple_mono_fontconfig() {
     return 0
   fi
 
-  installed_names="$(fc-list -f '%{postscriptname}\n' ':family=Maple Mono NF CN')"
-  for postscript_name in "${required_names[@]}"; do
+  installed_names="$(fc-list -f '%{postscriptname}\n' ":family=$MAPLE_MONO_FAMILY")"
+  for postscript_name in $MAPLE_MONO_POSTSCRIPT_NAMES; do
     if ! grep -Fxq "$postscript_name" <<<"$installed_names"; then
       log_check_missing "$postscript_name"
       errors=$((errors + 1))
@@ -134,53 +212,59 @@ check_maple_mono_fontconfig() {
     fi
   done
 
-  log_check_ok "Maple Mono NF CN"
+  log_check_ok "$MAPLE_MONO_FAMILY"
 
   active_configs="$(fc-conflist)"
   if ! grep -Fq "$config_path:" <<<"$active_configs"; then
-    log_check_missing "Maple Mono NF CN Fontconfig rule"
+    log_check_missing "$MAPLE_MONO_FAMILY Fontconfig rule"
     errors=$((errors + 1))
     return 0
   fi
 
   matched_postscript_name="$(fc-match -f '%{postscriptname}\n' monospace)"
-  if [[ "$matched_postscript_name" != "MapleMono-NF-CN-Regular" ]]; then
-    log_warning "Fontconfig resolves monospace to ${matched_postscript_name:-<unknown>} instead of MapleMono-NF-CN-Regular."
-    errors=$((errors + 1))
-    return 0
-  fi
+  for postscript_name in $MAPLE_MONO_POSTSCRIPT_NAMES; do
+    if [[ "$matched_postscript_name" == "$postscript_name" ]]; then
+      log_check_ok "$MAPLE_MONO_FAMILY monospace alias"
+      return 0
+    fi
+  done
 
-  log_check_ok "Maple Mono NF CN monospace alias"
+  log_warning "Fontconfig resolves monospace to ${matched_postscript_name:-<unknown>} instead of $MAPLE_MONO_FAMILY."
+  errors=$((errors + 1))
 }
 
-check_maple_mono_macos() {
+# macOS: the Homebrew cask installs one file per declared face in the user font directory.
+check_desktop_font_macos() {
   local font_dir="$HOME/Library/Fonts"
-  local font_file=""
-  local required_files=(
-    MapleMono-NF-CN-Regular.ttf
-    MapleMono-NF-CN-Bold.ttf
-    MapleMono-NF-CN-Italic.ttf
-    MapleMono-NF-CN-BoldItalic.ttf
-  )
+  local postscript_name=""
 
-  for font_file in "${required_files[@]}"; do
-    if [[ ! -f "$font_dir/$font_file" ]]; then
-      log_check_missing "$font_file"
+  for postscript_name in $MAPLE_MONO_POSTSCRIPT_NAMES; do
+    if [[ ! -f "$font_dir/$postscript_name.ttf" ]]; then
+      log_check_missing "$postscript_name.ttf"
       errors=$((errors + 1))
       return 0
     fi
   done
 
-  log_check_ok "Maple Mono NF CN"
+  log_check_ok "$MAPLE_MONO_FAMILY"
 }
 
 check_manifest_cmds() {
   local manifest="$1"
   local command_name_parser="$2"
+  local entries=""
   local tool_spec=""
   local command_name=""
 
+  if ! entries="$(manifest_entries "$manifest")"; then
+    errors=$((errors + 1))
+    return 0
+  fi
+
   while IFS= read -r tool_spec; do
+    if [[ -z "$tool_spec" ]]; then
+      continue
+    fi
     command_name="$($command_name_parser "$tool_spec")"
 
     if [[ -z "$command_name" ]]; then
@@ -190,18 +274,27 @@ check_manifest_cmds() {
     fi
 
     check_cmd "$command_name"
-  done < <(manifest_entries "$manifest")
+  done <<<"$entries"
 }
 
 check_oh_my_zsh_plugins() {
   local manifest="$1"
   local zsh_custom_dir="$2"
+  local entries=""
   local plugin_entry=""
   local plugin_repo=""
   local plugin_path=""
   local extra_field=""
 
+  if ! entries="$(manifest_entries "$manifest")"; then
+    errors=$((errors + 1))
+    return 0
+  fi
+
   while IFS= read -r plugin_entry; do
+    if [[ -z "$plugin_entry" ]]; then
+      continue
+    fi
     read -r plugin_repo plugin_path extra_field <<<"$plugin_entry"
 
     if [[ -z "$plugin_repo" || -z "$plugin_path" || -n "$extra_field" ]]; then
@@ -211,7 +304,7 @@ check_oh_my_zsh_plugins() {
     fi
 
     check_path "$zsh_custom_dir/$plugin_path" "${plugin_path##*/}"
-  done < <(manifest_entries "$manifest")
+  done <<<"$entries"
 }
 
 detect_shell_rc_file() {
@@ -232,44 +325,41 @@ detect_shell_rc_file() {
   esac
 }
 
-# Core tools
-check_cmd git
-check_cmd curl
-check_cmd zsh
-check_cmd mise
-check_cmd usage
-check_path "$XDG_CONFIG_HOME/mise/config.toml" "mise config"
-
-# Runtimes
-check_cmd go
-check_cmd node
-check_cmd python
-check_cmd golangci-lint
+# System packages
+{{ if eq .chezmoi.os "linux" -}}
+check_apt_packages "$manifests_dir/system/apt-packages.txt"
+{{ else if eq .chezmoi.os "darwin" -}}
+check_brewfile "$manifests_dir/system/Brewfile"
+{{ end }}
+# Runtimes and binary-distributed tools
+check_mise_toolchain
 
 # Ecosystem tools
 check_manifest_cmds "$manifests_dir/ecosystem/go-tools.txt" go_tool_binary_name
 check_manifest_cmds "$manifests_dir/ecosystem/uv-tools.txt" uv_tool_binary_name
 
-# Editor-related CLI tools
-check_cmd shellcheck
-check_cmd shfmt
-
 # Shell assets
 check_path "$HOME/.oh-my-zsh/oh-my-zsh.sh" "oh-my-zsh"
 check_oh_my_zsh_plugins "$manifests_dir/shell/oh-my-zsh-plugins.txt" "${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}"
-if ! bash "$scripts_dir/install-shell-completions.sh" check '{{ .chezmoi.os }}'; then
+if ! bash "$scripts_dir/install-shell-completions.sh" check '{{ .chezmoi.os }}' "$manifests_dir/shell/completions.txt"; then
   errors=$((errors + 1))
 fi
 
 {{ if and $desktopBaseline $isSupportedDesktop -}}
 # Desktop baseline
+desktop_font_manifest_load "$manifests_dir/desktop/maple-mono-nf-cn.env"
+{{ if eq .chezmoi.os "darwin" -}}
+check_brewfile "$manifests_dir/desktop/Brewfile"
+{{ else -}}
+check_apt_packages "$manifests_dir/desktop/apt-packages.txt"
+{{ end -}}
 check_path "$XDG_CONFIG_HOME/ghostty/config.ghostty" "ghostty config file"
 ghostty_bin="$(resolve_ghostty_bin || true)"
 check_ghostty_config "$ghostty_bin"
 {{ if eq .chezmoi.os "darwin" -}}
-check_maple_mono_macos
+check_desktop_font_macos
 {{ else -}}
-check_maple_mono_fontconfig
+check_desktop_font_fontconfig
 {{ end -}}
 {{ end }}
 
@@ -292,32 +382,37 @@ print_version_line() {
   fi
 
   case "$name" in
-    chezmoi)       output="$(chezmoi --version 2>/dev/null | head -1 | awk '{print $3}' | tr -d ',')" ;;
-    git)           output="$(git --version 2>/dev/null | awk '{print $3}')" ;;
-    go)            output="$(go version 2>/dev/null | awk '{print $3}')" ;;
-    node)          output="$(node --version 2>/dev/null)" ;;
-    python)        output="$(python --version 2>/dev/null | awk '{print $2}')" ;;
-    mise)          output="$(mise --version 2>/dev/null | awk '{print $1}')" ;;
-    uv)            output="$(uv --version 2>/dev/null | awk '{print $2}')" ;;
-    golangci-lint) output="$(golangci-lint --version 2>/dev/null | awk '/has version/ {print $4; exit}')" ;;
+    chezmoi) output="$(chezmoi --version 2>/dev/null | head -1 | awk '{print $3}' | tr -d ',')" ;;
+    git)     output="$(git --version 2>/dev/null | awk '{print $3}')" ;;
+    mise)    output="$(mise --version 2>/dev/null | awk '{print $1}')" ;;
     ghostty)
       [[ -n "$ghostty_bin" ]] || return 0
       output="$("$ghostty_bin" --version 2>/dev/null | head -1 | awk '{print $2}')"
       ;;
-    *)             output="installed" ;;
+    *)       output="installed" ;;
   esac
 
   printf '    %-16s %s\n' "$name" "${output:-installed}"
 }
 
+# mise prints one `<tool> <version>` line per tool in its current configuration.
+print_mise_toolchain() {
+  local listing=""
+  local tool=""
+  local version=""
+
+  listing="$(mise current 2>/dev/null)" || return 0
+  while read -r tool version _; do
+    if [[ -n "$tool" ]]; then
+      printf '    %-16s %s\n' "$tool" "$version"
+    fi
+  done <<<"$listing"
+}
+
 print_version_line chezmoi
 print_version_line git
 print_version_line mise
-print_version_line go
-print_version_line node
-print_version_line python
-print_version_line uv
-print_version_line golangci-lint
+print_mise_toolchain
 {{ if and $desktopBaseline $isSupportedDesktop -}}
 print_version_line ghostty
 {{ end }}
