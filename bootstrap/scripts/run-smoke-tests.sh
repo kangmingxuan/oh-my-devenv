@@ -768,6 +768,85 @@ expect_failure "$completion_errors" run_completion_installer "$synthetic_complet
   install linux "$invalid_completion_manifest"
 assert_file_contains "$completion_errors" "unsupported completion generator: no-adapter"
 
+# Reconciliation: files this installer wrote for commands that later left the
+# manifest or this platform are pruned only after every current entry installs,
+# while unmarked files and symlinks in the same directories are left alone.
+reconcile_completion_manifest="$tmp_dir/completions.reconcile.txt"
+reconcile_completion_data="$tmp_dir/completion-reconcile-data"
+reconcile_zsh_dir="$reconcile_completion_data/zsh/site-functions"
+reconcile_bash_dir="$reconcile_completion_data/bash-completion/completions"
+cat >"$reconcile_completion_manifest" <<'EOF'
+uv          linux,darwin
+ruff        linux,darwin
+chezmoi     linux,darwin
+EOF
+while IFS= read -r completion_command; do
+  if [[ ! -e "$completion_stub_bin/$completion_command" ]]; then
+    ln -s completion-generator "$completion_stub_bin/$completion_command"
+  fi
+done <<<"$(manifest_entries "$reconcile_completion_manifest" | awk '{ print $1 }')"
+run_completion_installer "$reconcile_completion_data" install linux "$reconcile_completion_manifest"
+if [[ "$(head -n 1 "$reconcile_zsh_dir/_uv")" != "#compdef uv" ]]; then
+  fail_test "ownership marker must not displace the #compdef line of generated Zsh completions"
+fi
+# Unrelated neighbors: an unmarked user file per directory, and a symlink to an
+# owned-looking file the installer must neither follow nor delete.
+printf '#compdef custom\n' >"$reconcile_zsh_dir/_custom"
+printf 'complete -W stub custom\n' >"$reconcile_bash_dir/custom.bash"
+cp "$reconcile_zsh_dir/_ruff" "$tmp_dir/completion-linked-owned"
+ln -s "$tmp_dir/completion-linked-owned" "$reconcile_zsh_dir/_linked"
+
+# ruff leaves the linux platform and chezmoi leaves the manifest entirely.
+cat >"$reconcile_completion_manifest" <<'EOF'
+uv          linux,darwin
+ruff        darwin
+EOF
+reconcile_current_targets="$reconcile_zsh_dir/_uv
+$reconcile_bash_dir/uv.bash"
+reconcile_obsolete_targets="$reconcile_zsh_dir/_ruff
+$reconcile_bash_dir/ruff.bash
+$reconcile_zsh_dir/_chezmoi
+$reconcile_bash_dir/chezmoi.bash"
+expect_failure "$completion_errors" run_completion_installer "$reconcile_completion_data" \
+  check linux "$reconcile_completion_manifest"
+while IFS= read -r completion_target; do
+  assert_file_contains "$completion_errors" "[stale] shell completion: $completion_target"
+done <<<"$reconcile_obsolete_targets"
+reconcile_listing="$(run_completion_installer "$reconcile_completion_data" \
+  list linux "$reconcile_completion_manifest" | sort)"
+expected_reconcile_listing="$(printf '%s\n%s\n' "$reconcile_current_targets" "$reconcile_obsolete_targets" | sort)"
+if [[ "$reconcile_listing" != "$expected_reconcile_listing" ]]; then
+  fail_test "completion list must include obsolete owned files before reinstall; got: $reconcile_listing"
+fi
+# A failing current entry must leave the obsolete files for the next attempt.
+if PATH="$completion_stub_bin:/usr/bin:/bin" XDG_DATA_HOME="$reconcile_completion_data" FAIL_COMPLETION_FOR=uv \
+  bash "$completion_installer" install linux "$reconcile_completion_manifest" >/dev/null 2>&1; then
+  fail_test "completion installation must fail when a generator fails"
+fi
+while IFS= read -r completion_target; do
+  [[ -f "$completion_target" ]] \
+    || fail_test "failed completion install must not prune obsolete files: $completion_target"
+done <<<"$reconcile_obsolete_targets"
+
+run_completion_installer "$reconcile_completion_data" install linux "$reconcile_completion_manifest" >/dev/null
+while IFS= read -r completion_target; do
+  [[ ! -e "$completion_target" ]] \
+    || fail_test "completion install must prune obsolete owned files: $completion_target"
+done <<<"$reconcile_obsolete_targets"
+for completion_target in "$reconcile_zsh_dir/_custom" "$reconcile_bash_dir/custom.bash"; do
+  [[ -f "$completion_target" ]] \
+    || fail_test "completion install must preserve unmarked files: $completion_target"
+done
+if [[ ! -L "$reconcile_zsh_dir/_linked" || ! -f "$tmp_dir/completion-linked-owned" ]]; then
+  fail_test "completion install must neither remove nor follow symlinks in completion directories"
+fi
+run_completion_installer "$reconcile_completion_data" check linux "$reconcile_completion_manifest" >/dev/null
+reconcile_listing="$(run_completion_installer "$reconcile_completion_data" \
+  list linux "$reconcile_completion_manifest" | sort)"
+if [[ "$reconcile_listing" != "$(sort <<<"$reconcile_current_targets")" ]]; then
+  fail_test "completion list must converge on current targets after reconcile; got: $reconcile_listing"
+fi
+
 render_template .chezmoiscripts/run_onchange_after_60-check.sh.tmpl "$tmp_dir/run_onchange_after_60-check.sh"
 syntax_check bash "$tmp_dir/run_onchange_after_60-check.sh"
 shellcheck_rendered_bash "$tmp_dir/run_onchange_after_60-check.sh"

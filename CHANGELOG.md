@@ -29,6 +29,7 @@ This repository versions the baseline with [Semantic Versioning 2.0](https://sem
 - Centrally generated CLI completions in the standard Bash and Zsh user data directories, including `uvx` and Linux `bat` adapters.
 - A documented, uninstall-protected mise local overlay for machine-only global tools and settings.
 - `bootstrap/manifests/shell/completions.txt`: one declarative inventory of completion commands and platforms shared by the installer, the environment check, uninstall, and the smoke suite.
+- Generated completion files carry an ownership marker. `install` prunes marked files whose command left the manifest or platform once the current entries install, `check` reports them as stale, and `list` includes them for uninstall; unmarked files and symlinks are never removed.
 
 ### Changed
 

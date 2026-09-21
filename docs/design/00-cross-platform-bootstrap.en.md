@@ -328,7 +328,8 @@ uv = "0.11.28"
 - Apply one shell policy per platform: Linux receives Bash and Zsh assets, macOS receives Zsh assets only
 - Keep the command-specific generator adapters in the script, because the CLIs expose completion generation through different subcommands and flags; `bat` wraps the Debian package-owned `batcat` completion instead of running a generator
 - Write each asset atomically so a failing generator leaves the previous valid file in place
-- Serve `install`, `check`, and `list` from the same inventory; `uninstall.sh` enumerates the assets through `list`
+- Stamp each generated file with a stable ownership marker (after `#compdef` in Zsh files); after every current entry installs, prune marked files in the two completion directories that no current entry targets, and never delete unmarked files or follow symlinks
+- Serve `install`, `check`, and `list` from the same inventory; `check` reports obsolete owned files as stale, `list` appends them to the current targets, and `uninstall.sh` enumerates the assets through `list`
 
 ### `install-go-tools`
 

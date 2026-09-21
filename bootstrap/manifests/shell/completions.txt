@@ -18,6 +18,10 @@
 #
 # Readers: install-shell-completions.sh (install/check/list), uninstall.sh
 # (through `list`), the 55 and 60 hooks, and run-smoke-tests.sh.
+#
+# Generated files carry an ownership marker. Removing a command or a platform
+# here makes the next `install` prune the files it previously generated; `check`
+# reports them as stale and `list` includes them until then.
 
 uv             linux,darwin
 uvx            linux,darwin

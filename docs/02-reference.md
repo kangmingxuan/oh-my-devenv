@@ -134,6 +134,13 @@ installed but is appended last, so it acts only as a fallback. Machine-local
 completion files use the same standard directories; no project-specific loader
 or glob convention is required.
 
+Every generated file carries an ownership comment marker (line 2 of Zsh files,
+after `#compdef`). When a command leaves the manifest or this platform, the
+next `install` prunes its marked files after the current entries install,
+`check` reports them as `[stale]`, and `list` includes them so
+`uninstall.sh` can remove them. Unmarked files and symlinks in those
+directories are never touched.
+
 ### Output
 
 | Variable | Default | Effect |

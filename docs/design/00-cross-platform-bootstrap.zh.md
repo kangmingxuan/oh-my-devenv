@@ -328,7 +328,8 @@ uv = "0.11.28"
 - 按平台应用统一的 shell 策略：Linux 生成 Bash 与 Zsh 资产，macOS 仅生成 Zsh 资产
 - 各命令的生成适配器保留在脚本中，因为各 CLI 通过不同的子命令或参数暴露补全生成；`bat` 包装 Debian 包自带的 `batcat` 补全，而不运行生成器
 - 以原子方式写入每个资产，生成失败时保留先前有效的文件
-- `install`、`check`、`list` 共用同一份清单；`uninstall.sh` 通过 `list` 枚举资产
+- 为每个生成文件写入稳定的归属标记（Zsh 文件放在 `#compdef` 之后）；所有当前条目安装成功后，清理两个补全目录中不再被当前条目指向的已标记文件，绝不删除未标记文件，也不跟随符号链接
+- `install`、`check`、`list` 共用同一份清单；`check` 将过时的归属文件报告为 stale，`list` 在当前目标之后附加它们，`uninstall.sh` 通过 `list` 枚举资产
 
 ### `install-go-tools`
 
