@@ -378,21 +378,7 @@ dotfiles 需要保证：
 6. 新 shell 启动时无明显 `command not found` 错误
 7. 重复执行 `chezmoi apply` 不会破坏环境
 
-## 14. AI 实现任务清单
-
-请按以下顺序落地：
-
-1. 创建目录结构
-2. 编写 `install-apt-packages`
-3. 编写 `install-brew-packages`
-4. 编写 `install-go-tools`
-5. 编写 `install-uv-tools`
-6. 编写 `.chezmoiscripts/*`
-7. 编写 `bootstrap/manifests/system/*.txt` 与 `bootstrap/manifests/ecosystem/*.txt`
-8. 编写独立的 `xdg_config/` source 与 `xdg_config/mise/config.toml.tmpl`
-9. 编写 `README.md` 中的 bootstrap 使用说明
-
-## 15. 最终方案摘要
+## 14. 最终方案摘要
 
 最终采用的方案是：
 

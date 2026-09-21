@@ -378,21 +378,7 @@ On a fresh machine, after execution, all of the following should hold:
 6. No obvious `command not found` errors on new shell startup
 7. Re-running `chezmoi apply` does not break the environment
 
-## 14. AI Implementation Task List
-
-Implement in this order:
-
-1. Create directory structure
-2. Implement `install-apt-packages`
-3. Implement `install-brew-packages`
-4. Implement `install-go-tools`
-5. Implement `install-uv-tools`
-6. Implement `.chezmoiscripts/*`
-7. Implement `bootstrap/manifests/system/*.txt` and `bootstrap/manifests/ecosystem/*.txt`
-8. Implement the independent `xdg_config/` source and `xdg_config/mise/config.toml.tmpl`
-9. Add bootstrap usage instructions to `README.md`
-
-## 15. Final Summary
+## 14. Final Summary
 
 The final chosen approach is:
 

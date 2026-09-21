@@ -15,7 +15,7 @@ bash bootstrap/scripts/run-smoke-tests.sh
 pre-commit run --all-files
 ```
 
-The smoke suite renders templates, checks behavior and contracts, and runs ShellCheck. Pre-commit performs the configured ShellCheck and gitleaks scans; use it for the changes identified in `CONTRIBUTING.md`. Do not run `chezmoi apply`, `chezmoi update`, `chezmoi init --apply`, or bootstrap installers unless the user explicitly requests it: they mutate the live home directory or installed toolchain.
+The smoke suite renders templates, checks behavior and contracts, exercises selected installers with stubs, applies the nested XDG source under temporary roots, and runs ShellCheck. Its existing fixture-only operations are allowed by the canonical [local validation policy](CONTRIBUTING.md#local-validation). Do not run `chezmoi apply`, `chezmoi update`, `chezmoi init --apply`, or bootstrap installers against the live home directory or installed toolchain unless the user explicitly requests that mutation.
 
 ## Coding Style & Naming Conventions
 
@@ -29,7 +29,7 @@ Maintain only the current design. Replace superseded paths and behavior in the s
 
 ## Testing Guidelines
 
-Run the smoke suite for every change. Register new templates in `run-smoke-tests.sh` so relevant OS branches are rendered and syntax-checked. When a manifest format changes, update every consumer of that contract; changing ordinary entries should not require test changes. Report the exact checks run and any environment limitations.
+Follow the [local validation policy](CONTRIBUTING.md#local-validation). Finish the requested source edits, documentation, and appropriate safe checks even when a separate live-install signoff is pending. Register new templates in `run-smoke-tests.sh` so relevant OS branches are rendered and syntax-checked. When a manifest format changes, update every consumer of that contract; changing ordinary entries should not require test changes. Report the exact checks run and any environment limitations.
 
 ## Commit & Pull Request Guidelines
 

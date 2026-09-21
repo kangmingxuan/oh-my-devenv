@@ -4,12 +4,13 @@ on:
   push:
   pull_request:
 
-# A heavier, integration-level check than Smoke Tests. The smoke suite only
-# renders templates and syntax-checks them; it never runs the installers. This
-# workflow performs a real `chezmoi init --apply` end to end on a throwaway
-# runner and asserts the final environment check passes, so a semantic break in
-# an installer (a bad package name, a broken `go install` line, a regressed
-# idempotency probe) is caught instead of slipping through render-only CI.
+# A heavier, integration-level check than Smoke Tests. The smoke suite renders
+# and syntax-checks templates, validates contracts and boundaries, and exercises
+# selected behavior with stubs and temporary roots. It does not run the complete
+# package and runtime bootstrap. This workflow renders initialization
+# configuration, performs a real `chezmoi apply` on a throwaway runner, and
+# asserts the final environment check passes, so installer integration failures
+# are caught.
 jobs:
   apply-linux:
     runs-on: ubuntu-latest
