@@ -38,7 +38,7 @@ jobs:
     container: archlinux:base
     steps:
       - name: Install smoke dependencies
-        run: pacman -Syu --needed --noconfirm git chezmoi shellcheck zsh bash-completion bat
+        run: pacman -Syu --needed --noconfirm git chezmoi shellcheck zsh bash-completion bat diffutils
       - uses: actions/checkout@v7
       - name: Run smoke tests
         run: bash bootstrap/scripts/run-smoke-tests.sh
