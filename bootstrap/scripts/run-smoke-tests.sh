@@ -920,7 +920,7 @@ fi
 # Available desktop faces pass even when the system's default font differs;
 # missing faces must still fail. Font identities come from the manifest.
 # These stubs are called by the extracted function, outside static analysis.
-# shellcheck disable=SC2329
+# shellcheck disable=SC2317,SC2329
 (
   eval "$(sed -n '/^check_desktop_font_fontconfig() {$/,/^}$/p' "$tmp_dir/run_onchange_after_60-check.sh")"
   fc-list() {
