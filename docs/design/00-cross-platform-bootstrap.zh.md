@@ -202,7 +202,7 @@
 - 当 shell 层依赖 zsh 时，通过 `apt` 安装 `zsh`
 - 复用与 macOS 相同的 shell 资产脚本安装 `oh-my-zsh` 与插件
 - 只有非 WSL 的 Ubuntu 26.04+ 参与已选择的桌面基线：Ghostty 通过 apt 安装，固定并校验过的 Maple Mono 归档安装到用户字体目录
-- 在该 Linux 桌面基线下，通过受管 Fontconfig 片段将通用 `monospace` 强优先到 Maple Mono NF CN；关闭桌面基线时将片段渲染为合法的空配置，使曾经启用过的机器也能正确收敛
+- 仅在受支持的 Ubuntu 桌面基线保留 Ghostty 未遵守显式字体设置的 Fontconfig 补丁，同时匹配 `prgname=ghostty` 和 `monospace`；其他应用和平台保留自己的字体偏好。其他环境或关闭桌面基线时渲染合法的空配置，使既有规则正确收敛；字体检查验证已注册的字体样式，不要求改变系统等宽字体
 
 ### WSL
 

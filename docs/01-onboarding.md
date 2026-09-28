@@ -64,11 +64,11 @@ instead of duplicating the machine-wide default in a shared overlay.
 
 On supported Ubuntu machines, the desktop baseline also manages
 `$XDG_CONFIG_HOME/fontconfig/conf.d/99-oh-my-devenv-maple-mono-nf-cn.conf`. This rule
-prepends Maple Mono NF CN with a strong binding when an application requests
-the generic `monospace` family. It is the Linux compatibility path used by
-Ghostty, and it intentionally affects every Fontconfig client that requests
-generic `monospace`. Turning off `desktopBaseline` and applying again leaves a
-valid but inactive managed fragment, so the preference does not linger.
+works around an observed Ubuntu issue where Ghostty falls back to the distro's
+monospace font despite its explicit `font-family` setting. It applies only to
+Ghostty's `monospace` requests (`prgname=ghostty`); other applications keep their
+font preferences. Other platforms, or disabling `desktopBaseline`, render a
+valid inactive fragment on apply, replacing any previously active rule.
 
 ---
 

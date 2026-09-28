@@ -481,16 +481,16 @@ syntax_check bash "$tmp_dir/run_onchange_after_22-install-desktop-assets.sh"
 shellcheck_rendered_bash "$tmp_dir/run_onchange_after_22-install-desktop-assets.sh"
 assert_file_contains "$tmp_dir/run_onchange_after_22-install-desktop-assets.sh" "install_error_trap"
 desktop_platform_supported=0
-linux_fontconfig_alias_enabled=0
+ubuntu_ghostty_font_workaround_enabled=0
 if grep -Fq "install-brew-packages.sh" "$tmp_dir/run_onchange_after_22-install-desktop-assets.sh"; then
   desktop_platform_supported=1
   assert_file_contains "$tmp_dir/run_onchange_after_22-install-desktop-assets.sh" 'manifests_dir/desktop/Brewfile'
 elif grep -Fq "install-maple-mono-font.sh" "$tmp_dir/run_onchange_after_22-install-desktop-assets.sh"; then
   desktop_platform_supported=1
-  linux_fontconfig_alias_enabled=1
   if grep -Fq 'install-pacman-packages.sh' "$tmp_dir/run_onchange_after_22-install-desktop-assets.sh"; then
     assert_file_contains "$tmp_dir/run_onchange_after_22-install-desktop-assets.sh" 'manifests_dir/desktop/pacman-packages.txt'
   else
+    ubuntu_ghostty_font_workaround_enabled=1
     assert_file_contains "$tmp_dir/run_onchange_after_22-install-desktop-assets.sh" 'install-apt-packages.sh'
     assert_file_contains "$tmp_dir/run_onchange_after_22-install-desktop-assets.sh" 'manifests_dir/desktop/apt-packages.txt'
   fi
@@ -528,7 +528,7 @@ render_template \
 assert_file_contains "$tmp_dir/99-oh-my-devenv-maple-mono-nf-cn.conf" '<!DOCTYPE fontconfig SYSTEM "urn:fontconfig:fonts.dtd">'
 assert_file_contains "$tmp_dir/99-oh-my-devenv-maple-mono-nf-cn.conf" "<fontconfig>"
 assert_file_contains "$tmp_dir/99-oh-my-devenv-maple-mono-nf-cn.conf" "</fontconfig>"
-if (( linux_fontconfig_alias_enabled == 1 )); then
+if (( ubuntu_ghostty_font_workaround_enabled == 1 )); then
   assert_file_contains "$tmp_dir/99-oh-my-devenv-maple-mono-nf-cn.conf" '<edit name="family" mode="prepend" binding="strong">'
   assert_file_contains "$tmp_dir/99-oh-my-devenv-maple-mono-nf-cn.conf" "<string>$MAPLE_MONO_FAMILY</string>"
 else
@@ -917,6 +917,26 @@ else
   assert_file_not_contains "$tmp_dir/run_onchange_after_60-check.sh" 'desktop_font_manifest_load "'
 fi
 
+# Available desktop faces pass even when the system's default font differs;
+# missing faces must still fail. Font identities come from the manifest.
+# These stubs are called by the extracted function, outside static analysis.
+# shellcheck disable=SC2329
+(
+  eval "$(sed -n '/^check_desktop_font_fontconfig() {$/,/^}$/p' "$tmp_dir/run_onchange_after_60-check.sh")"
+  fc-list() {
+    local face
+    for face in $MAPLE_MONO_POSTSCRIPT_NAMES; do printf '%s\n' "$face"; done
+  }
+  fc-match() { printf '%s\n' 'SmokeSystemDefault'; }
+  fc-conflist() { printf '%s:\n' "$XDG_CONFIG_HOME/fontconfig/conf.d/99-oh-my-devenv-maple-mono-nf-cn.conf"; }
+  errors=0
+  check_desktop_font_fontconfig >/dev/null
+  [[ "$errors" == 0 ]] || fail_test "registered desktop fonts must not require the system monospace alias"
+  fc-list() { :; }
+  check_desktop_font_fontconfig >/dev/null
+  [[ "$errors" == 1 ]] || fail_test "missing desktop fonts must still fail validation"
+)
+
 log_step "🤖" "Verifying docs and repo-only files stay undeployed..."
 managed_listing="$(chezmoi managed --source="$repo_root" --override-data-file "$tmp_data_file" --path-style=absolute)"
 if grep -Fq "$HOME/xdg_config" <<<"$managed_listing"; then
@@ -1094,9 +1114,11 @@ if [[ "$desktop_platform_supported_data" == true ]]; then
 elif [[ -s "$xdg_desktop_home/ghostty/config.ghostty" ]]; then
   fail_test "nested XDG apply wrote a Ghostty config on an unsupported desktop platform"
 fi
-if (( linux_fontconfig_alias_enabled == 1 )); then
+if (( ubuntu_ghostty_font_workaround_enabled == 1 )); then
   assert_file_contains "$xdg_desktop_home/fontconfig/conf.d/99-oh-my-devenv-maple-mono-nf-cn.conf" \
     "<string>$MAPLE_MONO_FAMILY</string>"
+else
+  assert_file_not_contains "$xdg_desktop_home/fontconfig/conf.d/99-oh-my-devenv-maple-mono-nf-cn.conf" '<match'
 fi
 
 xdg_status="$(XDG_CONFIG_HOME="$xdg_test_home" XDG_STATE_HOME="$xdg_test_state" \
@@ -1192,6 +1214,40 @@ assert_file_not_contains "$synthetic_unsupported_fontconfig" 'binding="strong"'
 assert_file_not_contains "$synthetic_unsupported_fontconfig" "$MAPLE_MONO_FAMILY"
 assert_file_not_contains "$synthetic_macos_fontconfig" 'binding="strong"'
 assert_file_not_contains "$synthetic_macos_fontconfig" "$MAPLE_MONO_FAMILY"
+# Arch (including derivatives), Debian and WSL must not inherit Ubuntu's workaround.
+for platform_data in \
+  'true|{"os":"linux","osRelease":{"id":"arch"},"kernel":{"osrelease":"linux"}}' \
+  'true|{"os":"linux","osRelease":{"id":"omarchy","idLike":"arch"},"kernel":{"osrelease":"linux"}}' \
+  'false|{"os":"linux","osRelease":{"id":"debian"},"kernel":{"osrelease":"linux"}}' \
+  'false|{"os":"linux","osRelease":{"id":"ubuntu","versionID":"26.04"},"kernel":{"osrelease":"microsoft-standard-WSL2"}}'; do
+  synthetic_inactive_fontconfig="$tmp_dir/fontconfig-inactive.conf"
+  chezmoi --source="$repo_root" \
+    --override-data "$(desktop_override_data "${platform_data%%|*}" "${platform_data#*|}")" \
+    execute-template --file "$synthetic_fontconfig_template" >"$synthetic_inactive_fontconfig"
+  assert_file_contains "$synthetic_inactive_fontconfig" '<fontconfig>'
+  assert_file_not_contains "$synthetic_inactive_fontconfig" '<match'
+done
+
+# Exercise Fontconfig substitutions without installed fonts or the host's rules.
+# Linux CI installs Fontconfig; macOS only needs the cross-platform render checks.
+if [[ "$(uname -s)" != Darwin ]]; then
+  require_command fc-pattern
+  for program in ghostty foot chromium; do
+    actual_family="$(FONTCONFIG_FILE="$synthetic_supported_fontconfig" \
+      fc-pattern -c -f '%{family}' "monospace:prgname=$program")"
+    if [[ "$program" == ghostty ]]; then
+      [[ "$actual_family" == "$MAPLE_MONO_FAMILY,monospace" ]] || fail_test "Ghostty workaround did not prefer the manifest font"
+    else
+      [[ "$actual_family" == monospace ]] || fail_test "Ghostty workaround changed $program fonts"
+    fi
+  done
+  actual_family="$(FONTCONFIG_FILE="$synthetic_supported_fontconfig" fc-pattern -c -f '%{family}' monospace)"
+  [[ "$actual_family" == monospace ]] || fail_test "Ghostty workaround changed the default monospace preference"
+  actual_family="$(FONTCONFIG_FILE="$synthetic_supported_fontconfig" \
+    fc-pattern -c -f '%{family}' 'Smoke Explicit Font,monospace:prgname=ghostty')"
+  [[ "$actual_family" == "Smoke Explicit Font,$MAPLE_MONO_FAMILY,monospace" ]] || fail_test "Ghostty workaround displaced an explicitly selected font"
+fi
+
 synthetic_macos_ghostty="$tmp_dir/ghostty-macos.conf"
 synthetic_linux_ghostty="$tmp_dir/ghostty-linux.conf"
 chezmoi --source="$repo_root" \

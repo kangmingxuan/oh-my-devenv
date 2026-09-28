@@ -22,7 +22,7 @@ This repository versions the baseline with [Semantic Versioning 2.0](https://sem
 
 - Arch Linux family package installation and checks through pacman.
 - Arch template, installer, and login regression coverage, plus a `smoke-tests-arch` CI job.
-- Opt-in, all-or-nothing desktop baseline for macOS, non-WSL Arch Linux, and Ubuntu 26.04+: Ghostty, Maple Mono NF CN, managed Ghostty defaults, a Linux Fontconfig compatibility rule, and OrbStack on macOS.
+- Opt-in, all-or-nothing desktop baseline for macOS, non-WSL Arch Linux, and Ubuntu 26.04+: Ghostty, Maple Mono NF CN, managed Ghostty defaults, an Ubuntu Ghostty-specific Fontconfig compatibility rule, and OrbStack on macOS.
 - `smoke-tests-macos` CI job that runs the smoke suite on `macos-latest`, so the `darwin` template arms are rendered and shell-checked instead of going untested.
 - `apply-linux` CI job that runs a real `chezmoi init --apply` end to end and asserts the final environment check passes, covering installer semantics the render-only smoke suite cannot.
 - Dependabot configuration to keep GitHub Actions versions current.
@@ -34,6 +34,8 @@ This repository versions the baseline with [Semantic Versioning 2.0](https://sem
 - Generated completion files carry an ownership marker. `install` prunes marked files whose command left the manifest or platform once the current entries install, `check` reports them as stale, and `list` includes them for uninstall; unmarked files and symlinks are never removed.
 
 ### Changed
+
+- Scoped the existing font-discovery workaround to Ghostty on supported Ubuntu desktops. Other platforms render an inactive rule, and desktop validation checks installed font faces without imposing a system-wide `monospace` preference.
 
 - Support native Arch bat completions alongside Debian's batcat wrappers.
 - Manage the Bash login entry point and allow quiet shared initialization in `env.sh`.

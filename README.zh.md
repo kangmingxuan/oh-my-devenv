@@ -20,7 +20,7 @@ oh-my-devenv 是一套主观鲜明、可复现的开发环境。它公开的是�
 - **受管的 shell** —— 所有平台上的 Zsh 与 Linux / WSL 上的 Bash 都提供完整自动补全；macOS Bash 则刻意只保留有限支持。
 - **锁定版本的运行时** —— 通过 mise 管理 Go、Node、Python 与 golangci-lint，外加 `gopls`、`dlv`、`ruff`、`basedpyright`、`pre-commit` 等生态工具。
 - **现代 CLI 工具箱** —— ripgrep、fd、bat、fzf、jq、direnv、tmux、shellcheck、shfmt 等。
-- **可选桌面基线** —— 一个全有或全无的平台包：受支持的工作站安装 Ghostty 与 Maple Mono NF CN，macOS 额外安装 OrbStack，Arch Linux 与 Ubuntu 26.04+ 配置所需的 Fontconfig 别名规则。
+- **可选桌面基线** —— 一个全有或全无的平台包：受支持的工作站安装 Ghostty 与 Maple Mono NF CN，macOS 额外安装 OrbStack，Ubuntu 26.04+ 另有仅针对 Ghostty 的 Fontconfig 兼容补丁。
 - **安全的首次运行** —— 自动备份已存在的受管 dotfiles，并仅在首次询问 Git 身份和桌面基线选择。
 - **用本地 overlay 保存私有事实** —— 把凭据、私有主机和机器专属值放进文档明确的用户配置槽位。项目自有槽位统一收敛到 `$XDG_CONFIG_HOME/oh-my-devenv/`，配置根目录默认是 `~/.config`。
 - **刻意保持主观** —— 仓库只承载一套当前设计，不提供兼容配置档案，也不追求折中式的中性默认值。

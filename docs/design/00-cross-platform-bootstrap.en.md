@@ -202,7 +202,7 @@ Requirements:
 - Install `zsh` via `apt` when the shell layer depends on it
 - Reuse the same shell asset script as macOS to install `oh-my-zsh` and plugins
 - Only non-WSL Ubuntu 26.04+ participates in the selected desktop baseline: install Ghostty through apt and the pinned, verified Maple Mono archive in the user font directory
-- On that Linux desktop baseline, manage a strong generic `monospace` Fontconfig preference for Maple Mono NF CN; render the fragment as a valid no-op when the choice is disabled so previously enabled machines converge cleanly
+- Only on the supported Ubuntu desktop baseline, retain the Fontconfig workaround for Ghostty ignoring its explicit font-family setting; match `prgname=ghostty` and `monospace`. Other applications and platforms keep their font preferences. Render a valid no-op elsewhere or when disabled so previously enabled machines converge cleanly; font validation checks registered faces rather than the system monospace alias
 
 ### WSL
 
