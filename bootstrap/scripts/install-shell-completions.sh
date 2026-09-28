@@ -44,6 +44,12 @@ bash_completion_dir="$XDG_DATA_HOME/bash-completion/completions"
 zsh_completion_dir="$XDG_DATA_HOME/zsh/site-functions"
 bat_bash_completion_source="/usr/share/bash-completion/completions/batcat"
 bat_zsh_completion_source="/usr/share/zsh/vendor-completions/_batcat"
+bat_native_completion=false
+if [[ -r /usr/share/bash-completion/completions/bat && -r /usr/share/zsh/site-functions/_bat ]]; then
+  bat_bash_completion_source="/usr/share/bash-completion/completions/bat"
+  bat_zsh_completion_source="/usr/share/zsh/site-functions/_bat"
+  bat_native_completion=true
+fi
 
 # Stable ownership marker written into every generated file, so install can
 # prune assets whose command left the manifest or this platform, and list can
@@ -310,7 +316,7 @@ bat_completion_source() {
   esac
 }
 
-# Verify the Debian package-owned batcat completion this wrapper depends on.
+# Verify the package-owned completion used by the copy or Debian wrapper.
 check_bat_completion_source() {
   local shell_name="$1"
   local source_file=""
@@ -318,16 +324,16 @@ check_bat_completion_source() {
   source_file="$(bat_completion_source "$shell_name")"
 
   if [[ ! -r "$source_file" ]]; then
-    printf 'ERROR: package-owned batcat %s completion is missing: %s\n' "$shell_name" "$source_file" >&2
+    printf 'ERROR: package-owned bat %s completion is missing: %s\n' "$shell_name" "$source_file" >&2
     return 1
   fi
 
   if [[ "$shell_name" == bash ]] && ! grep -Eq '^_bat[[:space:]]*\(\)' "$source_file"; then
-    printf 'ERROR: unexpected batcat Bash completion contract: %s\n' "$source_file" >&2
+    printf 'ERROR: unexpected package-owned bat Bash completion contract: %s\n' "$source_file" >&2
     return 1
   fi
-  if [[ "$shell_name" == zsh ]] && [[ "$(head -n 1 "$source_file")" != "#compdef batcat" ]]; then
-    printf 'ERROR: unexpected batcat Zsh completion contract: %s\n' "$source_file" >&2
+  if [[ "$shell_name" == zsh ]] && ! head -n 1 "$source_file" | grep -Eq '^#compdef bat(cat)?$'; then
+    printf 'ERROR: unexpected package-owned bat Zsh completion contract: %s\n' "$source_file" >&2
     return 1
   fi
 }
@@ -347,7 +353,9 @@ install_bat_completion() {
   temporary="$(mktemp "$target.tmp.XXXXXX")"
   register_completion_temp_file "$temporary"
 
-  if [[ "$shell_name" == bash ]]; then
+  if [[ "$bat_native_completion" == true ]]; then
+    cat "$source_file" >"$temporary"
+  elif [[ "$shell_name" == bash ]]; then
     printf '# shellcheck disable=SC1091\nsource %q\ncomplete -F _bat bat\n' \
       "$source_file" >"$temporary"
   else

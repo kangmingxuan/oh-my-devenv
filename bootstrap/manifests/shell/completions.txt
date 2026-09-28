@@ -13,8 +13,8 @@
 # and Zsh assets, macOS receives Zsh assets only. The generator adapter for each
 # command lives in bootstrap/scripts/install-shell-completions.sh because the
 # CLIs expose completion generation through different subcommands or flags;
-# `bat` wraps the Debian package-owned `batcat` completions instead of running
-# a generator.
+# `bat` copies native package completions on Arch or wraps Debian package-owned
+# `batcat` completions instead of running a generator.
 #
 # Readers: install-shell-completions.sh (install/check/list), uninstall.sh
 # (through `list`), the 55 and 60 hooks, and run-smoke-tests.sh.

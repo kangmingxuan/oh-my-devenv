@@ -66,7 +66,7 @@ local env files must not set or change `XDG_CONFIG_HOME`.
    it installs the tool and updates the overlay without editing the managed
    global config.
 9. Keep responsibilities clean:
-   - `$XDG_CONFIG_HOME/oh-my-devenv/env.sh` is for persistent, non-secret exports that Bash and Zsh should load.
+   - `$XDG_CONFIG_HOME/oh-my-devenv/env.sh` is for persistent, non-secret exports and quiet shared initialization that Bash and Zsh should load.
    - `$XDG_CONFIG_HOME/oh-my-devenv/bootstrap.env` is for non-secret settings consumed only by bootstrap tooling.
    - `$XDG_CONFIG_HOME/oh-my-devenv/secrets.sh` is for shell-compatible secrets that interactive Bash and Zsh read automatically; bootstrap and non-interactive shell commands never read it automatically.
    - `$XDG_CONFIG_HOME/oh-my-devenv/zshrc.zsh` and `$XDG_CONFIG_HOME/oh-my-devenv/bashrc.bash` are late interactive-only overlays for aliases, functions, and prompt tweaks.

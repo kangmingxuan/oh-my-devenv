@@ -45,7 +45,7 @@ initialization remains in the documented
 install the **desktop baseline**. Those values only affect this computer and are
 not committed back into the repository.
 
-The desktop choice defaults to yes on macOS and on non-WSL Ubuntu 26.04+ when
+The desktop choice defaults to yes on macOS and on non-WSL Arch Linux and Ubuntu 26.04+ when
 the init process can see a graphical-session signal (`XDG_CURRENT_DESKTOP`,
 `WAYLAND_DISPLAY`, or `DISPLAY`). It defaults to no elsewhere. The answer is
 persisted as `desktopBaseline` in the local chezmoi data, so later applies do not
@@ -78,7 +78,7 @@ Bootstrap is split into ordered hooks under `.chezmoiscripts/`:
 
 0. **`run_before_00-*`** — prints the startup banner (hide it with `NO_LOGO=1`).
 1. **`run_once_before_10-*`** — one-time prerequisites and, if needed, **backup** of any pre-existing managed files before they are overwritten.
-2. **`run_onchange_after_20-*`** — shared system packages (`apt` on Linux / WSL, Homebrew on macOS).
+2. **`run_onchange_after_20-*`** — shared system packages (`apt` on Debian / Ubuntu, `pacman` on Arch Linux, Homebrew on macOS).
 3. **`run_onchange_after_22-*`** — when selected, installs the platform desktop bundle: Ghostty and Maple Mono NF CN everywhere supported, plus OrbStack on macOS.
 4. **`run_onchange_after_25-*`** — shell assets (oh-my-zsh and plugins from the manifest).
 5. **`run_onchange_after_30-*`** — install mise itself.

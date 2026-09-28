@@ -9,7 +9,7 @@ The repository is maintained on a **best-effort** basis by a single maintainer. 
 1. **Single opinionated baseline.** This repository ships the maintainer's current preferred design. There is no `personal` vs. `work` mode and no attempt to satisfy every workflow.
 2. **Current design only.** Replace superseded paths and behavior directly. Do not retain compatibility aliases, fallback loaders, or legacy branches.
 3. **No private data.** No personal emails, usernames, internal IP ranges, or credentials. Host-specific corporate or private infrastructure details stay in overlays or user-owned config.
-4. **Reproducible bootstrap.** Changes to executable bootstrap behavior must keep the appropriate checks in the canonical [`CONTRIBUTING.md` validation policy](../CONTRIBUTING.md#local-validation) passing and keep a clean-machine bootstrap working on macOS, Ubuntu/Debian, and WSL.
+4. **Reproducible bootstrap.** Changes to executable bootstrap behavior must keep the appropriate checks in the canonical [`CONTRIBUTING.md` validation policy](../CONTRIBUTING.md#local-validation) passing and keep a clean-machine bootstrap working on macOS, Ubuntu/Debian, Arch Linux, and WSL.
 5. **Validate behavior, not duplicated facts.** Tests enforce parsing, rendering, syntax, permissions, boundaries, and behavior. They do not restate literal configuration values that already have a canonical source file.
 
 ## Roles
@@ -48,6 +48,7 @@ A reviewable change is ready to merge when all of the following hold:
 - The CI pipeline is green. Every reviewable change runs these GitHub Actions jobs:
   - `smoke-tests-linux` — renders and syntax-checks the baseline, validates contracts and deployment boundaries, and exercises selected behavior with stubs and temporary roots on `ubuntu-latest`.
   - `smoke-tests-macos` — the same smoke suite on `macos-latest`, so the `darwin` template arms and platform-sensitive checks are exercised instead of going untested.
+  - `smoke-tests-arch` — the same smoke suite in an `archlinux:base` container, exercising Arch platform routing and package-owned completion assets.
   - `apply-linux` — renders initialization configuration, runs a real `chezmoi apply` on `ubuntu-latest`, and asserts the final environment check prints `All checks passed.`
   - `secret-scan` — a full `gitleaks` scan of the repository tree.
 
@@ -70,8 +71,8 @@ Milestones cut annotated git tags (`v0.<M>.0`). After a milestone's final MR mer
 
 Third-party dependencies pulled in by this repository fall into these categories:
 
-- **System packages** (`apt`, Homebrew): bump the manifest files (`bootstrap/manifests/system/apt-packages.txt`, `bootstrap/manifests/system/Brewfile`). Prefer stable distro names over version pins.
-- **Desktop assets**: keep the explicit, all-or-nothing platform bundle in `bootstrap/manifests/desktop/`. The macOS Brewfile owns Ghostty, its font cask, and OrbStack; the Ubuntu 26.04+ apt manifest owns Ghostty; `maple-mono-nf-cn.env` declares the font family and required faces shared by the Linux installer, the environment check, and the managed Ghostty and Fontconfig templates, and pins the Linux font archive URL and SHA-256 digest. Other GUI apps and personal CLIs stay outside this repository's bootstrap contract.
+- **System packages** (`apt`, `pacman`, Homebrew): bump the manifest files (`bootstrap/manifests/system/apt-packages.txt`, `bootstrap/manifests/system/pacman-packages.txt`, `bootstrap/manifests/system/Brewfile`). Prefer stable distro names over version pins.
+- **Desktop assets**: keep the explicit, all-or-nothing platform bundle in `bootstrap/manifests/desktop/`. The macOS Brewfile owns Ghostty, its font cask, and OrbStack; the Ubuntu 26.04+ apt manifest and Arch pacman manifest own Ghostty and Fontconfig; `maple-mono-nf-cn.env` declares the font family and required faces shared by the Linux installer, the environment check, and the managed Ghostty and Fontconfig templates, and pins the Linux font archive URL and SHA-256 digest. Other GUI apps and personal CLIs stay outside this repository's bootstrap contract.
 - **Shell assets** (oh-my-zsh and plugins): managed by explicit Git clone/update. The upstream repository is captured in `bootstrap/manifests/shell/oh-my-zsh-plugins.txt`. That manifest uses a strict two-field, order-sensitive contract shared by four readers (`dot_zshrc.tmpl`, `install-oh-my-zsh-assets.sh`, the `60-check` hook, and `run-smoke-tests.sh`); adding a field or special case means updating all four.
 - **Shell completions**: `bootstrap/manifests/shell/completions.txt` is the single inventory of generated completion commands and the platforms that generate them. `install-shell-completions.sh` reads it for install, check, and list; uninstall enumerates assets through `list`; the 55 and 60 hooks hash it. Generated files carry an ownership marker, so removing a command or platform from the manifest makes the next install prune the marked files it no longer declares; unmarked files and symlinks are never removed. Package-manager assets stay package-owned. Generator adapters stay in the installer because the CLIs differ; a new command needs an adapter only when no existing one fits. Keep `zsh-completions` last in `fpath` as fallback precedence.
 - **Runtimes** (mise): pinned to complete versions in `xdg_config/mise/config.toml.tmpl`. Bump intentionally.
@@ -79,7 +80,7 @@ Third-party dependencies pulled in by this repository fall into these categories
 - **Go tools** (`bootstrap/manifests/ecosystem/go-tools.txt`): every entry pins an exact `module@vX.Y.Z` version so clean installs and existing machines converge; the installer rejects anything else.
 - **Python tools** (`bootstrap/manifests/ecosystem/uv-tools.txt`): prefer pinned versions.
 
-The final `60-check` hook validates the same declared inventories the installers consumed instead of a second tool list: apt manifests through `dpkg-query`, Brewfiles through `brew bundle check`, the mise configuration through `mise ls --missing`, the ecosystem manifests by binary name, the completion manifest through the installer's `check` action, and the font manifest's family and faces through Fontconfig on Linux or the user font directory on macOS. Adding an ordinary manifest entry therefore extends the check without editing it.
+The final `60-check` hook validates the same declared inventories the installers consumed instead of a second tool list: apt manifests through `dpkg-query`, pacman manifests through `pacman -Q`, Brewfiles through `brew bundle check`, the mise configuration through `mise ls --missing`, the ecosystem manifests by binary name, the completion manifest through the installer's `check` action, and the font manifest's family and faces through Fontconfig on Linux or the user font directory on macOS. Adding an ordinary manifest entry therefore extends the check without editing it.
 
 Related low-risk dependency updates may share a merge request when they use the
 same validation path and remain easy to review and roll back. Keep major,
@@ -173,7 +174,7 @@ Mirror mode currently covers the consumers wired through `dotfiles_apply_mirror_
 - Secrets and credentials never live in this repository. They stay in local overlays or user-owned stores (`$XDG_CONFIG_HOME/oh-my-devenv/secrets.sh`, `$XDG_CONFIG_HOME/oh-my-devenv/git/config`, `$XDG_CONFIG_HOME/oh-my-devenv/git/hooks/*`, `~/.ssh/config.d/*.conf`, `uv auth`, `~/.npmrc`).
 - `bootstrap/scripts/common.sh` deliberately reads only `$XDG_CONFIG_HOME/oh-my-devenv/bootstrap.env`, never `env.sh` or `secrets.sh`. If Codex, Claude Code, or another automation needs tokens, launch it from a shell that explicitly sourced `secrets.sh` or use that tool's own secret/env injection.
 - The baseline's managed `mise` config defaults GitHub Artifact Attestations verification to off, and the runtime-install hook exports the same default for first bootstrap. This is a reliability tradeoff for shared egress environments (OrbStack VMs, shared CI runners, corp NAT) where anonymous GitHub API rate limits can otherwise break a clean install before the toolchain is usable.
-- The Ubuntu font installer accepts a resumable alternate download URL, but always verifies the repository-pinned SHA-256 digest and required PostScript names before replacing a baseline-owned font directory.
+- The Linux font installer accepts a resumable alternate download URL on supported Arch and Ubuntu desktops, but always verifies the repository-pinned SHA-256 digest and required PostScript names before replacing a baseline-owned font directory.
 - To validate or dogfood the stricter path, opt back in explicitly with `MISE_GITHUB_ATTESTATIONS=true MISE_AQUA_GITHUB_ATTESTATIONS=true chezmoi apply`. Python follows the global setting unless `MISE_PYTHON_GITHUB_ATTESTATIONS` is set separately.
 - Report suspected exposed secrets privately to the maintainer; do not open a public issue or MR.
 
@@ -181,7 +182,7 @@ Mirror mode currently covers the consumers wired through `dotfiles_apply_mirror_
 
 The repository CI pipeline is intentionally lightweight:
 
-- `smoke-tests-linux` and `smoke-tests-macos` render and syntax-check the baseline, validate contracts and deployment boundaries, test completion installation against stub commands, apply the nested XDG source under temporary roots, and run ShellCheck. Running on both operating systems also exercises the `darwin` template arms.
+- `smoke-tests-linux`, `smoke-tests-macos`, and `smoke-tests-arch` render and syntax-check the baseline, validate contracts and deployment boundaries, test completion installation against stub commands, apply the nested XDG source under temporary roots, and run ShellCheck. The macOS job exercises the `darwin` template arms; the Arch container job exercises pacman routing and Arch package-owned completion assets.
 - `apply-linux` renders initialization configuration, runs a real `chezmoi apply` on `ubuntu-latest`, and asserts the final environment check passes. It exercises the Linux package and runtime installers selected by its fixture; `desktopBaseline=false` excludes the desktop bundle because the hosted runner is not a supported workstation.
 - `secret-scan` runs `gitleaks` over the repository tree to catch committed secrets.
 - The pipeline is allowed to be simple and occasionally imperfect. It should catch obvious repo regressions, not model every clean-machine install path on every platform.

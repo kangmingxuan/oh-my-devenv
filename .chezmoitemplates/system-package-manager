@@ -1,0 +1,19 @@
+{{- if eq .chezmoi.os "darwin" -}}
+brew
+{{- else if eq .chezmoi.os "linux" -}}
+{{- $id := get .chezmoi.osRelease "id" | default "" -}}
+{{- $like := splitList " " (get .chezmoi.osRelease "idLike" | default "") -}}
+{{- if eq $id "arch" -}}
+pacman
+{{- else if or (eq $id "debian") (eq $id "ubuntu") -}}
+apt
+{{- else if has "arch" $like -}}
+pacman
+{{- else if or (has "debian" $like) (has "ubuntu" $like) -}}
+apt
+{{- else -}}
+unsupported
+{{- end -}}
+{{- else -}}
+unsupported
+{{- end -}}
