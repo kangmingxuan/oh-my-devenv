@@ -2,7 +2,7 @@
 
 [English](README.md) | **中文**
 
-> 一条命令，把全新的 **macOS**、**Ubuntu / Debian** 或 **WSL** 机器，变成配置完善的 shell、锁定版本的语言运行时和现代 CLI 工具链 —— 由 [chezmoi](https://www.chezmoi.io/) 统一管理。
+> 一条命令，把全新的 **macOS**、**Ubuntu / Debian**、**Arch Linux** 或 **WSL** 机器，变成配置完善的 shell、锁定版本的语言运行时和现代 CLI 工具链 —— 由 [chezmoi](https://www.chezmoi.io/) 统一管理。
 
 [![Smoke Tests](https://github.com/kangmingxuan/oh-my-devenv/actions/workflows/smoke-tests.yml/badge.svg)](https://github.com/kangmingxuan/oh-my-devenv/actions/workflows/smoke-tests.yml)
 [![Apply Tests](https://github.com/kangmingxuan/oh-my-devenv/actions/workflows/apply-tests.yml/badge.svg)](https://github.com/kangmingxuan/oh-my-devenv/actions/workflows/apply-tests.yml)
@@ -14,13 +14,13 @@ oh-my-devenv 是一套主观鲜明、可复现的开发环境。它公开的是�
 
 ## 功能亮点
 
-- **一份来源，跨平台通用** —— macOS（Intel + Apple Silicon）、Ubuntu / Debian 与 WSL 共用同一套模板化基线。
+- **一份来源，跨平台通用** —— macOS（Intel + Apple Silicon）、Ubuntu / Debian、Arch Linux 与 WSL 共用同一套模板化基线。
 - **一条命令完成引导** —— `chezmoi init --apply` 通过有序 hook 安装全部内容；重复运行幂等且安全。
 - **分层且可复现** —— chezmoi 统一编排系统软件包、可选桌面资产、shell 资产、[mise](https://mise.jdx.dev/) 运行时与各语言工具，每一层都有自己的清单（manifest）。
 - **受管的 shell** —— 所有平台上的 Zsh 与 Linux / WSL 上的 Bash 都提供完整自动补全；macOS Bash 则刻意只保留有限支持。
 - **锁定版本的运行时** —— 通过 mise 管理 Go、Node、Python 与 golangci-lint，外加 `gopls`、`dlv`、`ruff`、`basedpyright`、`pre-commit` 等生态工具。
 - **现代 CLI 工具箱** —— ripgrep、fd、bat、fzf、jq、direnv、tmux、shellcheck、shfmt 等。
-- **可选桌面基线** —— 一个全有或全无的平台包：受支持的工作站安装 Ghostty 与 Maple Mono NF CN，macOS 额外安装 OrbStack，Ubuntu 26.04+ 配置所需的 Fontconfig 别名规则。
+- **可选桌面基线** —— 一个全有或全无的平台包：受支持的工作站安装 Ghostty 与 Maple Mono NF CN，macOS 额外安装 OrbStack，Arch Linux 与 Ubuntu 26.04+ 配置所需的 Fontconfig 别名规则。
 - **安全的首次运行** —— 自动备份已存在的受管 dotfiles，并仅在首次询问 Git 身份和桌面基线选择。
 - **用本地 overlay 保存私有事实** —— 把凭据、私有主机和机器专属值放进文档明确的用户配置槽位。项目自有槽位统一收敛到 `$XDG_CONFIG_HOME/oh-my-devenv/`，配置根目录默认是 `~/.config`。
 - **刻意保持主观** —— 仓库只承载一套当前设计，不提供兼容配置档案，也不追求折中式的中性默认值。
@@ -30,7 +30,7 @@ oh-my-devenv 是一套主观鲜明、可复现的开发环境。它公开的是�
 ```mermaid
 flowchart TD
     A["chezmoi init --apply"] --> B["渲染 dotfiles<br/>+ 运行有序 hooks"]
-    B --> C["系统软件包<br/>Homebrew / apt"]
+    B --> C["系统软件包<br/>Homebrew / apt / pacman"]
     B --> D["可选桌面基线<br/>macOS 还包含 OrbStack"]
     B --> E["Shell 资产<br/>oh-my-zsh + 插件"]
     B --> X["受管配置<br/>$XDG_CONFIG_HOME"]
@@ -80,6 +80,16 @@ export PATH="$HOME/.local/bin:$PATH"
 command -v git curl chezmoi
 ```
 
+**Arch Linux / Omarchy**
+
+```bash
+sudo pacman -Syu --needed git curl chezmoi
+command -v git curl chezmoi
+```
+
+应用前先完成 Arch 的完整系统更新。引导脚本使用现有数据库执行
+`pacman -S --needed`，不会单独刷新数据库或自行升级整个系统。
+
 ### 2. 引导安装基线
 
 使用下面的仓库 URL。
@@ -102,7 +112,7 @@ chezmoi init --apply git@github.com:kangmingxuan/oh-my-devenv.git
 chezmoi init --apply https://github.com/kangmingxuan/oh-my-devenv.git
 ```
 
-首次 apply 会：备份任何已存在的受管文件，仅询问一次 Git 作者名、邮箱与桌面基线选择，部署 dotfiles，运行有序引导 hook，并以环境校验收尾。macOS 与带图形会话的 Ubuntu 26.04+ 默认启用桌面基线；无图形会话或不受支持的 Linux 与 WSL 默认关闭；本仓库的 apply CI fixture 会显式关闭。在 macOS 上，接受该选择会一起安装 Ghostty、Maple Mono NF CN 与 OrbStack。Homebrew 只负责安装 OrbStack 应用，用户仍需首次启动以完成设置；自由职业、商业及专业用途需要购买 [OrbStack 许可证](https://docs.orbstack.dev/licensing)。成功时你会看到 **`All checks passed.`** 以及一份核心工具版本列表。
+首次 apply 会：备份任何已存在的受管文件，仅询问一次 Git 作者名、邮箱与桌面基线选择，部署 dotfiles，运行有序引导 hook，并以环境校验收尾。macOS 与带图形会话的非 WSL Arch Linux、Ubuntu 26.04+ 默认启用桌面基线；无图形会话或不受支持的 Linux 与 WSL 默认关闭；本仓库的 apply CI fixture 会显式关闭。在 macOS 上，接受该选择会一起安装 Ghostty、Maple Mono NF CN 与 OrbStack。Homebrew 只负责安装 OrbStack 应用，用户仍需首次启动以完成设置；自由职业、商业及专业用途需要购买 [OrbStack 许可证](https://docs.orbstack.dev/licensing)。成功时你会看到 **`All checks passed.`** 以及一份核心工具版本列表。
 
 ### 运行前须知
 
@@ -127,7 +137,7 @@ chezmoi apply
 
 ## 适用范围与预期
 
-本仓库由单人以 **尽力而为（best-effort）** 的方式维护。请把它视为该维护者面向笔记本、虚拟机和一次性实验环境公开的主观基线：它能快速把全新机器带到可用的 shell、运行时与 CLI 工具链状态，但不是平台级产品，也不承诺适合每一种工作流。公开默认值都是有意选择；凭据、私有基础设施和机器专属事实应放在本地 overlay 中。桌面基线是显式、全有或全无的机器选择，目前仅在 macOS 和非 WSL 的 Ubuntu 26.04+ 上安装；具体内容因平台而异，macOS 包含 OrbStack。
+本仓库由单人以 **尽力而为（best-effort）** 的方式维护。请把它视为该维护者面向笔记本、虚拟机和一次性实验环境公开的主观基线：它能快速把全新机器带到可用的 shell、运行时与 CLI 工具链状态，但不是平台级产品，也不承诺适合每一种工作流。公开默认值都是有意选择；凭据、私有基础设施和机器专属事实应放在本地 overlay 中。桌面基线是显式、全有或全无的机器选择，目前仅在 macOS、非 WSL 的 Arch Linux 和 Ubuntu 26.04+ 上安装；具体内容因平台而异，macOS 包含 OrbStack。
 
 ## 文档
 

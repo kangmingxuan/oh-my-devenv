@@ -420,6 +420,7 @@ assert_file_not_contains "$tmp_dir/env.bash" "$shared_secrets_literal"
 assert_file_not_contains "$tmp_dir/env.bash" "$bash_overlay_literal"
 
 syntax_check sh "$repo_root/dot_profile"
+syntax_check bash "$repo_root/dot_bash_profile"
 
 render_template dot_gitconfig.tmpl "$tmp_dir/dot_gitconfig"
 assert_file_contains "$tmp_dir/dot_gitconfig" "$gitconfig_include_literal"
@@ -468,6 +469,8 @@ assert_file_contains "$tmp_dir/run_onchange_after_20-install-system-packages.sh"
 if grep -Fq "install-brew-packages.sh" "$tmp_dir/run_onchange_after_20-install-system-packages.sh"; then
   assert_file_contains "$tmp_dir/run_onchange_after_20-install-system-packages.sh" "\"\$manifests_dir/system/Brewfile\""
   assert_file_not_contains "$tmp_dir/run_onchange_after_20-install-system-packages.sh" "install-apt-packages.sh"
+elif grep -Fq "install-pacman-packages.sh" "$tmp_dir/run_onchange_after_20-install-system-packages.sh"; then
+  assert_file_contains "$tmp_dir/run_onchange_after_20-install-system-packages.sh" 'manifests_dir/system/pacman-packages.txt'
 else
   assert_file_contains "$tmp_dir/run_onchange_after_20-install-system-packages.sh" "install-apt-packages.sh"
   assert_file_contains "$tmp_dir/run_onchange_after_20-install-system-packages.sh" "\"\$manifests_dir/system/apt-packages.txt\""
@@ -485,8 +488,12 @@ if grep -Fq "install-brew-packages.sh" "$tmp_dir/run_onchange_after_22-install-d
 elif grep -Fq "install-maple-mono-font.sh" "$tmp_dir/run_onchange_after_22-install-desktop-assets.sh"; then
   desktop_platform_supported=1
   linux_fontconfig_alias_enabled=1
-  assert_file_contains "$tmp_dir/run_onchange_after_22-install-desktop-assets.sh" 'install-apt-packages.sh'
-  assert_file_contains "$tmp_dir/run_onchange_after_22-install-desktop-assets.sh" 'manifests_dir/desktop/apt-packages.txt'
+  if grep -Fq 'install-pacman-packages.sh' "$tmp_dir/run_onchange_after_22-install-desktop-assets.sh"; then
+    assert_file_contains "$tmp_dir/run_onchange_after_22-install-desktop-assets.sh" 'manifests_dir/desktop/pacman-packages.txt'
+  else
+    assert_file_contains "$tmp_dir/run_onchange_after_22-install-desktop-assets.sh" 'install-apt-packages.sh'
+    assert_file_contains "$tmp_dir/run_onchange_after_22-install-desktop-assets.sh" 'manifests_dir/desktop/apt-packages.txt'
+  fi
   assert_file_contains "$tmp_dir/run_onchange_after_22-install-desktop-assets.sh" 'manifests_dir/desktop/maple-mono-nf-cn.env'
 else
   assert_file_contains "$tmp_dir/run_onchange_after_22-install-desktop-assets.sh" "log_warning"
@@ -644,8 +651,8 @@ for completion_platform in linux darwin; do
   done <<<"$completion_listing"
 done
 
-# The Linux inventory may wrap Debian package-owned batcat completions, so the
-# production Linux install runs only where those files can exist.
+# The Linux inventory uses package-owned bat/batcat completions, so the
+# production Linux install runs only on Linux.
 if [[ "$(uname -s)" != Darwin ]]; then
   run_completion_installer "$completion_linux_data" install linux "$completion_manifest"
   run_completion_installer "$completion_linux_data" check linux "$completion_manifest"
@@ -892,6 +899,8 @@ assert_file_contains "$tmp_dir/run_onchange_after_60-check.sh" "print_diagnostic
 if grep -Fq 'check_brewfile "$manifests_dir/system/Brewfile"' "$tmp_dir/run_onchange_after_60-check.sh"; then
   assert_file_contains "$tmp_dir/run_onchange_after_60-check.sh" "brew_command"
   assert_file_contains "$tmp_dir/run_onchange_after_60-check.sh" "bundle check --file="
+elif grep -Fq 'check_pacman_packages "$manifests_dir/system/pacman-packages.txt"' "$tmp_dir/run_onchange_after_60-check.sh"; then
+  assert_file_contains "$tmp_dir/run_onchange_after_60-check.sh" 'pacman -Q'
 else
   # shellcheck disable=SC2016
   assert_file_contains "$tmp_dir/run_onchange_after_60-check.sh" 'check_apt_packages "$manifests_dir/system/apt-packages.txt"'
@@ -1462,11 +1471,15 @@ chmod +x "$HOME/.local/bin/mise"
 INSTALLER
 EOF
 chmod +x "$mise_stub_bin/curl"
-if env -i PATH="$mise_stub_bin:/usr/bin:/bin" HOME="$mise_fake_home" \
+# Expose only fixture prerequisites, even on hosts with mise in /usr/bin.
+for fixture_command in bash sh dirname cat mkdir chmod; do
+  ln -s "$(command -v "$fixture_command")" "$mise_stub_bin/$fixture_command"
+done
+if env -i PATH="$mise_stub_bin" HOME="$mise_fake_home" \
   bash -c 'command -v mise' >/dev/null 2>&1; then
   fail_test "mise fixture PATH must not already provide mise"
 fi
-env -i PATH="$mise_stub_bin:/usr/bin:/bin" HOME="$mise_fake_home" \
+env -i PATH="$mise_stub_bin" HOME="$mise_fake_home" \
   SMOKE_MISE_CURL_LOG="$mise_curl_log" \
   DOTFILES_MISE_INSTALL_URL="$synthetic_mise_install_url" \
   bash "$synthetic_linux_mise_hook" >"$mise_hook_output" 2>&1 \
@@ -1505,6 +1518,8 @@ log_step "🔍" "Running shellcheck on bootstrap scripts..."
 shellcheck "$repo_root/bootstrap/scripts/common.sh" \
   "$repo_root/bootstrap/scripts/go-env.sh" \
   "$repo_root/bootstrap/scripts/install-apt-packages.sh" \
+  "$repo_root/bootstrap/scripts/install-pacman-packages.sh" \
+  "$repo_root/bootstrap/scripts/test-arch-support.sh" \
   "$repo_root/bootstrap/scripts/install-brew-packages.sh" \
   "$repo_root/bootstrap/scripts/install-go-tools.sh" \
   "$repo_root/bootstrap/scripts/install-maple-mono-font.sh" \
@@ -1517,5 +1532,8 @@ shellcheck "$repo_root/bootstrap/scripts/common.sh" \
   "$repo_root/bootstrap/scripts/xdg-config.sh" \
   "$repo_root/bootstrap/scripts/run-smoke-tests.sh" \
   "$repo_root/docs/local-overlay-examples/git-pre-push.example"
+
+# Arch routing, installer behavior, and shared login overlay regression checks.
+bash "$script_dir/test-arch-support.sh"
 
 log_step "✅" "Smoke tests passed."

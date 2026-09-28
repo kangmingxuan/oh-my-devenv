@@ -2,7 +2,7 @@
 
 ## Project Structure & Module Organization
 
-The source targets macOS, Ubuntu/Debian, and WSL. Root `dot_*`, `private_dot_*`, and `xdg_config/` paths map into `$HOME`. Go templates use `.tmpl`; shared partials are in `.chezmoitemplates/`. Ordered hooks are in `.chezmoiscripts/`, reusable Bash in `bootstrap/scripts/`, and inventories in `bootstrap/manifests/`. Documentation is in `docs/`; CI is in `.github/workflows/`.
+The source targets macOS, Ubuntu/Debian, Arch Linux, and WSL. Root `dot_*`, `private_dot_*`, and `xdg_config/` paths map into `$HOME`. Go templates use `.tmpl`; shared partials are in `.chezmoitemplates/`. Ordered hooks are in `.chezmoiscripts/`, reusable Bash in `bootstrap/scripts/`, and inventories in `bootstrap/manifests/`. Documentation is in `docs/`; CI is in `.github/workflows/`.
 
 Follow `CONTRIBUTING.md` for contribution scope, workflow, and secret hygiene. Keep machine-specific values in the extension points documented by `docs/local-overlay-examples/README.md`. List repository-only metadata in `.chezmoiignore` so it is not deployed into `$HOME`.
 

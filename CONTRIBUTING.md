@@ -8,7 +8,7 @@ Changes that belong in this repository:
 
 - System packages selected as part of the maintained environment (editors, `git`, `curl`, formatting and diagnostic tools).
 - The explicitly selected, platform-specific desktop baseline on supported workstations, including OrbStack on macOS.
-- Baseline shell, Git, SSH, and runtime templates that work on macOS, Ubuntu/Debian, and WSL.
+- Baseline shell, Git, SSH, and runtime templates that work on macOS, Ubuntu/Debian, Arch Linux, and WSL.
 - Source-only bootstrap scripts and their smoke-test coverage.
 - Documentation describing the baseline and its maintenance.
 
@@ -82,8 +82,10 @@ The following source manifests are consumed by both the installer scripts and th
 - `bootstrap/manifests/shell/oh-my-zsh-plugins.txt`
 - `bootstrap/manifests/shell/completions.txt`
 - `bootstrap/manifests/system/apt-packages.txt`
+- `bootstrap/manifests/system/pacman-packages.txt`
 - `bootstrap/manifests/system/Brewfile`
 - `bootstrap/manifests/desktop/apt-packages.txt`
+- `bootstrap/manifests/desktop/pacman-packages.txt`
 - `bootstrap/manifests/desktop/Brewfile`
 - `bootstrap/manifests/desktop/maple-mono-nf-cn.env`
 - `bootstrap/manifests/ecosystem/go-tools.txt`
@@ -104,7 +106,7 @@ If you add, rename, or remove an entry, confirm that:
 
 ## CI
 
-The repository CI runs on GitHub Actions for every push and pull request: `run-smoke-tests.sh` on both `ubuntu-latest` and `macos-latest`, a real `chezmoi apply` with rendered initialization configuration (`apply-linux`), and a `gitleaks` secret scan. A change should not be merged while the pipeline is failing.
+The repository CI runs on GitHub Actions for every push and pull request: `run-smoke-tests.sh` on `ubuntu-latest`, `macos-latest`, and an `archlinux:base` container, a real `chezmoi apply` with rendered initialization configuration on Ubuntu (`apply-linux`), and a `gitleaks` secret scan. A change should not be merged while the pipeline is failing.
 
 ## Reporting Issues
 

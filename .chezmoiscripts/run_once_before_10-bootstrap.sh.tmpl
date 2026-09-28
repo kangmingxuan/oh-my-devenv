@@ -1,3 +1,9 @@
+{{- $packageManager := includeTemplate "system-package-manager" . -}}
+{{ if eq $packageManager "unsupported" -}}
+#!/bin/bash
+printf 'ERROR: supported systems are macOS, Debian/Ubuntu, and Arch Linux families.\n' >&2
+exit 1
+{{ else -}}
 #!/bin/bash
 # Run once on first chezmoi apply to ensure minimal prerequisites.
 
@@ -23,6 +29,7 @@ backup_existing_managed_configs() {
   for backup_entry in \
     ".bash/env.bash|$HOME/.bash/env.bash" \
     ".bashrc|$HOME/.bashrc" \
+    ".bash_profile|$HOME/.bash_profile" \
     ".gitconfig|$HOME/.gitconfig" \
     ".local/share/oh-my-devenv/xdg.sh|$HOME/.local/share/oh-my-devenv/xdg.sh" \
     ".profile|$HOME/.profile" \
@@ -68,7 +75,12 @@ backup_existing_managed_configs() {
 
 backup_existing_managed_configs
 
-{{ if eq .chezmoi.os "linux" -}}
+{{ if eq $packageManager "pacman" -}}
+if ! command -v curl >/dev/null 2>&1 || ! command -v git >/dev/null 2>&1; then
+  require_sudo "install essential prerequisites via pacman"
+  sudo pacman -S --needed --noconfirm git curl
+fi
+{{- else if eq $packageManager "apt" -}}
 if ! command -v curl >/dev/null 2>&1 || ! command -v git >/dev/null 2>&1; then
   log_step "📦" "Installing essential prerequisites via apt..."
   require_sudo "install essential prerequisites via apt"
@@ -96,3 +108,4 @@ fi
 mkdir -p "$HOME/.local/bin"
 
 log_step "✅" "Bootstrap prerequisites ready."
+{{ end -}}

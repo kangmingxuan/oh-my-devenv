@@ -1,0 +1,23 @@
+# Core
+git
+curl
+wget
+ca-certificates
+bash-completion
+zsh
+base-devel
+pkgconf
+
+# CLI
+tmux
+jq
+ripgrep
+fzf
+direnv
+fd
+bat
+tree
+zip
+unzip
+shellcheck
+shfmt

@@ -1,0 +1,5 @@
+# ~/.bash_profile
+# Bash reads this instead of ~/.profile when present. Keep one login path.
+if [ -f "$HOME/.profile" ]; then
+  . "$HOME/.profile"
+fi

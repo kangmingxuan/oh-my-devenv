@@ -17,7 +17,7 @@ manifest changes (chezmoi tracks a content hash), so routine re-applies are chea
 |-------|------|--------------|
 | 0 | `run_before_00-banner` | Prints the startup banner. Suppress with `NO_LOGO=1`. |
 | 1 | `run_once_before_10-bootstrap` | One-time setup: backs up any pre-existing managed files and ensures minimum prerequisites. |
-| 2 | `run_onchange_after_20-install-system-packages` | Installs shared system packages — `apt` on Linux / WSL and Homebrew on macOS. |
+| 2 | `run_onchange_after_20-install-system-packages` | Installs shared system packages — `apt` on Debian / Ubuntu, `pacman` on Arch Linux and Homebrew on macOS. |
 | 3 | `run_onchange_after_22-install-desktop-assets` | When selected, installs the platform desktop bundle: Ghostty and Maple Mono NF CN everywhere supported, plus OrbStack on macOS. |
 | 4 | `run_onchange_after_25-install-shell-assets` | Installs oh-my-zsh and the plugins from the shell manifest. |
 | 5 | `run_onchange_after_30-install-mise` | Installs [mise](https://mise.jdx.dev/) (Homebrew on macOS, installer script on Linux). |
@@ -40,11 +40,13 @@ is the source of truth for exact packages and pinned versions.
 
 | Layer | Installed by | Manifest | Includes |
 |-------|--------------|----------|----------|
-| System packages | `apt` (Linux / WSL) | [`bootstrap/manifests/system/apt-packages.txt`](../bootstrap/manifests/system/apt-packages.txt) | git, curl, wget, zsh, tmux, jq, ripgrep, fzf, direnv, fd-find, bat, tree, zip, unzip, shellcheck, shfmt, build-essential, pkg-config |
+| System packages | `apt` (Debian / Ubuntu / WSL) | [`bootstrap/manifests/system/apt-packages.txt`](../bootstrap/manifests/system/apt-packages.txt) | git, curl, wget, zsh, tmux, jq, ripgrep, fzf, direnv, fd-find, bat, tree, zip, unzip, shellcheck, shfmt, build-essential, pkg-config |
 | System packages | Homebrew (macOS) | [`bootstrap/manifests/system/Brewfile`](../bootstrap/manifests/system/Brewfile) | the same CLI set plus yq, gnupg, pinentry-mac, and gh |
+| System packages | `pacman` (Arch families) | [`bootstrap/manifests/system/pacman-packages.txt`](../bootstrap/manifests/system/pacman-packages.txt) | Arch names such as base-devel, pkgconf, and fd |
 | Desktop assets | Homebrew (macOS) | [`bootstrap/manifests/desktop/Brewfile`](../bootstrap/manifests/desktop/Brewfile) | Ghostty, Maple Mono NF CN, and OrbStack |
+| Desktop packages | `pacman` (Arch outside WSL) | [`bootstrap/manifests/desktop/pacman-packages.txt`](../bootstrap/manifests/desktop/pacman-packages.txt) | Ghostty and Fontconfig |
 | Desktop terminal | `apt` + managed config (Ubuntu 26.04+) | [`bootstrap/manifests/desktop/apt-packages.txt`](../bootstrap/manifests/desktop/apt-packages.txt) | Ghostty, Fontconfig support, and a managed `monospace` compatibility rule |
-| Desktop font | verified archive (Ubuntu 26.04+) | [`bootstrap/manifests/desktop/maple-mono-nf-cn.env`](../bootstrap/manifests/desktop/maple-mono-nf-cn.env) | the font family and required faces shared with the check and the Ghostty/Fontconfig templates, plus the pinned Linux release installed under the user data directory |
+| Desktop font | verified archive (Arch Linux / Ubuntu 26.04+) | [`bootstrap/manifests/desktop/maple-mono-nf-cn.env`](../bootstrap/manifests/desktop/maple-mono-nf-cn.env) | the font family and required faces shared with the check and the Ghostty/Fontconfig templates, plus the pinned Linux release installed under the user data directory |
 | Runtimes and binary tools | [mise](https://mise.jdx.dev/) | [`xdg_config/mise/config.toml.tmpl`](../xdg_config/mise/config.toml.tmpl) | go, node, python, golangci-lint, uv, usage (versions pinned here) |
 | Go tools | `go install` | [`bootstrap/manifests/ecosystem/go-tools.txt`](../bootstrap/manifests/ecosystem/go-tools.txt) | gopls, dlv |
 | Python tools | `uv tool` | [`bootstrap/manifests/ecosystem/uv-tools.txt`](../bootstrap/manifests/ecosystem/uv-tools.txt) | ruff, basedpyright, pre-commit |
@@ -53,14 +55,14 @@ is the source of truth for exact packages and pinned versions.
 
 The desktop layer is controlled by the persisted `desktopBaseline` machine
 choice. It is an all-or-nothing, platform-specific bundle supported on macOS
-and non-WSL Ubuntu 26.04+; other platforms render no Ghostty config and install
+and non-WSL Arch Linux and Ubuntu 26.04+; other platforms render no Ghostty config and install
 no desktop assets. The macOS bundle includes Ghostty, Maple Mono NF CN, and
 OrbStack. Installing the OrbStack cask does not complete its first-launch setup
 or licensing; those remain user actions. Using OrbStack for freelance,
 business, or professional work requires a paid
 [OrbStack license](https://docs.orbstack.dev/licensing).
 
-On supported Ubuntu machines,
+On supported Linux desktops (Arch Linux and Ubuntu 26.04+ outside WSL),
 `$XDG_CONFIG_HOME/fontconfig/conf.d/99-oh-my-devenv-maple-mono-nf-cn.conf` makes the
 generic Fontconfig `monospace` family resolve to Maple Mono NF CN before distro
 fallbacks. Ghostty needs that compatibility rule on the supported Linux stack;
@@ -177,7 +179,7 @@ validate a single override.
 
 | Variable | Default | Effect |
 |----------|---------|--------|
-| `DOTFILES_MAPLE_MONO_URL` | pinned upstream release URL | Ubuntu-only alternate URL for the exact Maple Mono archive named in the manifest. The fixed SHA-256 digest still has to match. |
+| `DOTFILES_MAPLE_MONO_URL` | pinned upstream release URL | Alternate URL on supported Linux desktops for the exact Maple Mono archive named in the manifest. The fixed SHA-256 digest still has to match. |
 
 ### Tool installation
 
@@ -207,7 +209,7 @@ table — real location, what reads it, and a copyable `.example` — is in
 [`local-overlay-examples/README.md`](local-overlay-examples/README.md). The most
 common slots:
 
-- `$XDG_CONFIG_HOME/oh-my-devenv/env.sh` — persistent non-secret exports read by Bash and Zsh.
+- `$XDG_CONFIG_HOME/oh-my-devenv/env.sh` — persistent non-secret exports and quiet shared initialization read by Bash and Zsh.
 - `$XDG_CONFIG_HOME/oh-my-devenv/bootstrap.env` — non-secret settings read only by bootstrap scripts.
 - `$XDG_CONFIG_HOME/oh-my-devenv/secrets.sh` — secrets read by interactive shells only.
 - `$XDG_CONFIG_HOME/oh-my-devenv/git/config` — user-owned Git preferences on top of the managed identity.
@@ -222,3 +224,32 @@ common slots:
 - [`local-overlay-examples/README.md`](local-overlay-examples/README.md) — customization templates.
 - [`03-maintenance.md`](03-maintenance.md) — maintainer workflow, mirror validation, and dependency hygiene.
 - [`design/00-cross-platform-bootstrap.en.md`](design/00-cross-platform-bootstrap.en.md) — why the layered model looks the way it does.
+
+### Arch Linux and Omarchy integration
+
+Distribution routing uses `ID` and tokenized `ID_LIKE` from os-release. Arch
+families use pacman, Debian/Ubuntu families use apt, and unsupported Linux
+families fail in the before hook before managed files are replaced. Arch
+package inventories are `bootstrap/manifests/{system,desktop}/pacman-packages.txt`.
+The installer uses existing package databases and never runs `pacman -Sy`;
+perform a full system upgrade before bootstrap. Only official repository
+packages are used; there is no AUR helper dependency.
+
+The optional desktop baseline supports Arch outside WSL as well as Ubuntu
+26.04+ and macOS. Linux receives Ghostty, the verified Maple Mono user-font
+archive, and the existing monospace Fontconfig rule. This does not configure
+Hyprland or change the default terminal. Review existing font rules before
+opting in on an already configured workstation.
+
+The managed `.bash_profile` delegates to `.profile`, ensuring non-interactive
+Bash login shells load `.bash/env.bash` and the shared `env.sh` overlay even
+when `.bashrc` exits early. The first-run backup includes `.bash_profile`.
+Zsh login and interactive shells load the same overlay through their shared
+initializer. Plain non-login `bash -c` / `zsh -c` do not load that overlay.
+
+On Omarchy, keep machine-specific integrations in the local `env.sh` (quiet
+shared environment/function initialization) and `bashrc.bash` (interactive
+preferences). Do not blindly source a second complete shell baseline: avoid
+duplicate mise/fzf activation and review PATH order. No private machine
+configuration is shipped in this repository. Local mise tool overrides belong
+in its native `config.local.toml` overlay.

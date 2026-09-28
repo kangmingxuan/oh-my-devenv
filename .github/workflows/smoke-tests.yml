@@ -32,3 +32,13 @@ jobs:
         # Running on macOS renders the `darwin` template arms that the Linux job
         # never exercises, so a Darwin-only syntax error can no longer pass CI.
         run: bash bootstrap/scripts/run-smoke-tests.sh
+
+  smoke-tests-arch:
+    runs-on: ubuntu-latest
+    container: archlinux:base
+    steps:
+      - name: Install smoke dependencies
+        run: pacman -Syu --needed --noconfirm git chezmoi shellcheck zsh bash-completion bat diffutils
+      - uses: actions/checkout@v7
+      - name: Run smoke tests
+        run: bash bootstrap/scripts/run-smoke-tests.sh

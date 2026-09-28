@@ -183,7 +183,7 @@ print_diagnostic_hints() {
   printf 'What to try next:\n' >&2
   printf '  1. Re-run with verbose output:\n' >&2
   printf '       chezmoi apply --verbose --debug\n' >&2
-  printf '  2. If network calls failed, check connectivity to apt mirrors,\n' >&2
+  printf '  2. If network calls failed, check connectivity to your distro package mirrors,\n' >&2
   printf '     Homebrew, get.chezmoi.io / mise.run, github.com, and your\n' >&2
   printf '     Go / PyPI proxies.\n' >&2
   printf '  3. If a single step repeatedly fails, run only that step:\n' >&2

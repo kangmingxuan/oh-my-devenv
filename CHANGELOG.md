@@ -20,7 +20,9 @@ This repository versions the baseline with [Semantic Versioning 2.0](https://sem
 
 ### Added
 
-- Opt-in, all-or-nothing desktop baseline for macOS and non-WSL Ubuntu 26.04+: Ghostty, Maple Mono NF CN, managed Ghostty defaults, a Linux Fontconfig compatibility rule, and OrbStack on macOS.
+- Arch Linux family package installation and checks through pacman.
+- Arch template, installer, and login regression coverage, plus a `smoke-tests-arch` CI job.
+- Opt-in, all-or-nothing desktop baseline for macOS, non-WSL Arch Linux, and Ubuntu 26.04+: Ghostty, Maple Mono NF CN, managed Ghostty defaults, a Linux Fontconfig compatibility rule, and OrbStack on macOS.
 - `smoke-tests-macos` CI job that runs the smoke suite on `macos-latest`, so the `darwin` template arms are rendered and shell-checked instead of going untested.
 - `apply-linux` CI job that runs a real `chezmoi init --apply` end to end and asserts the final environment check passes, covering installer semantics the render-only smoke suite cannot.
 - Dependabot configuration to keep GitHub Actions versions current.
@@ -33,8 +35,10 @@ This repository versions the baseline with [Semantic Versioning 2.0](https://sem
 
 ### Changed
 
+- Support native Arch bat completions alongside Debian's batcat wrappers.
+- Manage the Bash login entry point and allow quiet shared initialization in `env.sh`.
 - Defined oh-my-devenv as the maintainer's public, opinionated current design: validation checks behavior and safety boundaries without duplicating configuration facts, and superseded designs are replaced without compatibility logic.
-- The final environment check validates the same manifests the installers consumed: apt manifests through `dpkg-query`, Brewfiles through `brew bundle check`, the mise configuration through `mise ls --missing`, the completion manifest through the installer, and the font manifest's declared family and faces. Its version card lists the mise-managed toolchain from `mise current`.
+- The final environment check validates the same manifests the installers consumed: apt manifests through `dpkg-query`, pacman manifests through `pacman -Q`, Brewfiles through `brew bundle check`, the mise configuration through `mise ls --missing`, the completion manifest through the installer, and the font manifest's declared family and faces. Its version card lists the mise-managed toolchain from `mise current`.
 - `maple-mono-nf-cn.env` now declares the font family and required PostScript faces; the Linux installer, the check, and the managed Ghostty and Fontconfig templates read that single source.
 - `mirrors.env` lists only the internal keys in one `<ENV_VAR_NAME> <value>` format. External mode leaves the caller environment untouched and downstream tools keep their own defaults.
 - `install-go-tools.sh` requires every entry to pin an exact `module@vX.Y.Z` version and rejects anything else before installing.
