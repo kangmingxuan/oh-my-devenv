@@ -6,18 +6,22 @@
 {{- if hasKey . "desktopPlatformSupported" -}}
 {{- $desktopPlatformSupported = .desktopPlatformSupported -}}
 {{- end -}}
-{{- $enableMapleMonoAlias := and (eq .chezmoi.os "linux") $desktopBaseline $desktopPlatformSupported -}}
+{{- $enableMapleMonoAlias := and (eq .chezmoi.os "linux") $desktopBaseline $desktopPlatformSupported
+    (eq (get .chezmoi.osRelease "id") "ubuntu") -}}
 <?xml version="1.0"?>
 <!DOCTYPE fontconfig SYSTEM "urn:fontconfig:fonts.dtd">
 <fontconfig>{{ if $enableMapleMonoAlias }}
-  <description>Prefer {{ .desktopFontFamily }} for the generic monospace family</description>
+  <description>Ubuntu Ghostty font discovery workaround for {{ .desktopFontFamily }}</description>
 
   <!--
-    Ghostty's Linux font discovery can otherwise resolve its monospace query
-    to the distribution default even when config.ghostty explicitly selects
-    the configured family. Keep the requested family ahead of those fallbacks.
+    On Ubuntu, Ghostty has been observed falling back to the distribution's
+    monospace font despite its explicit font-family setting. Restrict this
+    workaround to Ghostty; other applications retain their font preferences.
   -->
   <match target="pattern">
+    <test name="prgname" compare="eq">
+      <string>ghostty</string>
+    </test>
     <test name="family" qual="any" compare="eq">
       <string>monospace</string>
     </test>
@@ -26,6 +30,6 @@
     </edit>
   </match>
 {{- else }}
-  <!-- Intentionally inactive outside the supported Linux desktop baseline. -->
+  <!-- Intentionally inactive outside the supported Ubuntu desktop baseline. -->
 {{- end }}
 </fontconfig>

@@ -45,7 +45,7 @@ is the source of truth for exact packages and pinned versions.
 | System packages | `pacman` (Arch families) | [`bootstrap/manifests/system/pacman-packages.txt`](../bootstrap/manifests/system/pacman-packages.txt) | Arch names such as base-devel, pkgconf, and fd |
 | Desktop assets | Homebrew (macOS) | [`bootstrap/manifests/desktop/Brewfile`](../bootstrap/manifests/desktop/Brewfile) | Ghostty, Maple Mono NF CN, and OrbStack |
 | Desktop packages | `pacman` (Arch outside WSL) | [`bootstrap/manifests/desktop/pacman-packages.txt`](../bootstrap/manifests/desktop/pacman-packages.txt) | Ghostty and Fontconfig |
-| Desktop terminal | `apt` + managed config (Ubuntu 26.04+) | [`bootstrap/manifests/desktop/apt-packages.txt`](../bootstrap/manifests/desktop/apt-packages.txt) | Ghostty, Fontconfig support, and a managed `monospace` compatibility rule |
+| Desktop terminal | `apt` + managed config (Ubuntu 26.04+) | [`bootstrap/manifests/desktop/apt-packages.txt`](../bootstrap/manifests/desktop/apt-packages.txt) | Ghostty, Fontconfig support, and a Ghostty-specific font-discovery workaround |
 | Desktop font | verified archive (Arch Linux / Ubuntu 26.04+) | [`bootstrap/manifests/desktop/maple-mono-nf-cn.env`](../bootstrap/manifests/desktop/maple-mono-nf-cn.env) | the font family and required faces shared with the check and the Ghostty/Fontconfig templates, plus the pinned Linux release installed under the user data directory |
 | Runtimes and binary tools | [mise](https://mise.jdx.dev/) | [`xdg_config/mise/config.toml.tmpl`](../xdg_config/mise/config.toml.tmpl) | go, node, python, golangci-lint, uv, usage (versions pinned here) |
 | Go tools | `go install` | [`bootstrap/manifests/ecosystem/go-tools.txt`](../bootstrap/manifests/ecosystem/go-tools.txt) | gopls, dlv |
@@ -62,15 +62,17 @@ or licensing; those remain user actions. Using OrbStack for freelance,
 business, or professional work requires a paid
 [OrbStack license](https://docs.orbstack.dev/licensing).
 
-On supported Linux desktops (Arch Linux and Ubuntu 26.04+ outside WSL),
-`$XDG_CONFIG_HOME/fontconfig/conf.d/99-oh-my-devenv-maple-mono-nf-cn.conf` makes the
-generic Fontconfig `monospace` family resolve to Maple Mono NF CN before distro
-fallbacks. Ghostty needs that compatibility rule on the supported Linux stack;
-because the match is deliberately generic, the preference also applies to
-other Fontconfig clients. The final check verifies both that Fontconfig loaded
-the managed fragment and that `fc-match monospace` resolves to one of the faces
-declared in `bootstrap/manifests/desktop/maple-mono-nf-cn.env`, so the family
-choice stays owned by that manifest.
+Ghostty selects the manifest font through its own `font-family` configuration.
+On supported Ubuntu desktops only (26.04+ outside WSL),
+`$XDG_CONFIG_HOME/fontconfig/conf.d/99-oh-my-devenv-maple-mono-nf-cn.conf` works
+around an observed failure to honor that setting. The rule matches both
+`prgname=ghostty` and `monospace`; it leaves other applications and explicitly
+preferred font families alone. Other platforms render a valid inactive fragment,
+so applying also clears the earlier broad rule on Arch. The final check verifies
+Ghostty's configuration and the installed faces declared in
+`bootstrap/manifests/desktop/maple-mono-nf-cn.env`, without imposing a system
+`monospace` preference. Ubuntu rendering remains the manual acceptance check
+for this narrowly scoped workaround.
 
 ## Day-to-day commands
 
@@ -237,9 +239,9 @@ packages are used; there is no AUR helper dependency.
 
 The optional desktop baseline supports Arch outside WSL as well as Ubuntu
 26.04+ and macOS. Linux receives Ghostty, the verified Maple Mono user-font
-archive, and the existing monospace Fontconfig rule. This does not configure
-Hyprland or change the default terminal. Review existing font rules before
-opting in on an already configured workstation.
+archive, and managed Ghostty settings. The Fontconfig workaround is active only
+for Ghostty on Ubuntu; Arch keeps its existing generic font preferences. This
+does not configure Hyprland or change the default terminal.
 
 The managed `.bash_profile` delegates to `.profile`, ensuring non-interactive
 Bash login shells load `.bash/env.bash` and the shared `env.sh` overlay even

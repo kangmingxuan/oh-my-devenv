@@ -210,18 +210,13 @@ check_ghostty_config() {
   fi
 }
 
-# Linux: the declared faces are registered and the managed fragment makes the
-# generic monospace family resolve to the configured font.
+# Linux: verify the declared faces are available. Ghostty selects its font in
+# its own configuration; the system monospace preference belongs to the user.
 check_desktop_font_fontconfig() {
-  local active_configs=""
-  local config_path="$XDG_CONFIG_HOME/fontconfig/conf.d/99-oh-my-devenv-maple-mono-nf-cn.conf"
   local installed_names=""
-  local matched_postscript_name=""
   local postscript_name=""
 
-  if ! command -v fc-list >/dev/null 2>&1 \
-    || ! command -v fc-match >/dev/null 2>&1 \
-    || ! command -v fc-conflist >/dev/null 2>&1; then
+  if ! command -v fc-list >/dev/null 2>&1; then
     log_check_missing "fontconfig"
     errors=$((errors + 1))
     return 0
@@ -237,24 +232,6 @@ check_desktop_font_fontconfig() {
   done
 
   log_check_ok "$MAPLE_MONO_FAMILY"
-
-  active_configs="$(fc-conflist)"
-  if ! grep -Fq "$config_path:" <<<"$active_configs"; then
-    log_check_missing "$MAPLE_MONO_FAMILY Fontconfig rule"
-    errors=$((errors + 1))
-    return 0
-  fi
-
-  matched_postscript_name="$(fc-match -f '%{postscriptname}\n' monospace)"
-  for postscript_name in $MAPLE_MONO_POSTSCRIPT_NAMES; do
-    if [[ "$matched_postscript_name" == "$postscript_name" ]]; then
-      log_check_ok "$MAPLE_MONO_FAMILY monospace alias"
-      return 0
-    fi
-  done
-
-  log_warning "Fontconfig resolves monospace to ${matched_postscript_name:-<unknown>} instead of $MAPLE_MONO_FAMILY."
-  errors=$((errors + 1))
 }
 
 # macOS: the Homebrew cask installs one file per declared face in the user font directory.

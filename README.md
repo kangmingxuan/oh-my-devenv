@@ -20,7 +20,7 @@ oh-my-devenv is an opinionated, reproducible development environment. It publish
 - **Managed shells** — first-class completion for Zsh everywhere and Bash on Linux / WSL, with intentionally limited Bash support on macOS.
 - **Pinned runtimes** — Go, Node, Python, and golangci-lint via mise, plus ecosystem tools such as `gopls`, `dlv`, `ruff`, `basedpyright`, and `pre-commit`.
 - **Modern CLI toolkit** — ripgrep, fd, bat, fzf, jq, direnv, tmux, shellcheck, shfmt, and more.
-- **Opt-in desktop baseline** — one all-or-nothing platform bundle: Ghostty and Maple Mono NF CN on supported workstations, OrbStack on macOS, and the required Linux Fontconfig alias on Arch Linux and Ubuntu 26.04+.
+- **Opt-in desktop baseline** — one all-or-nothing platform bundle: Ghostty and Maple Mono NF CN on supported workstations, OrbStack on macOS, and a Ghostty-specific Fontconfig workaround on Ubuntu 26.04+.
 - **Safe first run** — backs up any existing managed dotfiles and prompts once for your Git identity and desktop-baseline choice.
 - **Local overlays for private facts** — keep credentials, private hosts, and machine-only values in the documented user-owned config slots. The project-owned slots converge under `$XDG_CONFIG_HOME/oh-my-devenv/`, whose default root is `~/.config`.
 - **Opinionated by design** — the repository carries one current design, not compatibility profiles or neutral-by-committee defaults.
