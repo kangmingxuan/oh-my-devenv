@@ -145,6 +145,23 @@ Older Git versions are not supported for this optional central guardrail. Keep
 using repository-local `.git/hooks/*` on those machines instead; the project
 does not ship a wrapper or compatibility path.
 
+## PATH Ordering in `env.sh`
+
+Bash and Zsh define `path_reorder_front` before they load
+`$XDG_CONFIG_HOME/oh-my-devenv/env.sh`. It is the only PATH helper the overlay
+should call:
+
+```bash
+path_reorder_front "$HOME/<preferred-tool>/bin" "$HOME/<fallback-tool>/bin"
+```
+
+The first argument ends up first in `PATH`. Empty and missing directories are
+skipped quietly. Each moved directory appears exactly once, the remaining
+entries keep their relative order, and repeating the call leaves `PATH`
+unchanged. Directories are compared as literal strings, so paths containing
+spaces or `*`, `?`, and `[` are safe. Zsh additionally keeps every `PATH` entry
+unique through `typeset -U`.
+
 ## Optional Vendor Integrations
 
 Vendor-specific shell and SSH integration stays in local overlays. JetBrains
