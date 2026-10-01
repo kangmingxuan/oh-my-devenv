@@ -70,6 +70,22 @@ readiness until the signoff is available.
 
 ## Templates And Rendering
 
+All repository Bash code, including rendered `.chezmoiscripts/` hooks, Linux-only
+scripts, and managed Bash dotfiles, must be compatible with Bash 3.2, the macOS
+`/bin/bash`. Do not use Bash 4+ features; under `set -u`, expand potentially
+empty arrays with `${arr[@]+"${arr[@]}"}`. The `smoke-tests-macos` job puts a
+`bash` symlink to `/bin/bash` first on `PATH`, so the suite and every script it
+executes run on Bash 3.2. For code the suite does not execute, it runs `bash -n`
+and rejects Bash 4+ builtins and expansions such as `mapfile` and associative
+arrays. The Linux and Arch smoke jobs use distribution Bash (5.x).
+
+To check locally on a Mac with a newer Bash first on `PATH`:
+
+```bash
+mkdir -p /tmp/system-bash && ln -sf /bin/bash /tmp/system-bash/bash
+PATH="/tmp/system-bash:$PATH" bash bootstrap/scripts/run-smoke-tests.sh
+```
+
 - Shell and application templates (`dot_*.tmpl`, `dot_*/env.*.tmpl`, and `xdg_config/**/*.tmpl`) must render on macOS and Linux/WSL, with and without optional integrations.
 - The smoke suite renders templates with `chezmoi execute-template`, syntax-checks the output with the corresponding shell, and exercises selected behavior in temporary fixture directories.
 - Every hook under `.chezmoiscripts/` is rendered for each supported platform automatically. When you add another template, add it to `bootstrap/scripts/run-smoke-tests.sh` so rendering and syntax checks are enforced on every change.

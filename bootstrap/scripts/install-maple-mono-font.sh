@@ -127,7 +127,10 @@ cleanup() {
 trap cleanup EXIT
 
 unzip -q "$archive_path" -d "$work_dir"
-mapfile -d '' font_files < <(find "$work_dir" -type f -name '*.ttf' -print0 | sort -z)
+font_files=()
+while IFS= read -r -d '' font_file; do
+  font_files+=("$font_file")
+done < <(find "$work_dir" -type f -name '*.ttf' -print0 | sort -z)
 if [[ ${#font_files[@]} -eq 0 ]]; then
   echo "ERROR: $MAPLE_MONO_ARCHIVE contains no TTF files" >&2
   exit 1

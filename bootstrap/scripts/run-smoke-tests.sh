@@ -931,7 +931,7 @@ if [[ -n "$xdg_status" ]]; then
   fail_test "nested XDG source is not clean after apply: $xdg_status"
 fi
 
-# Preview uninstall with /bin/bash, which is Bash 3.2 on macOS.
+# Preview uninstall against fixture roots.
 uninstall_data_home="$tmp_dir/uninstall-data-home"
 case "$(uname -s)" in
   Darwin) uninstall_completion_platform=darwin ;;
@@ -964,7 +964,7 @@ overlay_fixture_listing="$(
   done < <(local_overlay_inventory "$overlay_manifest")
 )"
 uninstall_preview="$(HOME="$tmp_dir/uninstall-home" XDG_CONFIG_HOME="$xdg_test_home" XDG_DATA_HOME="$uninstall_data_home" \
-  /bin/bash "$repo_root/bootstrap/scripts/uninstall.sh")"
+  bash "$repo_root/bootstrap/scripts/uninstall.sh")"
 if ! grep -Fq "[would-remove] file: $uninstall_xdg_fixture" <<<"$uninstall_preview"; then
   fail_test "uninstall preview does not include the custom-XDG managed file $uninstall_xdg_fixture"
 fi
@@ -1188,6 +1188,33 @@ printf '%s\n' '--bad-option' >"$pacman_manifest"
 expect_failure "$tmp_dir/pacman.err" run_pacman_installer
 assert_file_contains "$tmp_dir/pacman.err" "invalid pacman package"
 
+log_step "🐚" "Checking Bash 3.2 compatibility..."
+# All Bash code must run on macOS /bin/bash 3.2. Bash sources are discovered:
+# files with a Bash shebang or ShellCheck directive, Bash dotfiles, and Bash
+# overlay examples. `bash -n` rejects newer syntax; the pattern rejects Bash 4+
+# features that parse under Bash 3.2 and fail only when executed, which
+# ShellCheck does not flag: mapfile/readarray/coproc, wait -n, declare/typeset/
+# local attributes -A -g -l -n -u, case-modifying and @ transformations,
+# negative subscripts, and [[ -v ]]. Bracketed letters keep the pattern from
+# matching its own definition.
+bash4_pattern='(^|[^[:alnum:]_])(ma[p]file|rea[d]array|co[p]roc)([^[:alnum:]_]|$)|wa[i]t +-n|(de[c]lare|ty[p]eset|lo[c]al) +-[a-zA-Z]*[Aglnu]|\$\{#?[A-Za-z_][A-Za-z0-9_]*(\[[^]]*\])?([\^,]|@[QEPAaKk])|\[[ ]*-[0-9]+[ ]*\]\}|\[\[ +-[v] '
+bash_sources="$(
+  {
+    grep -rlE --exclude-dir=.git --exclude='*.md' '^#!.*bash|^# shellcheck shell=bash' "$repo_root"
+    find "$repo_root" -path "$repo_root/.git" -prune -o -type f \
+      \( -name 'dot_bash*' -o -path '*/dot_bash/*' -o -name dot_profile \
+      -o -name '*.bash' -o -name '*.bash.example' \) -print
+  } | sort -u
+)"
+[[ -n "$bash_sources" ]] || fail_test "no Bash sources discovered"
+while IFS= read -r bash_source; do
+  if [[ "$bash_source" != *.tmpl ]]; then
+    syntax_check bash "$bash_source"
+  fi
+  if grep -nE -- "$bash4_pattern" "$bash_source" | grep -vE '^[0-9]+:[[:space:]]*#'; then
+    fail_test "Bash 4+ construct in $bash_source; Bash code must run on Bash 3.2"
+  fi
+done <<<"$bash_sources"
 log_step "🔍" "Running shellcheck on bootstrap scripts..."
 shellcheck "$repo_root"/bootstrap/scripts/*.sh \
   "$repo_root/docs/local-overlay-examples/git-pre-push.example"

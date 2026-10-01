@@ -28,9 +28,14 @@ jobs:
       - uses: actions/checkout@v7
       - name: Install smoke dependencies
         run: brew install chezmoi shellcheck
-      - name: Run smoke tests
-        # Runs the suite against macOS tools and the system Bash 3.2.
-        run: bash bootstrap/scripts/run-smoke-tests.sh
+      - name: Run smoke tests with the system Bash
+        # Every `bash` the suite and the scripts it exercises start resolves to
+        # macOS /bin/bash, the oldest Bash the baseline supports.
+        run: |
+          mkdir -p "$RUNNER_TEMP/system-bash"
+          ln -s /bin/bash "$RUNNER_TEMP/system-bash/bash"
+          export PATH="$RUNNER_TEMP/system-bash:$PATH"
+          bash bootstrap/scripts/run-smoke-tests.sh
 
   smoke-tests-arch:
     runs-on: ubuntu-latest

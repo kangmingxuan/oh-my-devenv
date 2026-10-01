@@ -47,7 +47,7 @@ A reviewable change is ready to merge when all of the following hold:
 
 - The CI pipeline is green. Every reviewable change runs these GitHub Actions jobs:
   - `smoke-tests-linux` — renders and syntax-checks the baseline, validates contracts and deployment boundaries, and exercises selected behavior with stubs and temporary roots on `ubuntu-latest`.
-  - `smoke-tests-macos` — the same smoke suite on `macos-latest`, so the `darwin` template arms and platform-sensitive checks are exercised instead of going untested.
+  - `smoke-tests-macos` — the same smoke suite on `macos-latest` using the system `/bin/bash` (Bash 3.2), exercising the `darwin` template arms and platform-sensitive checks.
   - `smoke-tests-arch` — the same smoke suite in an `archlinux:base` container, exercising Arch platform routing and package-owned completion assets.
   - `apply-linux` — renders initialization configuration, runs a real `chezmoi apply` on `ubuntu-latest`, and asserts the final environment check prints `All checks passed.`
   - `secret-scan` — a full `gitleaks` scan of the repository tree.
@@ -143,7 +143,7 @@ The shell checks should agree with each other; the bootstrap check should reflec
 
 The repository CI pipeline is intentionally lightweight:
 
-- `smoke-tests-linux`, `smoke-tests-macos`, and `smoke-tests-arch` render and syntax-check the baseline, validate contracts and deployment boundaries, test completion installation against stub commands, apply the nested XDG source under temporary roots, and run ShellCheck. The macOS job exercises the `darwin` template arms; the Arch container job exercises pacman routing and Arch package-owned completion assets.
+- `smoke-tests-linux`, `smoke-tests-macos`, and `smoke-tests-arch` render and syntax-check the baseline, validate contracts and deployment boundaries, test completion installation against stub commands, apply the nested XDG source under temporary roots, and run ShellCheck. The macOS job runs the suite and the scripts it starts on the system `/bin/bash` (Bash 3.2) and exercises the `darwin` template arms; the Arch container job exercises pacman routing and Arch package-owned completion assets.
 - `apply-linux` renders initialization configuration, runs a real `chezmoi apply` on `ubuntu-latest`, and asserts the final environment check passes. It exercises the Linux package and runtime installers selected by its fixture; `desktopBaseline=false` excludes the desktop bundle because the hosted runner is not a supported workstation.
 - `secret-scan` runs `gitleaks` over the repository tree to catch committed secrets.
 - The pipeline is allowed to be simple and occasionally imperfect. It should catch obvious repo regressions, not model every clean-machine install path on every platform.
@@ -177,7 +177,7 @@ When your active `chezmoi source-path` points **outside** `~/.local/share/` (for
 
 **CI**
 
-The smoke suite runs the dry-run preview under `/bin/bash` (Bash 3.2 on macOS) against fixture roots. `--confirm` is not exercised in CI; validate it in a disposable environment when you change it, and inspect the dry-run output before using `--confirm`.
+The smoke suite runs the dry-run preview against fixture roots (on Bash 3.2 in the macOS job). `--confirm` is not exercised in CI; validate it in a disposable environment when you change it, and inspect the dry-run output before using `--confirm`.
 
 ## Related Documents
 
