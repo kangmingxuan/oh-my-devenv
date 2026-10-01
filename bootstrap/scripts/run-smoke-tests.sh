@@ -208,11 +208,12 @@ desktopPlatformSupported = $desktop_platform_supported_data
 desktopFontFamily = "$MAPLE_MONO_FAMILY"
 EOF
 
-# Synthetic chezmoi platform data for boundary renders.
+# Synthetic chezmoi platform data for boundary renders. --override-data merges
+# into the host data, so every osRelease field the templates read is explicit.
 darwin_chezmoi_data='{"os":"darwin","osRelease":null,"kernel":null}'
-supported_linux_chezmoi_data='{"os":"linux","osRelease":{"id":"ubuntu","versionID":"26.04"},"kernel":{"osrelease":"linux"}}'
-wsl_chezmoi_data='{"os":"linux","osRelease":{"id":"ubuntu","versionID":"26.04"},"kernel":{"osrelease":"microsoft-standard-WSL2"}}'
-unsupported_chezmoi_data='{"os":"linux","osRelease":{"id":"unsupported-smoke-distro"},"kernel":{"osrelease":"linux"}}'
+supported_linux_chezmoi_data='{"os":"linux","osRelease":{"id":"ubuntu","versionID":"26.04","idLike":""},"kernel":{"osrelease":"linux"}}'
+wsl_chezmoi_data='{"os":"linux","osRelease":{"id":"ubuntu","versionID":"26.04","idLike":""},"kernel":{"osrelease":"microsoft-standard-WSL2"}}'
+unsupported_chezmoi_data='{"os":"linux","osRelease":{"id":"unsupported-smoke-distro","idLike":"","versionID":""},"kernel":{"osrelease":"linux"}}'
 
 # Literal strings asserted against rendered templates.
 shared_secrets_literal="$(local_overlay_location secrets)"
@@ -406,8 +407,8 @@ log_step "📜" "Rendering and checking chezmoi hooks..."
 hook_platforms=(
   "macos|$darwin_chezmoi_data"
   "ubuntu|$supported_linux_chezmoi_data"
-  'debian|{"os":"linux","osRelease":{"id":"debian","versionID":"13"},"kernel":{"osrelease":"linux"}}'
-  'arch|{"os":"linux","osRelease":{"id":"arch"},"kernel":{"osrelease":"linux"}}'
+  'debian|{"os":"linux","osRelease":{"id":"debian","versionID":"13","idLike":""},"kernel":{"osrelease":"linux"}}'
+  'arch|{"os":"linux","osRelease":{"id":"arch","idLike":"","versionID":""},"kernel":{"osrelease":"linux"}}'
   "wsl|$wsl_chezmoi_data"
   "unsupported|$unsupported_chezmoi_data"
 )
@@ -988,7 +989,7 @@ assert_file_contains "$synthetic_supported_fontconfig" '<edit name="family" mode
 assert_file_contains "$synthetic_supported_fontconfig" "<string>$MAPLE_MONO_FAMILY</string>"
 for platform_data in \
   "$darwin_chezmoi_data" \
-  '{"os":"linux","osRelease":{"id":"arch"},"kernel":{"osrelease":"linux"}}'; do
+  '{"os":"linux","osRelease":{"id":"arch","idLike":"","versionID":""},"kernel":{"osrelease":"linux"}}'; do
   synthetic_inactive_fontconfig="$tmp_dir/fontconfig-inactive.conf"
   chezmoi --source="$repo_root" \
     --override-data "$(desktop_override_data true "$platform_data")" \
