@@ -916,6 +916,15 @@ if [[ "$desktop_platform_supported_data" == true ]]; then
 elif [[ -s "$xdg_desktop_home/ghostty/config.ghostty" ]]; then
   fail_test "nested XDG apply wrote a Ghostty config on an unsupported desktop platform"
 fi
+# Disabling the baseline renders the desktop templates empty, and chezmoi then
+# removes the targets an earlier apply wrote.
+XDG_CONFIG_HOME="$xdg_desktop_home" XDG_STATE_HOME="$tmp_dir/xdg-desktop-state-home" \
+  bash "$repo_root/bootstrap/scripts/xdg-config.sh" apply "$xdg_test_config"
+for desktop_target in ghostty/config.ghostty fontconfig/conf.d/99-oh-my-devenv-maple-mono-nf-cn.conf; do
+  if [[ -e "$xdg_desktop_home/$desktop_target" ]]; then
+    fail_test "disabling the desktop baseline left $desktop_target in place"
+  fi
+done
 xdg_status="$(XDG_CONFIG_HOME="$xdg_test_home" XDG_STATE_HOME="$xdg_test_state" \
   bash "$repo_root/bootstrap/scripts/xdg-config.sh" status "$xdg_test_config")"
 if [[ -n "$xdg_status" ]]; then
