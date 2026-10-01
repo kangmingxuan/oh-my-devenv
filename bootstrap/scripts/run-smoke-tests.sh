@@ -565,6 +565,49 @@ for f in $('"$path_functions"'); do printf "functions|%s\n" "$f"; done
   fi
 done
 
+# Bash directory comparison must stay case-sensitive under nocasematch, and the
+# caller's option state must survive every call. Foo and foo are distinct PATH
+# strings even where the filesystem folds them to one directory. The CPU limit
+# bounds a scenario that loops instead of making progress.
+mkdir -p "$path_root/Foo" "$path_root/foo"
+# shellcheck disable=SC2016
+path_case_command='. "$HOME/.bash/env.bash"
+r="$OH_MY_DEVENV_SMOKE_PATH_ROOT"
+shopt -s nocasematch
+PATH="$r/foo:$r/Foo::$r/foo:$r/keep:$r/Foo"
+path_reorder_front "$r/Foo"; printf "upper|%s\n" "$PATH"
+path_reorder_front "$r/Foo"; printf "repeated-call|%s\n" "$PATH"
+path_reorder_front "$r/foo" "$r/Foo"; printf "both|%s\n" "$PATH"
+path_reorder_front "$r/Foo" "$r/foo"; printf "both-reversed|%s\n" "$PATH"
+path_reorder_front "" "$r/missing"; printf "skipped|%s\n" "$PATH"
+path_reorder_front; printf "no-args|%s\n" "$PATH"
+shopt -q nocasematch && printf "option|enabled\n"
+shopt -u nocasematch
+path_reorder_front "$r/foo"; printf "disabled|%s\n" "$PATH"
+shopt -q nocasematch || printf "option|disabled\n"'
+path_case_output="$(
+  ulimit -t 10
+  env -i HOME="$tmp_dir/path-home-bash" PATH="$path_inherited" \
+    OH_MY_DEVENV_SMOKE_PATH_ROOT="$path_root" \
+    "$bash_bin" --norc -c "$path_case_command" 2>"$tmp_dir/path-case.err"
+)" || fail_test "bash nocasematch path_reorder_front scenario exited with status $?"
+[[ ! -s "$tmp_dir/path-case.err" ]] \
+  || fail_test "bash nocasematch path_reorder_front scenario wrote to stderr: $(cat "$tmp_dir/path-case.err")"
+path_case_expected="$(printf '%s\n' \
+  "upper|$path_root/Foo:$path_root/foo::$path_root/foo:$path_root/keep" \
+  "repeated-call|$path_root/Foo:$path_root/foo::$path_root/foo:$path_root/keep" \
+  "both|$path_root/foo:$path_root/Foo::$path_root/keep" \
+  "both-reversed|$path_root/Foo:$path_root/foo::$path_root/keep" \
+  "skipped|$path_root/Foo:$path_root/foo::$path_root/keep" \
+  "no-args|$path_root/Foo:$path_root/foo::$path_root/keep" \
+  "option|enabled" \
+  "disabled|$path_root/foo:$path_root/Foo::$path_root/keep" \
+  "option|disabled")"
+if [[ "$path_case_output" != "$path_case_expected" ]]; then
+  printf 'Expected:\n%s\nActual:\n%s\n' "$path_case_expected" "$path_case_output" >&2
+  fail_test "bash path_reorder_front must compare directories case-sensitively under nocasematch"
+fi
+
 render_template dot_gitconfig.tmpl "$tmp_dir/dot_gitconfig"
 assert_file_contains "$tmp_dir/dot_gitconfig" "$gitconfig_include_literal"
 # The managed gitconfig must stay host-neutral: no hard-coded URL rewrites, so
