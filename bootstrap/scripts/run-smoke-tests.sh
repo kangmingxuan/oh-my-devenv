@@ -392,6 +392,222 @@ login_overlay="$(env -u __BASH_ENV_DONE HOME="$login_home" XDG_CONFIG_HOME="$log
   bash --noprofile --norc -c '. "$HOME/.bash_profile"; overlay_probe')"
 [[ "$login_overlay" == loaded ]] || fail_test "non-interactive login shells must load the env.sh overlay"
 
+# path_reorder_front is the PATH API for the shared env.sh overlay. Both shells
+# run the same overlay and scenario through their deployed login entry in a
+# clean fixture HOME, and must report the same fixture-only PATH projection.
+# Fixture names include spaces, glob metacharacters, and decoys they would
+# match as patterns; the inherited PATH holds adjacent and scattered duplicates.
+# Nonfixture entries must keep their order through every move, and calls that
+# move nothing must leave PATH byte-for-byte unchanged. Empty entries (the
+# current directory) are kept in Bash; Zsh deduplicates them via typeset -U.
+path_root="$tmp_dir/path-fixture"
+for path_fixture_dir in a b c d gx 'g*' qz 'q?' '[c]' 'with space'; do
+  mkdir -p "$path_root/$path_fixture_dir"
+done
+path_inherited="$path_root/a:$path_root/a:$path_root/b:$path_root/c:$path_root/gx:$path_root/g*"
+path_inherited="$path_inherited:$path_root/qz:$path_root/q?:$path_root/with space:$path_root/[c]"
+path_inherited="$path_inherited:$path_root/d:$path_root/c:/usr/bin:/bin"
+path_overlay="$tmp_dir/path-overlay.sh"
+cat >"$path_overlay" <<'EOF'
+path_overlay_loads=$(( ${path_overlay_loads:-0} + 1 ))
+root="$OH_MY_DEVENV_SMOKE_PATH_ROOT"
+[ -n "${path_before_overlay+set}" ] || path_before_overlay="$PATH"
+path_reorder_front "$root/c" "$root/a" "" "$root/missing" "$root/c"
+EOF
+path_scenario="$tmp_dir/path-scenario.sh"
+cat >"$path_scenario" <<'EOF'
+report() { printf '%s|%s\n' "$1" "$2"; }
+root="$OH_MY_DEVENV_SMOKE_PATH_ROOT"
+report before-overlay "$path_before_overlay"
+report overlay "$PATH"
+report child "$("$OH_MY_DEVENV_SMOKE_SHELL" "$OH_MY_DEVENV_SMOKE_SHELL_FLAG" -c '. "$HOME/$1"; printf "%s" "$PATH"' _ "$OH_MY_DEVENV_SMOKE_ENTRY")"
+path_reorder_front "$root/g*" "$root/q?" "$root/[c]" "$root/with space"
+report literal "$PATH"
+path_reorder_front "$root/g*" "$root/q?" "$root/[c]" "$root/with space"
+report repeated-call "$PATH"
+path_reorder_front
+report no-args "$PATH"
+path_reorder_front "" "$root/missing" "$root/*"
+report skipped "$PATH"
+. "$HOME/$OH_MY_DEVENV_SMOKE_ENV"
+report resourced "$PATH"
+report overlay-loads "$path_overlay_loads"
+report sentinels "$i:$d:$dir:$entry:$keep"
+(
+  cd "$root" || exit 1
+  for edge in "" "a:" ":a" "::" ":b::a:"; do
+    PATH="$edge"
+    path_reorder_front a
+    report "edge:[$edge]" "$PATH"
+  done
+)
+EOF
+
+path_projection() {
+  local output="$1"
+  local line label value entry projected nonfixture baseline="" literal=""
+  local -a entries
+
+  while IFS= read -r line; do
+    label="${line%%|*}"
+    value="${line#*|}"
+    case "$label" in
+      overlay-loads | sentinels | functions | edge:*)
+        printf '%s|%s\n' "$label" "$value"
+        continue
+        ;;
+    esac
+    projected=""
+    nonfixture=""
+    IFS=: read -r -a entries <<<"$value"
+    for entry in "${entries[@]}"; do
+      if [[ "$entry" == "$path_root"/* ]]; then
+        projected="${projected:+$projected:}${entry#"$path_root"/}"
+      else
+        nonfixture="$nonfixture:$entry"
+      fi
+    done
+    # The pre-overlay PATH only supplies the nonfixture baseline; its fixture
+    # order depends on each shell's own deduplication.
+    if [[ "$label" == before-overlay ]]; then
+      baseline="$nonfixture"
+      continue
+    fi
+    printf '%s|%s\n' "$label" "$projected"
+    [[ "$nonfixture" == "$baseline" ]] || printf '%s-nonfixture|%s\n' "$label" "$nonfixture"
+    case "$label" in
+      literal) literal="$value" ;;
+      repeated-call | no-args | skipped | resourced)
+        [[ "$value" == "$literal" ]] || printf '%s-full|%s\n' "$label" "$value"
+        ;;
+    esac
+  done <<<"$output"
+}
+
+path_expected_overlay='c:a:b:gx:g*:qz:q?:with space:[c]:d'
+path_expected_literal='g*:q?:[c]:with space:c:a:b:gx:qz:d'
+path_expected="$(printf '%s\n' \
+  "functions|path_reorder_front" \
+  "overlay|$path_expected_overlay" \
+  "child|$path_expected_overlay" \
+  "literal|$path_expected_literal" \
+  "repeated-call|$path_expected_literal" \
+  "no-args|$path_expected_literal" \
+  "skipped|$path_expected_literal" \
+  "resourced|$path_expected_literal" \
+  "overlay-loads|1" \
+  "sentinels|sentinel:sentinel:sentinel:sentinel:sentinel")"
+# Edge inputs move fixture "a" (relative to the fixture root) past empty entries.
+path_expected_edges_shared="$(printf '%s\n' \
+  "edge:[]|a:" \
+  "edge:[a:]|a:" \
+  "edge:[:a]|a:")"
+path_expected_edges_bash="$(printf '%s\n' \
+  "edge:[::]|a:::" \
+  "edge:[:b::a:]|a::b::")"
+path_expected_edges_zsh="$(printf '%s\n' \
+  "edge:[::]|a:" \
+  "edge:[:b::a:]|a::b")"
+
+bash_bin="$(command -v bash)"
+zsh_bin="$(command -v zsh)"
+for path_shell in bash zsh; do
+  path_home="$tmp_dir/path-home-$path_shell"
+  mkdir -p "$path_home/.config/oh-my-devenv" "$path_home/.local/share/oh-my-devenv"
+  cp "$xdg_resolver" "$path_home/.local/share/oh-my-devenv/xdg.sh"
+  cp "$path_overlay" "$path_home/.config/oh-my-devenv/env.sh"
+  if [[ "$path_shell" == bash ]]; then
+    mkdir -p "$path_home/.bash"
+    cp "$repo_root/dot_bash_profile" "$path_home/.bash_profile"
+    cp "$repo_root/dot_profile" "$path_home/.profile"
+    cp "$tmp_dir/env.bash" "$path_home/.bash/env.bash"
+    cp "$tmp_dir/dot_bashrc" "$path_home/.bashrc"
+    path_shell_bin="$bash_bin"
+    path_shell_flag=--norc
+    path_entry=.bash_profile
+    path_env=.bash/env.bash
+    # shellcheck disable=SC2016
+    path_functions='compgen -A function path_'
+    path_shell_expected="$path_expected
+$path_expected_edges_shared
+$path_expected_edges_bash"
+  else
+    mkdir -p "$path_home/.zsh"
+    cp "$repo_root/dot_zprofile" "$path_home/.zprofile"
+    cp "$tmp_dir/env.zsh" "$path_home/.zsh/env.zsh"
+    path_shell_bin="$zsh_bin"
+    path_shell_flag=-f
+    path_entry=.zprofile
+    path_env=.zsh/env.zsh
+    # shellcheck disable=SC2016
+    path_functions='print -rl -- ${(ok)functions[(I)path_*]}'
+    path_shell_expected="$path_expected
+$path_expected_edges_shared
+$path_expected_edges_zsh"
+  fi
+  # shellcheck disable=SC2016
+  path_command='i=sentinel d=sentinel dir=sentinel entry=sentinel keep=sentinel
+. "$HOME/$OH_MY_DEVENV_SMOKE_ENTRY"
+for f in $('"$path_functions"'); do printf "functions|%s\n" "$f"; done
+. "$1"'
+  path_output="$(env -i HOME="$path_home" PATH="$path_inherited" \
+    OH_MY_DEVENV_SMOKE_PATH_ROOT="$path_root" OH_MY_DEVENV_SMOKE_SHELL="$path_shell_bin" \
+    OH_MY_DEVENV_SMOKE_SHELL_FLAG="$path_shell_flag" \
+    OH_MY_DEVENV_SMOKE_ENTRY="$path_entry" OH_MY_DEVENV_SMOKE_ENV="$path_env" \
+    "$path_shell_bin" "$path_shell_flag" -c "$path_command" _ "$path_scenario" 2>"$tmp_dir/path-$path_shell.err")" \
+    || fail_test "$path_shell path_reorder_front scenario exited with status $?"
+  [[ ! -s "$tmp_dir/path-$path_shell.err" ]] \
+    || fail_test "$path_shell path_reorder_front scenario wrote to stderr: $(cat "$tmp_dir/path-$path_shell.err")"
+  path_actual="$(path_projection "$path_output")"
+  if [[ "$path_actual" != "$path_shell_expected" ]]; then
+    printf 'Expected:\n%s\nActual:\n%s\n' "$path_shell_expected" "$path_actual" >&2
+    fail_test "$path_shell path_reorder_front contract mismatch"
+  fi
+done
+
+# Bash directory comparison must stay case-sensitive under nocasematch, and the
+# caller's option state must survive every call. Foo and foo are distinct PATH
+# strings even where the filesystem folds them to one directory. The CPU limit
+# bounds a scenario that loops instead of making progress.
+mkdir -p "$path_root/Foo" "$path_root/foo"
+# shellcheck disable=SC2016
+path_case_command='. "$HOME/.bash/env.bash"
+r="$OH_MY_DEVENV_SMOKE_PATH_ROOT"
+shopt -s nocasematch
+PATH="$r/foo:$r/Foo::$r/foo:$r/keep:$r/Foo"
+path_reorder_front "$r/Foo"; printf "upper|%s\n" "$PATH"
+path_reorder_front "$r/Foo"; printf "repeated-call|%s\n" "$PATH"
+path_reorder_front "$r/foo" "$r/Foo"; printf "both|%s\n" "$PATH"
+path_reorder_front "$r/Foo" "$r/foo"; printf "both-reversed|%s\n" "$PATH"
+path_reorder_front "" "$r/missing"; printf "skipped|%s\n" "$PATH"
+path_reorder_front; printf "no-args|%s\n" "$PATH"
+shopt -q nocasematch && printf "option|enabled\n"
+shopt -u nocasematch
+path_reorder_front "$r/foo"; printf "disabled|%s\n" "$PATH"
+shopt -q nocasematch || printf "option|disabled\n"'
+path_case_output="$(
+  ulimit -t 10
+  env -i HOME="$tmp_dir/path-home-bash" PATH="$path_inherited" \
+    OH_MY_DEVENV_SMOKE_PATH_ROOT="$path_root" \
+    "$bash_bin" --norc -c "$path_case_command" 2>"$tmp_dir/path-case.err"
+)" || fail_test "bash nocasematch path_reorder_front scenario exited with status $?"
+[[ ! -s "$tmp_dir/path-case.err" ]] \
+  || fail_test "bash nocasematch path_reorder_front scenario wrote to stderr: $(cat "$tmp_dir/path-case.err")"
+path_case_expected="$(printf '%s\n' \
+  "upper|$path_root/Foo:$path_root/foo::$path_root/foo:$path_root/keep" \
+  "repeated-call|$path_root/Foo:$path_root/foo::$path_root/foo:$path_root/keep" \
+  "both|$path_root/foo:$path_root/Foo::$path_root/keep" \
+  "both-reversed|$path_root/Foo:$path_root/foo::$path_root/keep" \
+  "skipped|$path_root/Foo:$path_root/foo::$path_root/keep" \
+  "no-args|$path_root/Foo:$path_root/foo::$path_root/keep" \
+  "option|enabled" \
+  "disabled|$path_root/foo:$path_root/Foo::$path_root/keep" \
+  "option|disabled")"
+if [[ "$path_case_output" != "$path_case_expected" ]]; then
+  printf 'Expected:\n%s\nActual:\n%s\n' "$path_case_expected" "$path_case_output" >&2
+  fail_test "bash path_reorder_front must compare directories case-sensitively under nocasematch"
+fi
+
 render_template dot_gitconfig.tmpl "$tmp_dir/dot_gitconfig"
 assert_file_contains "$tmp_dir/dot_gitconfig" "$gitconfig_include_literal"
 # The managed gitconfig must stay host-neutral: no hard-coded URL rewrites, so
