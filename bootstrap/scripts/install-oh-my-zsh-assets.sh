@@ -29,11 +29,8 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091
 source "$script_dir/common.sh"
 
-# Export the internal DOTFILES_OH_MY_ZSH_GIT_URL override; external mode leaves
-# the environment untouched. Mirror mode covers the oh-my-zsh repository only;
-# plugin repositories are cloned from github.com. See bootstrap/scripts/mirrors.sh.
-dotfiles_apply_mirror_env
-
+# bootstrap.env may point the oh-my-zsh clone elsewhere; plugin repositories
+# are cloned from github.com.
 OH_MY_ZSH_REPO="${DOTFILES_OH_MY_ZSH_GIT_URL:-https://github.com/ohmyzsh/ohmyzsh.git}"
 
 clone_or_update_repo() {
@@ -67,7 +64,7 @@ mkdir -p "$ZSH_CUSTOM_DIR"
 plugins=()
 while IFS= read -r plugin; do
   plugins+=("$plugin")
-done < <(sed -e 's/#.*//' -e '/^[[:space:]]*$/d' "$MANIFEST")
+done < <(manifest_entries "$MANIFEST")
 
 if [[ ${#plugins[@]} -eq 0 ]]; then
   echo "No oh-my-zsh plugins to install."
@@ -76,9 +73,9 @@ fi
 
 echo "==> Ensuring oh-my-zsh plugins from $MANIFEST"
 for plugin in "${plugins[@]}"; do
-  read -r repo path <<<"$plugin"
+  read -r repo path extra <<<"$plugin"
 
-  if [[ -z "$repo" || -z "$path" ]]; then
+  if [[ -z "$repo" || -z "$path" || -n "$extra" ]]; then
     echo "ERROR: invalid plugin entry '$plugin' in $MANIFEST" >&2
     exit 1
   fi

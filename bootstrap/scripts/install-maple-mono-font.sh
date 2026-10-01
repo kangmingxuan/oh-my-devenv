@@ -69,32 +69,9 @@ fi
 
 download_dir="${XDG_CACHE_HOME:-$HOME/.cache}/oh-my-devenv/downloads"
 archive_path="$download_dir/$MAPLE_MONO_ARCHIVE"
-font_url="${DOTFILES_MAPLE_MONO_URL:-$MAPLE_MONO_URL}"
 mkdir -p "$download_dir"
 
-if ! checksum_matches "$archive_path"; then
-  echo "==> Downloading $MAPLE_MONO_FAMILY $MAPLE_MONO_VERSION"
-  curl_args=(
-    --fail
-    --location
-    --show-error
-    --retry 5
-    --retry-delay 2
-    --retry-all-errors
-    --output "$archive_path"
-  )
-  if [[ -f "$archive_path" ]]; then
-    curl_args+=(--continue-at -)
-  fi
-  curl "${curl_args[@]}" "$font_url" || true
-fi
-
-if ! checksum_matches "$archive_path"; then
-  invalid_archive="$archive_path.invalid"
-  if [[ -f "$archive_path" ]]; then
-    mv -f "$archive_path" "$invalid_archive"
-  fi
-  echo "==> Restarting the font download after an invalid or incomplete cached archive"
+download_font_archive() {
   curl \
     --fail \
     --location \
@@ -102,40 +79,49 @@ if ! checksum_matches "$archive_path"; then
     --retry 5 \
     --retry-delay 2 \
     --retry-all-errors \
-    --output "$archive_path" \
-    "$font_url"
-  rm -f "$invalid_archive"
-fi
+    "$@" \
+    --output "$archive_path.part" \
+    "${DOTFILES_MAPLE_MONO_URL:-$MAPLE_MONO_URL}"
+}
 
+# A partial download resumes on the next run, and restarts when the server
+# cannot resume it. A complete archive that fails verification is discarded so
+# the next run starts over.
 if ! checksum_matches "$archive_path"; then
-  echo "ERROR: checksum verification failed for $MAPLE_MONO_ARCHIVE" >&2
-  exit 1
+  echo "==> Downloading $MAPLE_MONO_FAMILY $MAPLE_MONO_VERSION"
+  if ! download_font_archive --continue-at -; then
+    rm -f "$archive_path.part"
+    download_font_archive
+  fi
+  mv -f "$archive_path.part" "$archive_path"
+  if ! checksum_matches "$archive_path"; then
+    rm -f "$archive_path"
+    echo "ERROR: checksum verification failed for $MAPLE_MONO_ARCHIVE" >&2
+    exit 1
+  fi
 fi
 
 work_dir="$(mktemp -d)"
 stage_dir=""
 previous_dir=""
-installed_new_dir=0
-install_committed=0
+swapped=0
+committed=0
+# Until Fontconfig confirms the new faces, any exit removes the new directory
+# and restores the previous managed one.
 cleanup() {
   rm -rf "$work_dir"
-  if [[ -n "$stage_dir" && -d "$stage_dir" ]]; then
+  if [[ -n "$stage_dir" ]]; then
     rm -rf "$stage_dir"
   fi
-
-  if (( install_committed == 0 )); then
-    if (( installed_new_dir == 1 )); then
-      rm -rf "$font_dir"
-    fi
-    if [[ -n "$previous_dir" && -d "$previous_dir" ]]; then
-      if mv "$previous_dir" "$font_dir"; then
-        fc-cache -f "$font_dir" >/dev/null 2>&1 || true
-      else
-        echo "ERROR: failed to restore previous font directory: $previous_dir" >&2
-      fi
-    fi
-  elif [[ -n "$previous_dir" && -d "$previous_dir" ]]; then
-    rm -rf "$previous_dir"
+  if (( committed == 1 )); then
+    return
+  fi
+  if (( swapped == 1 )); then
+    rm -rf "$font_dir"
+  fi
+  if [[ -n "$previous_dir" && -d "$previous_dir" ]]; then
+    mv "$previous_dir" "$font_dir"
+    fc-cache -f "$font_dir" >/dev/null 2>&1 || true
   fi
 }
 trap cleanup EXIT
@@ -158,6 +144,11 @@ for postscript_name in "${required_postscript_names[@]}"; do
   fi
 done
 
+if [[ -d "$font_dir" && ! -f "$managed_marker" ]]; then
+  echo "ERROR: refusing to replace unowned font directory: $font_dir" >&2
+  exit 1
+fi
+
 mkdir -p "$fonts_root"
 stage_dir="$(mktemp -d "$fonts_root/.maple-mono-nf-cn.XXXXXX")"
 for font_file in "${font_files[@]}"; do
@@ -165,30 +156,22 @@ for font_file in "${font_files[@]}"; do
 done
 printf '%s\n' "$expected_marker" >"$stage_dir/.oh-my-devenv-managed"
 
+# Swap the staged directory into place, keeping the previous managed copy
+# beside it until Fontconfig confirms the new faces.
 if [[ -d "$font_dir" ]]; then
-  if [[ ! -f "$managed_marker" ]]; then
-    echo "ERROR: refusing to replace unowned font directory: $font_dir" >&2
-    exit 1
-  fi
-  previous_dir="$(mktemp -d "$fonts_root/.maple-mono-nf-cn.previous.XXXXXX")"
-  rmdir "$previous_dir"
+  previous_dir="$stage_dir.previous"
   mv "$font_dir" "$previous_dir"
 fi
-
 mv "$stage_dir" "$font_dir"
 stage_dir=""
-installed_new_dir=1
+swapped=1
 
 fc-cache -f "$font_dir" >/dev/null
 if ! font_family_complete; then
   echo "ERROR: $MAPLE_MONO_FAMILY did not register with Fontconfig" >&2
   exit 1
 fi
-
-install_committed=1
-if [[ -n "$previous_dir" && -d "$previous_dir" ]]; then
-  rm -rf "$previous_dir"
-  previous_dir=""
-fi
+committed=1
+rm -rf "$previous_dir"
 
 echo "==> $MAPLE_MONO_FAMILY $MAPLE_MONO_VERSION installed successfully."

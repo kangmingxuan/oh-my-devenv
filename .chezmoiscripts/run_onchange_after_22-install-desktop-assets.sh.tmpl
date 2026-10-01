@@ -1,9 +1,5 @@
 {{- $packageManager := includeTemplate "system-package-manager" . -}}
-{{- $desktopBaseline := false -}}
-{{- if hasKey . "desktopBaseline" -}}
-{{- $desktopBaseline = .desktopBaseline -}}
-{{- end -}}
-{{- if $desktopBaseline -}}
+{{- if .desktopBaseline -}}
 {{- $isSupportedDesktop := eq (includeTemplate "desktop-platform-supported" .) "true" -}}
 #!/bin/bash
 
@@ -11,7 +7,7 @@ set -euo pipefail
 
 bootstrap_dir='{{ joinPath .chezmoi.sourceDir "bootstrap" }}'
 scripts_dir="$bootstrap_dir/scripts"
-{{ if or (eq .chezmoi.os "darwin") $isSupportedDesktop -}}
+{{ if $isSupportedDesktop -}}
 manifests_dir="$bootstrap_dir/manifests"
 {{ end }}
 

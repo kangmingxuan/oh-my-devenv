@@ -16,14 +16,6 @@ if ! command -v mise >/dev/null 2>&1; then
   exit 1
 fi
 
-# Shared egress IPs (OrbStack VMs, CI, corp NAT) routinely hit GitHub's
-# anonymous API rate limit during artifact attestation verification. Keep the
-# baseline install path reliable by default, but allow operators to opt back in
-# explicitly with environment overrides.
-export MISE_GITHUB_ATTESTATIONS="${MISE_GITHUB_ATTESTATIONS:-false}"
-export MISE_AQUA_GITHUB_ATTESTATIONS="${MISE_AQUA_GITHUB_ATTESTATIONS:-false}"
-export MISE_PYTHON_GITHUB_ATTESTATIONS="${MISE_PYTHON_GITHUB_ATTESTATIONS:-$MISE_GITHUB_ATTESTATIONS}"
-
 log_step "⚙️" "Syncing mise-managed runtimes and tools..."
 mise install --yes
 

@@ -18,10 +18,6 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091
 source "$script_dir/common.sh"
 
-# Export the internal HOMEBREW_API_DOMAIN / HOMEBREW_BOTTLE_DOMAIN overrides
-# before `brew bundle`; external mode leaves the environment untouched.
-dotfiles_apply_mirror_env
-
 BREW_CMD="$(brew_command)"
 
 # Load Homebrew environment for this script invocation.

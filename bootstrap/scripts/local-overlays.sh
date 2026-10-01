@@ -33,11 +33,9 @@ local_overlay_load() {
       example = $2
       location = $3
       match_type = $4
-      consumers = $5
-      lifecycle = $6
     }
-    NF != 6 {
-      printf "ERROR: invalid local overlay inventory row %d: expected 6 fields, got %d\n", NR, NF > "/dev/stderr"
+    NF != 4 {
+      printf "ERROR: invalid local overlay inventory row %d: expected 4 fields, got %d\n", NR, NF > "/dev/stderr"
       invalid = 1
       next
     }
@@ -67,10 +65,6 @@ local_overlay_load() {
         printf "ERROR: glob local overlay has no pattern on row %d: %s\n", NR, location > "/dev/stderr"
         invalid = 1
       }
-    }
-    consumers == "" || lifecycle == "" {
-      printf "ERROR: missing local overlay metadata on row %d\n", NR > "/dev/stderr"
-      invalid = 1
     }
     {
       if (seen_id[id]++) {
@@ -111,10 +105,14 @@ local_overlay_inventory() {
   printf '%s\n' "${OH_MY_DEVENV_LOCAL_OVERLAY_ROWS[@]}"
 }
 
-local_overlay_resolve_location() {
+# Print an inventory location with its $HOME or $XDG_CONFIG_HOME prefix
+# expanded. For glob rows, metacharacters in the expanded base are escaped so
+# only the inventory's own pattern can match.
+local_overlay_expand() {
   local location="$1"
-  local base=""
+  local match="$2"
   local prefix=""
+  local base=""
 
   case "$location" in
     "\$HOME/"*)
@@ -131,46 +129,15 @@ local_overlay_resolve_location() {
       ;;
   esac
 
-  if [[ -n "$base" ]]; then
-    printf '%s/%s\n' "$base" "${location#"$prefix"}"
-  else
-    printf '/%s\n' "${location#"$prefix"}"
+  if [[ "$match" == "glob" ]]; then
+    base="${base//\\/\\\\}"
+    base="${base//\*/\\*}"
+    base="${base//\?/\\?}"
+    base="${base//\[/\\[}"
+    base="${base//\]/\\]}"
   fi
-}
 
-local_overlay_glob_pattern() {
-  local location="$1"
-  local base=""
-  local prefix=""
-  local relative=""
-
-  case "$location" in
-    "\$HOME/"*)
-      prefix="\$HOME/"
-      base="${HOME%/}"
-      ;;
-    "\$XDG_CONFIG_HOME/"*)
-      prefix="\$XDG_CONFIG_HOME/"
-      base="${XDG_CONFIG_HOME%/}"
-      ;;
-    *)
-      printf 'ERROR: unsupported local overlay location: %s\n' "$location" >&2
-      return 1
-      ;;
-  esac
-
-  relative="${location#"$prefix"}"
-  base="${base//\\/\\\\}"
-  base="${base//\*/\\*}"
-  base="${base//\?/\\?}"
-  base="${base//\[/\\[}"
-  base="${base//\]/\\]}"
-
-  if [[ -n "$base" ]]; then
-    printf '%s/%s\n' "$base" "$relative"
-  else
-    printf '/%s\n' "$relative"
-  fi
+  printf '%s/%s\n' "$base" "${location#"$prefix"}"
 }
 
 local_overlay_location() {
@@ -201,13 +168,12 @@ local_overlay_matches_path() {
     IFS=$'\t' read -r -a fields <<<"$row"
     location="${fields[2]}"
     match="${fields[3]}"
+    resolved="$(local_overlay_expand "$location" "$match")" || return 1
     case "$match" in
       exact)
-        resolved="$(local_overlay_resolve_location "$location")" || return 1
         [[ "$target" == "$resolved" ]] && return 0
         ;;
       glob)
-        resolved="$(local_overlay_glob_pattern "$location")" || return 1
         # shellcheck disable=SC2053
         [[ "$target" == $resolved ]] && return 0
         ;;
@@ -226,13 +192,12 @@ local_overlay_existing_paths() {
     IFS=$'\t' read -r -a fields <<<"$row"
     location="${fields[2]}"
     match="${fields[3]}"
+    resolved="$(local_overlay_expand "$location" "$match")" || return 1
     case "$match" in
       exact)
-        resolved="$(local_overlay_resolve_location "$location")" || return 1
         [[ -e "$resolved" || -L "$resolved" ]] && printf '%s\n' "$resolved"
         ;;
       glob)
-        resolved="$(local_overlay_glob_pattern "$location")" || return 1
         while IFS= read -r path; do
           [[ -e "$path" || -L "$path" ]] && printf '%s\n' "$path"
         done < <(compgen -G "$resolved" || true)

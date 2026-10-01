@@ -22,10 +22,6 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091
 source "$script_dir/common.sh"
 
-# Export the internal UV_INDEX_URL override before `uv tool install`; external
-# mode leaves the environment untouched. See bootstrap/scripts/mirrors.sh.
-dotfiles_apply_mirror_env
-
 # When DOTFILES_FORCE_REINSTALL=1 the script skips the idempotency probe and
 # reinstalls every tool. Useful for recovering from a partially broken tool
 # directory.
@@ -45,12 +41,7 @@ echo "==> Syncing uv tools from $MANIFEST"
 
 # Snapshot the current `uv tool list` once. Output format is stable as
 # "<package> v<version>" lines followed by indented binary entries.
-installed_snapshot=""
-if installed_snapshot="$(uv tool list 2>/dev/null)"; then
-  :
-else
-  installed_snapshot=""
-fi
+installed_snapshot="$(uv tool list 2>/dev/null || true)"
 
 installed_version_for() {
   local name="$1"

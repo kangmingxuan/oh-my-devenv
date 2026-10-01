@@ -19,9 +19,8 @@ the baseline leaves to each user's home directory or user-owned tool config:
 | `mise-config.local.toml.example` | `$XDG_CONFIG_HOME/mise/config.local.toml` | mise | tool-native configuration |
 | `ghostty-config.local.ghostty.example` | `$XDG_CONFIG_HOME/ghostty/config.local.ghostty` | Ghostty | tool-native configuration |
 
-The machine-readable source for this table is
-[`bootstrap/manifests/local-overlays.tsv`](../../bootstrap/manifests/local-overlays.tsv).
-Uninstall protection and smoke validation read that inventory directly.
+[`bootstrap/manifests/local-overlays.tsv`](../../bootstrap/manifests/local-overlays.tsv)
+is the authority for overlay locations; uninstall protection reads it directly.
 
 ## Why `.example`?
 

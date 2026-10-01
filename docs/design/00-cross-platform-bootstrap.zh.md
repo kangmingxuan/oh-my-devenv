@@ -108,28 +108,32 @@
 │   │   ├── desktop/
 │   │   │   ├── apt-packages.txt
 │   │   │   ├── Brewfile
-│   │   │   └── maple-mono-nf-cn.env
+│   │   │   ├── maple-mono-nf-cn.env
+│   │   │   └── pacman-packages.txt
 │   │   ├── shell/
 │   │   │   ├── completions.txt
 │   │   │   └── oh-my-zsh-plugins.txt
 │   │   ├── system/
 │   │   │   ├── apt-packages.txt
 │   │   │   ├── Brewfile
-│   │   │   └── mirrors.env
-│   │   └── ecosystem/
-│   │       ├── go-tools.txt
-│   │       └── uv-tools.txt
+│   │   │   └── pacman-packages.txt
+│   │   ├── ecosystem/
+│   │   │   ├── go-tools.txt
+│   │   │   └── uv-tools.txt
+│   │   └── local-overlays.tsv
 │   └── scripts/
 │       ├── common.sh
-│       ├── go-env.sh
 │       ├── install-apt-packages.sh
 │       ├── install-brew-packages.sh
 │       ├── install-maple-mono-font.sh
 │       ├── install-go-tools.sh
 │       ├── install-oh-my-zsh-assets.sh
+│       ├── install-pacman-packages.sh
 │       ├── install-shell-completions.sh
 │       ├── install-uv-tools.sh
-│       ├── mirrors.sh
+│       ├── local-overlays.sh
+│       ├── run-smoke-tests.sh
+│       ├── uninstall.sh
 │       └── xdg-config.sh
 ├── dot_local/share/oh-my-devenv/
 │   └── xdg.sh
@@ -202,7 +206,7 @@
 - 当 shell 层依赖 zsh 时，通过 `apt` 安装 `zsh`
 - 复用与 macOS 相同的 shell 资产脚本安装 `oh-my-zsh` 与插件
 - 只有非 WSL 的 Ubuntu 26.04+ 参与已选择的桌面基线：Ghostty 通过 apt 安装，固定并校验过的 Maple Mono 归档安装到用户字体目录
-- 仅在受支持的 Ubuntu 桌面基线保留 Ghostty 未遵守显式字体设置的 Fontconfig 补丁，同时匹配 `prgname=ghostty` 和 `monospace`；其他应用和平台保留自己的字体偏好。其他环境或关闭桌面基线时渲染合法的空配置，使既有规则正确收敛；字体检查验证已注册的字体样式，不要求改变系统等宽字体
+- 仅在受支持的 Ubuntu 桌面基线保留 Ghostty 未遵守显式字体设置的 Fontconfig 补丁，同时匹配 `prgname=ghostty` 和 `monospace`；其他应用和平台保留自己的字体偏好。其他环境或关闭桌面基线时模板渲染为空，chezmoi 不管理该文件；字体检查验证已注册的字体样式，不要求改变系统等宽字体
 
 ### WSL
 
@@ -335,7 +339,7 @@ uv = "0.11.28"
 
 - 校验 `go` 可用
 - 从 `bootstrap/manifests/` 中的 source-only manifest 路径读取 `go-tools.txt`
-- 通过 `bootstrap/scripts/go-env.sh` 固定 Go 工具安装路径
+- 通过 `bootstrap/scripts/common.sh` 中的 `setup_go_env` 固定 Go 工具安装路径
 - 在未显式覆盖时，将 `GOBIN` 默认设置为 `$HOME/go/bin`
 - 要求每一项都固定为精确的 `module@vX.Y.Z` 版本，否则在安装任何工具之前直接失败
 - 已安装版本与固定版本一致时跳过，除非设置 `DOTFILES_FORCE_REINSTALL=1`

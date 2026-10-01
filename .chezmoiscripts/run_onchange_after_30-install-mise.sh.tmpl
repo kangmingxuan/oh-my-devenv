@@ -8,39 +8,23 @@ scripts_dir="$bootstrap_dir/scripts"
 source "$scripts_dir/common.sh"
 install_error_trap "$0"
 
-# Export the internal mise installer URL override; external mode leaves the
-# environment untouched. See bootstrap/scripts/mirrors.sh.
-dotfiles_apply_mirror_env
-
-mise_bin=""
+{{ if eq .chezmoi.os "darwin" -}}
+BREW_CMD="$(brew_command)"
+eval "$("$BREW_CMD" shellenv)"
+{{ else -}}
+export PATH="$HOME/.local/bin:$PATH"
+{{ end -}}
 
 if command -v mise >/dev/null 2>&1; then
-  mise_bin="$(command -v mise)"
   log_info "mise is already installed."
 else
   log_step "🛠️" "Installing mise..."
 {{ if eq .chezmoi.os "darwin" -}}
-  BREW_CMD="$(brew_command)"
-  eval "$($BREW_CMD shellenv)"
   "$BREW_CMD" install mise
 {{ else -}}
-  mise_install_url="${DOTFILES_MISE_INSTALL_URL:-https://mise.run}"
-  curl -fsSL "$mise_install_url" | sh
+  curl -fsSL "${DOTFILES_MISE_INSTALL_URL:-https://mise.run}" | sh
 {{ end -}}
   log_step "✅" "mise installed successfully."
 fi
 
-if command -v mise >/dev/null 2>&1; then
-  mise_bin="$(command -v mise)"
-elif [[ -x "$HOME/.local/bin/mise" ]]; then
-  mise_bin="$HOME/.local/bin/mise"
-elif [[ -x /opt/homebrew/bin/mise ]]; then
-  mise_bin="/opt/homebrew/bin/mise"
-elif [[ -x /usr/local/bin/mise ]]; then
-  mise_bin="/usr/local/bin/mise"
-else
-  echo "ERROR: mise installed but executable was not found" >&2
-  exit 1
-fi
-
-"$mise_bin" --version
+mise --version

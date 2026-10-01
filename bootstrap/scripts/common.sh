@@ -264,6 +264,13 @@ go_tool_version() {
   printf '%s\n' "$version"
 }
 
+# Go installs binaries into GOBIN, which defaults beneath GOPATH.
+setup_go_env() {
+  export GOPATH="${GOPATH:-$HOME/go}"
+  export GOBIN="${GOBIN:-$GOPATH/bin}"
+  mkdir -p "$GOBIN"
+}
+
 # Resolve the Homebrew executable from PATH or its standard install prefixes.
 brew_command() {
   if command -v brew >/dev/null 2>&1; then
@@ -350,8 +357,5 @@ common_repo_root="$(cd "$common_script_dir/../.." && pwd)"
 source "$common_repo_root/dot_local/share/oh-my-devenv/xdg.sh"
 oh_my_devenv_setup_xdg_dirs
 oh_my_devenv_source_env_file "$XDG_CONFIG_HOME/oh-my-devenv/bootstrap.env"
-
-# shellcheck disable=SC1091
-source "$common_script_dir/mirrors.sh"
 
 unset common_script_dir common_repo_root

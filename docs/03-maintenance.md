@@ -65,7 +65,7 @@ Users pull the latest `main` through `chezmoi update`. Because changes reach mac
 - Direct replacement of superseded behavior, with no compatibility path left behind.
 - A note in the merge request description when a change is expected to be user-visible.
 
-Milestones cut annotated git tags (`v0.<M>.0`). After a milestone's final MR merges, the maintainer pushes the tag manually to keep tagging a deliberate act. Tag messages follow the `v<version> — <milestone-name>` convention. See `CHANGELOG.md` for the versioning policy and the full history.
+Milestones cut annotated git tags (`v0.<M>.0`). After a milestone's final MR merges, the maintainer pushes the tag manually to keep tagging a deliberate act. Tag messages follow the `v<version> — <milestone-name>` convention. See [`design/01-release-and-versioning.en.md`](design/01-release-and-versioning.en.md) for the versioning policy.
 
 ## Dependencies
 
@@ -94,14 +94,13 @@ If you touch the install flow itself, keep the change scoped and review the rele
 Removing a default is as significant as adding one. Before removing:
 
 - Confirm the default is not used by bootstrap scripts or smoke tests.
-- Add a note to the merge request describing what engineers should do on machines that already installed it.
 
 ## Validating Local Environment Boundaries
 
 `$XDG_CONFIG_HOME/oh-my-devenv/env.sh` holds persistent non-secret shell
 environment such as `GOPRIVATE`, `GONOSUMDB`, and `GONOPROXY`. Bash and Zsh read
 it; bootstrap does not. `$XDG_CONFIG_HOME/oh-my-devenv/bootstrap.env` holds
-bootstrap-only controls such as `DOTFILES_MIRROR_MODE`. Neither file may change
+bootstrap-only controls such as `GOPROXY` or `DOTFILES_FORCE_REINSTALL`. Neither file may change
 `XDG_CONFIG_HOME` or `XDG_DATA_HOME`; export custom absolute roots before the
 shell or chezmoi starts.
 
@@ -120,62 +119,24 @@ To validate the consumer boundary:
    bash -lc 'source "$HOME/.bash/env.bash"; printf "%s\n" "${GOPRIVATE:-<unset>}"'
    ```
 
-4. Create `bootstrap.env` from its example, add
-   `export DOTFILES_MIRROR_MODE=external`, and confirm bootstrap sees it:
+4. Create `bootstrap.env` from its example, add a test export such as
+   `export GOPROXY='https://goproxy.internal.example'`, and confirm bootstrap sees it:
 
    ```bash
-   bash -lc 'source bootstrap/scripts/common.sh; printf "%s\n" "${DOTFILES_MIRROR_MODE:-<unset>}"'
+   bash -lc 'source bootstrap/scripts/common.sh; printf "%s\n" "${GOPROXY:-<unset>}"'
    ```
 
 The shell checks should agree with each other; the bootstrap check should reflect
 `bootstrap.env` independently.
-
-## Validating A Mirror Override
-
-Re-running the full bootstrap to confirm that a `DOTFILES_<KEY>` override points at a working mirror is overkill. To validate a single override without touching the rest of the system:
-
-Mirror mode currently covers the consumers wired through `dotfiles_apply_mirror_env`: Go tools (`GOPROXY`), uv tools (`UV_INDEX_URL`), Homebrew API/bottles, the mise installer URL, and the oh-my-zsh main repo URL. It does not rewrite apt sources, mise runtime downloads, or oh-my-zsh plugin repositories.
-
-1. Open a fresh shell session so nothing from a previous `chezmoi apply` leaks in.
-2. Export the override you want to verify, or place the same value in
-   `$XDG_CONFIG_HOME/oh-my-devenv/bootstrap.env`:
-
-   ```bash
-   export DOTFILES_MIRROR_MODE=internal
-   export DOTFILES_GOPROXY='https://goproxy.internal.example'
-   ```
-
-3. Ask `mirrors.sh` to materialize its view of the environment:
-
-   ```bash
-   source bootstrap/scripts/common.sh
-   dotfiles_apply_mirror_env
-   env | grep -E '^(GOPROXY|UV_INDEX_URL|HOMEBREW_|DOTFILES_)'
-   ```
-
-   Only the keys you overrode should appear. `bootstrap/manifests/system/mirrors.env` lists the internal keys only; a key whose manifest value is still a `<placeholder>` and has no `DOTFILES_*` override emits a `WARNING` line instead of being exported. External mode never reads the manifest, so downstream tools keep their own defaults.
-
-4. Exercise the one consumer whose endpoint you changed. Example for `GOPROXY`:
-
-   ```bash
-   bash bootstrap/scripts/install-go-tools.sh bootstrap/manifests/ecosystem/go-tools.txt
-   ```
-
-   If the mirror is unreachable or rejects the request, the failure surfaces immediately with the usual `go install` error instead of being buried under the full bootstrap output.
-
-5. When done, unset the overrides or close the shell. The next `chezmoi apply`
-   returns to the mode encoded in `bootstrap.env`.
-
-`bash bootstrap/scripts/run-smoke-tests.sh` still runs only under the implicit `external` mode, because the CI runner has no way to reach any internal endpoint. The assertions verify the mode-switch logic with fixture manifests and caller overrides, validate the manifest schema, and confirm external mode leaves the environment untouched; they do not dial the mirrors or freeze any endpoint value.
 
 ## Security
 
 - `gitleaks` scans staged diffs on every commit via `pre-commit`. Bootstrap smoke tests run in CI only (see CI section below), not as a pre-commit hook.
 - Secrets and credentials never live in this repository. They stay in local overlays or user-owned stores (`$XDG_CONFIG_HOME/oh-my-devenv/secrets.sh`, `$XDG_CONFIG_HOME/oh-my-devenv/git/config`, `$XDG_CONFIG_HOME/oh-my-devenv/git/hooks/*`, `~/.ssh/config.d/*.conf`, `uv auth`, `~/.npmrc`).
 - `bootstrap/scripts/common.sh` deliberately reads only `$XDG_CONFIG_HOME/oh-my-devenv/bootstrap.env`, never `env.sh` or `secrets.sh`. If Codex, Claude Code, or another automation needs tokens, launch it from a shell that explicitly sourced `secrets.sh` or use that tool's own secret/env injection.
-- The baseline's managed `mise` config defaults GitHub Artifact Attestations verification to off, and the runtime-install hook exports the same default for first bootstrap. This is a reliability tradeoff for shared egress environments (OrbStack VMs, shared CI runners, corp NAT) where anonymous GitHub API rate limits can otherwise break a clean install before the toolchain is usable.
+- The baseline's managed `mise` config turns GitHub Artifact Attestations verification off. This is a reliability tradeoff for shared egress environments (OrbStack VMs, shared CI runners, corp NAT) where anonymous GitHub API rate limits can otherwise break a clean install before the toolchain is usable.
 - The Linux font installer accepts a resumable alternate download URL on supported Arch and Ubuntu desktops, but always verifies the repository-pinned SHA-256 digest and required PostScript names before replacing a baseline-owned font directory.
-- To validate or dogfood the stricter path, opt back in explicitly with `MISE_GITHUB_ATTESTATIONS=true MISE_AQUA_GITHUB_ATTESTATIONS=true chezmoi apply`. Python follows the global setting unless `MISE_PYTHON_GITHUB_ATTESTATIONS` is set separately.
+- To validate or dogfood the stricter path, opt back in explicitly with `MISE_GITHUB_ATTESTATIONS=true MISE_AQUA_GITHUB_ATTESTATIONS=true chezmoi apply`.
 - Report suspected exposed secrets privately to the maintainer; do not open a public issue or MR.
 
 ## CI
@@ -216,7 +177,7 @@ When your active `chezmoi source-path` points **outside** `~/.local/share/` (for
 
 **CI**
 
-`uninstall.sh` is no longer exercised in a dedicated CI job. Treat it as a maintainer-facing operational helper: validate it locally when you change it, and prefer dry-run output inspection before using `--confirm`.
+The smoke suite runs the dry-run preview under `/bin/bash` (Bash 3.2 on macOS) against fixture roots. `--confirm` is not exercised in CI; validate it in a disposable environment when you change it, and inspect the dry-run output before using `--confirm`.
 
 ## Related Documents
 
@@ -226,4 +187,4 @@ When your active `chezmoi source-path` points **outside** `~/.local/share/` (for
 - `docs/02-reference.md` — bootstrap hooks, installed tools, day-to-day commands, and the full environment-variable / flag reference.
 - `CONTRIBUTING.md` — contributor workflow and scope rules.
 - `docs/design/01-release-and-versioning.en.md` — release and versioning policy.
-- `CHANGELOG.md` — human-readable release history per milestone, plus the semver / tagging policy. Every PR that ships a user-visible change updates its `[Unreleased]` section.
+- `CHANGELOG.md` — human-readable release history. Every PR that ships a user-visible change updates its `[Unreleased]` section.

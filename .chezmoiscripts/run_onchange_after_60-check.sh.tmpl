@@ -1,8 +1,4 @@
 {{- $packageManager := includeTemplate "system-package-manager" . -}}
-{{- $desktopBaseline := false -}}
-{{- if hasKey . "desktopBaseline" -}}
-{{- $desktopBaseline = .desktopBaseline -}}
-{{- end -}}
 {{- $isSupportedDesktop := eq (includeTemplate "desktop-platform-supported" .) "true" -}}
 #!/bin/bash
 {{ if eq $packageManager "pacman" -}}
@@ -12,7 +8,7 @@
 {{ else if eq .chezmoi.os "darwin" -}}
 # Brewfile hash: {{ include "bootstrap/manifests/system/Brewfile" | sha256sum }}
 {{ end -}}
-{{ if and $desktopBaseline $isSupportedDesktop -}}
+{{ if and .desktopBaseline $isSupportedDesktop -}}
 # Ghostty config hash: {{ include "xdg_config/ghostty/config.ghostty.tmpl" | sha256sum }}
 # Maple Mono manifest hash: {{ include "bootstrap/manifests/desktop/maple-mono-nf-cn.env" | sha256sum }}
 {{ if eq .chezmoi.os "darwin" -}}
@@ -40,7 +36,6 @@ manifests_dir="$bootstrap_dir/manifests"
 
 source "$scripts_dir/common.sh"
 install_error_trap "$0"
-source "$scripts_dir/go-env.sh"
 
 setup_go_env
 
@@ -348,7 +343,7 @@ if ! bash "$scripts_dir/install-shell-completions.sh" check '{{ .chezmoi.os }}' 
   errors=$((errors + 1))
 fi
 
-{{ if and $desktopBaseline $isSupportedDesktop -}}
+{{ if and .desktopBaseline $isSupportedDesktop -}}
 # Desktop baseline
 desktop_font_manifest_load "$manifests_dir/desktop/maple-mono-nf-cn.env"
 {{ if eq .chezmoi.os "darwin" -}}
@@ -418,7 +413,7 @@ print_version_line chezmoi
 print_version_line git
 print_version_line mise
 print_mise_toolchain
-{{ if and $desktopBaseline $isSupportedDesktop -}}
+{{ if and .desktopBaseline $isSupportedDesktop -}}
 print_version_line ghostty
 {{ end }}
 

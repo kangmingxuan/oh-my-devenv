@@ -1,16 +1,7 @@
-{{- $desktopBaseline := false -}}
-{{- if hasKey . "desktopBaseline" -}}
-{{- $desktopBaseline = .desktopBaseline -}}
-{{- end -}}
-{{- $desktopPlatformSupported := false -}}
-{{- if hasKey . "desktopPlatformSupported" -}}
-{{- $desktopPlatformSupported = .desktopPlatformSupported -}}
-{{- end -}}
-{{- $enableMapleMonoAlias := and (eq .chezmoi.os "linux") $desktopBaseline $desktopPlatformSupported
-    (eq (get .chezmoi.osRelease "id") "ubuntu") -}}
+{{- if and .desktopBaseline .desktopPlatformSupported (eq .chezmoi.os "linux") (eq (get .chezmoi.osRelease "id") "ubuntu") -}}
 <?xml version="1.0"?>
 <!DOCTYPE fontconfig SYSTEM "urn:fontconfig:fonts.dtd">
-<fontconfig>{{ if $enableMapleMonoAlias }}
+<fontconfig>
   <description>Ubuntu Ghostty font discovery workaround for {{ .desktopFontFamily }}</description>
 
   <!--
@@ -29,7 +20,5 @@
       <string>{{ .desktopFontFamily }}</string>
     </edit>
   </match>
-{{- else }}
-  <!-- Intentionally inactive outside the supported Ubuntu desktop baseline. -->
-{{- end }}
 </fontconfig>
+{{ end -}}
