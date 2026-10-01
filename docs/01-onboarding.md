@@ -67,8 +67,8 @@ On supported Ubuntu machines, the desktop baseline also manages
 works around an observed Ubuntu issue where Ghostty falls back to the distro's
 monospace font despite its explicit `font-family` setting. It applies only to
 Ghostty's `monospace` requests (`prgname=ghostty`); other applications keep their
-font preferences. Other platforms, or disabling `desktopBaseline`, render a
-valid inactive fragment on apply, replacing any previously active rule.
+font preferences. On other platforms, or with `desktopBaseline` disabled, the
+template renders empty and chezmoi does not manage the file.
 
 ---
 
@@ -90,7 +90,7 @@ Bootstrap is split into ordered hooks under `.chezmoiscripts/`:
 
 The generated chezmoi config excludes scripts from `chezmoi status`, so routine hook runs do not make a clean setup look locally modified.
 
-The baseline also defaults `mise` GitHub attestation verification to off during installs, because fresh machines behind a shared egress IP can otherwise hit GitHub API rate limits while fetching `uv`, `golangci-lint`, or Python. If you explicitly want attestation verification on your machine, re-run with `MISE_GITHUB_ATTESTATIONS=true MISE_AQUA_GITHUB_ATTESTATIONS=true`. Python follows that global setting unless you set `MISE_PYTHON_GITHUB_ATTESTATIONS` separately.
+The managed `mise` config turns GitHub attestation verification off, because fresh machines behind a shared egress IP can otherwise hit GitHub API rate limits while fetching `uv`, `golangci-lint`, or Python. If you explicitly want attestation verification on your machine, re-run with `MISE_GITHUB_ATTESTATIONS=true MISE_AQUA_GITHUB_ATTESTATIONS=true`.
 
 ---
 
@@ -100,7 +100,7 @@ The last hook runs `run_onchange_after_60-check.sh`. On success you should see:
 
 - The line **`All checks passed.`**
 - A block titled **`Core tools in this environment:`** listing versions for `chezmoi`, `git`, `mise`, and every tool in the current mise configuration (for example `go`, `node`, `python`, `uv`, and `golangci-lint`).
-- A short **`Next steps:`** list at the very end (shell reload hint, this onboarding doc, `docs/local-overlay-examples/`, corporate-network + `DOTFILES_MIRROR_MODE`, and the Bug issue template) so you are not dropped back to a silent prompt after a long apply.
+- A short **`Next steps:`** list at the very end (shell reload hint, this onboarding doc, `docs/local-overlay-examples/`, restricted-network overrides, and the Bug issue template) so you are not dropped back to a silent prompt after a long apply.
 
 If anything fails, the script exits non-zero and prints diagnostic hints — see **Something broke** below.
 
@@ -111,10 +111,9 @@ If anything fails, the script exits non-zero and prints diagnostic hints — see
 If you are on a corporate or otherwise restricted network, public registries may be slow or blocked. Keep those private endpoints local to your machine rather than baking them into the public baseline. Start from [**Local overlay examples**](local-overlay-examples/README.md) before your first apply:
 
 - Put persistent Go settings in `$XDG_CONFIG_HOME/oh-my-devenv/env.sh`
-- Put bootstrap mirror settings in `$XDG_CONFIG_HOME/oh-my-devenv/bootstrap.env`
+- Put bootstrap endpoint overrides such as `GOPROXY`, `UV_INDEX_URL`, or the Homebrew domains in `$XDG_CONFIG_HOME/oh-my-devenv/bootstrap.env`; every bootstrap script reads it before `chezmoi init --apply` installs anything
 - Keep internal npm scopes in `~/.npmrc`, not in shell startup files
 - Keep Python internal indexes project-local and `uv`-only
-- Set **`DOTFILES_MIRROR_MODE`** in `bootstrap.env` or export it before `chezmoi init --apply` when bootstrap itself needs mirror endpoints
 - On Ubuntu, the pinned Maple Mono archive uses a resumable download and SHA-256 verification. If GitHub Releases is unavailable, set **`DOTFILES_MAPLE_MONO_URL`** to an alternate URL serving the exact same archive.
 
 ---
@@ -130,7 +129,7 @@ If you are on a corporate or otherwise restricted network, public registries may
 ## Something broke
 
 1. Re-run with **`chezmoi apply --verbose --debug`** (or `chezmoi init --apply ...` again) and capture the failing step.
-2. If the bootstrap warned about overwriting existing files, inspect backups under **`${XDG_STATE_HOME:-$HOME/.local/state}/chezmoi-first-run-backup/<timestamp>/`**.
+2. If the bootstrap warned about overwriting existing files, inspect backups under **`${XDG_STATE_HOME:-$HOME/.local/state}/chezmoi-first-run-backup/<timestamp>/`**, where each file keeps its original absolute path.
 3. Open an issue using the repository's bug-report workflow so the report includes OS, command, and logs.
 
 Do **not** paste secrets, tokens, or internal hostnames into public issues.

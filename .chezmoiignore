@@ -28,4 +28,3 @@ bootstrap
 bootstrap/**
 xdg_config
 xdg_config/**
-.ci-chezmoi-data.toml

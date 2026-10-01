@@ -108,28 +108,32 @@ Recommended structure:
 │   │   ├── desktop/
 │   │   │   ├── apt-packages.txt
 │   │   │   ├── Brewfile
-│   │   │   └── maple-mono-nf-cn.env
+│   │   │   ├── maple-mono-nf-cn.env
+│   │   │   └── pacman-packages.txt
 │   │   ├── shell/
 │   │   │   ├── completions.txt
 │   │   │   └── oh-my-zsh-plugins.txt
 │   │   ├── system/
 │   │   │   ├── apt-packages.txt
 │   │   │   ├── Brewfile
-│   │   │   └── mirrors.env
-│   │   └── ecosystem/
-│   │       ├── go-tools.txt
-│   │       └── uv-tools.txt
+│   │   │   └── pacman-packages.txt
+│   │   ├── ecosystem/
+│   │   │   ├── go-tools.txt
+│   │   │   └── uv-tools.txt
+│   │   └── local-overlays.tsv
 │   └── scripts/
 │       ├── common.sh
-│       ├── go-env.sh
 │       ├── install-apt-packages.sh
 │       ├── install-brew-packages.sh
 │       ├── install-maple-mono-font.sh
 │       ├── install-go-tools.sh
 │       ├── install-oh-my-zsh-assets.sh
+│       ├── install-pacman-packages.sh
 │       ├── install-shell-completions.sh
 │       ├── install-uv-tools.sh
-│       ├── mirrors.sh
+│       ├── local-overlays.sh
+│       ├── run-smoke-tests.sh
+│       ├── uninstall.sh
 │       └── xdg-config.sh
 ├── dot_local/share/oh-my-devenv/
 │   └── xdg.sh
@@ -202,7 +206,7 @@ Requirements:
 - Install `zsh` via `apt` when the shell layer depends on it
 - Reuse the same shell asset script as macOS to install `oh-my-zsh` and plugins
 - Only non-WSL Ubuntu 26.04+ participates in the selected desktop baseline: install Ghostty through apt and the pinned, verified Maple Mono archive in the user font directory
-- Only on the supported Ubuntu desktop baseline, retain the Fontconfig workaround for Ghostty ignoring its explicit font-family setting; match `prgname=ghostty` and `monospace`. Other applications and platforms keep their font preferences. Render a valid no-op elsewhere or when disabled so previously enabled machines converge cleanly; font validation checks registered faces rather than the system monospace alias
+- Only on the supported Ubuntu desktop baseline, retain the Fontconfig workaround for Ghostty ignoring its explicit font-family setting; match `prgname=ghostty` and `monospace`. Other applications and platforms keep their font preferences. Elsewhere, or when disabled, the template renders empty and chezmoi does not manage the file; font validation checks registered faces rather than the system monospace alias
 
 ### WSL
 
@@ -335,7 +339,7 @@ uv = "0.11.28"
 
 - Validate `go` is available
 - Read `go-tools.txt` from a source-only manifest path under `bootstrap/manifests/`
-- Source `bootstrap/scripts/go-env.sh` to keep Go tools on a stable install path
+- Call `setup_go_env` from `bootstrap/scripts/common.sh` to keep Go tools on a stable install path
 - Default `GOBIN` to `$HOME/go/bin` when no override is provided
 - Require every entry to pin an exact `module@vX.Y.Z` version and fail before installing anything otherwise
 - Skip tools already installed at the pinned version unless `DOTFILES_FORCE_REINSTALL=1`

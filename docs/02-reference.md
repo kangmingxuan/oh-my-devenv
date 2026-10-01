@@ -27,7 +27,8 @@ manifest changes (chezmoi tracks a content hash), so routine re-applies are chea
 | 9 | `run_onchange_after_55-install-shell-completions` | Generates official CLI completion assets in the standard Bash and Zsh user data directories. |
 | 10 | `run_onchange_after_60-check` | Final environment check against the same manifests the installers consumed. On success prints **`All checks passed.`**, a core-tool version list, and a short next-steps block. |
 
-The first-run backups land under
+The first-run backup copies every pre-existing target of the main and XDG
+sources to the same absolute path beneath
 `${XDG_STATE_HOME:-$HOME/.local/state}/chezmoi-first-run-backup/<timestamp>/`.
 The nested XDG source uses an independent chezmoi state file at
 `${XDG_STATE_HOME:-$HOME/.local/state}/chezmoi/oh-my-devenv-xdg.boltdb`, so it
@@ -67,8 +68,8 @@ On supported Ubuntu desktops only (26.04+ outside WSL),
 `$XDG_CONFIG_HOME/fontconfig/conf.d/99-oh-my-devenv-maple-mono-nf-cn.conf` works
 around an observed failure to honor that setting. The rule matches both
 `prgname=ghostty` and `monospace`; it leaves other applications and explicitly
-preferred font families alone. Other platforms render a valid inactive fragment,
-so applying also clears the earlier broad rule on Arch. The final check verifies
+preferred font families alone. Elsewhere the template renders empty, so chezmoi
+does not manage the file. The final check verifies
 Ghostty's configuration and the installed faces declared in
 `bootstrap/manifests/desktop/maple-mono-nf-cn.env`, without imposing a system
 `monospace` preference. Ubuntu rendering remains the manual acceptance check
@@ -154,28 +155,18 @@ directories are never touched.
 | `NO_EMOJI=1` | off | Disable emoji in bootstrap output. |
 | `NO_COLOR=1` | off | Disable colored output. |
 
-### Mirror mode (restricted networks)
+### Restricted networks
 
-Mirror mode only rewrites the endpoints wired through `dotfiles_apply_mirror_env`:
-`GOPROXY`, `UV_INDEX_URL`, the Homebrew API/bottle domains, the mise installer URL,
-and the oh-my-zsh main-repo URL. It does **not** rewrite apt sources, mise runtime
-downloads, or oh-my-zsh plugin repos. In `external` mode nothing is exported and
-each tool keeps its own default; `internal` mode exports the keys listed in
-`bootstrap/manifests/system/mirrors.env`, with your `DOTFILES_*` overrides
-taking precedence. See
-[`03-maintenance.md`](03-maintenance.md#validating-a-mirror-override) for how to
-validate a single override.
+Export each tool's native variable in
+`$XDG_CONFIG_HOME/oh-my-devenv/bootstrap.env`; every bootstrap script sources it
+through `bootstrap/scripts/common.sh`, and shells never read it. Examples are
+`GOPROXY`, `UV_INDEX_URL`, `HOMEBREW_API_DOMAIN`, and `HOMEBREW_BOTTLE_DOMAIN`.
+Two downloads have no native variable, so the baseline reads its own:
 
 | Variable | Default | Effect |
 |----------|---------|--------|
-| `DOTFILES_MIRROR_MODE` | `external` | `external`, `internal`, or `auto`. Selects which endpoint set to apply. |
-| `DOTFILES_INTERNAL_PROBE_URL` | unset | URL probed when mode is `auto` to decide internal vs external. |
-| `DOTFILES_GOPROXY` | — | Override the Go module proxy. |
-| `DOTFILES_UV_INDEX_URL` | — | Override the uv package index. |
-| `DOTFILES_HOMEBREW_API_DOMAIN` | — | Override the Homebrew API domain. |
-| `DOTFILES_HOMEBREW_BOTTLE_DOMAIN` | — | Override the Homebrew bottle domain. |
-| `DOTFILES_MISE_INSTALL_URL` | — | Override the mise installer URL. |
-| `DOTFILES_OH_MY_ZSH_GIT_URL` | — | Override the oh-my-zsh main-repo clone URL. |
+| `DOTFILES_MISE_INSTALL_URL` | `https://mise.run` | Linux mise installer URL. |
+| `DOTFILES_OH_MY_ZSH_GIT_URL` | `https://github.com/ohmyzsh/ohmyzsh.git` | oh-my-zsh clone URL. Plugin repositories always clone from github.com. |
 
 ### Pinned artifact downloads
 
@@ -193,12 +184,12 @@ validate a single override.
 
 | Variable | Default | Effect |
 |----------|---------|--------|
-| `MISE_GITHUB_ATTESTATIONS` | `false` | GitHub artifact attestation verification. Off by default for reliability on shared-egress networks. |
-| `MISE_AQUA_GITHUB_ATTESTATIONS` | `false` | Same, for mise's aqua backend. |
-| `MISE_PYTHON_GITHUB_ATTESTATIONS` | inherits `MISE_GITHUB_ATTESTATIONS` | Python-specific override. |
 | `MISE_SHIMS_DIR` | `$HOME/.local/share/mise/shims` | Shim directory placed on `PATH`. |
 
-To opt back into attestation verification for a run:
+The managed `$XDG_CONFIG_HOME/mise/config.toml` disables GitHub attestation
+verification (`github_attestations` and `aqua.github_attestations`) because
+shared egress IPs exhaust GitHub's anonymous API rate limit. mise's own
+environment variables override it for a single run:
 
 ```bash
 MISE_GITHUB_ATTESTATIONS=true MISE_AQUA_GITHUB_ATTESTATIONS=true chezmoi apply
@@ -224,7 +215,7 @@ common slots:
 
 - [`01-onboarding.md`](01-onboarding.md) — the guided first-run walkthrough.
 - [`local-overlay-examples/README.md`](local-overlay-examples/README.md) — customization templates.
-- [`03-maintenance.md`](03-maintenance.md) — maintainer workflow, mirror validation, and dependency hygiene.
+- [`03-maintenance.md`](03-maintenance.md) — maintainer workflow and dependency hygiene.
 - [`design/00-cross-platform-bootstrap.en.md`](design/00-cross-platform-bootstrap.en.md) — why the layered model looks the way it does.
 
 ### Arch Linux and Omarchy integration

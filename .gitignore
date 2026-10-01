@@ -29,11 +29,6 @@ Desktop.ini
 *.key
 *.p12
 
-# Local chezmoi render / test data
-.ci-chezmoi-data.toml
-chezmoi.toml
-chezmoi-data.toml
-
 # Logs, caches, and temporary files
 *.log
 *.tmp

@@ -23,7 +23,10 @@ repo_root="$(cd "$script_dir/../.." && pwd)"
 # shellcheck disable=SC1091
 source "$script_dir/common.sh"
 
-if ! command -v chezmoi >/dev/null 2>&1; then
+# Inside a chezmoi hook, use the binary running the apply; standalone callers
+# use chezmoi from PATH.
+chezmoi_bin="${CHEZMOI_EXECUTABLE:-chezmoi}"
+if ! command -v "$chezmoi_bin" >/dev/null 2>&1; then
   printf 'ERROR: chezmoi is required to manage XDG configuration\n' >&2
   exit 1
 fi
@@ -57,7 +60,7 @@ if [[ -n "$config_file" ]]; then
 fi
 
 desktop_platform_supported="$(
-  chezmoi "${chezmoi_config_args[@]}" --source="$repo_root" execute-template \
+  "$chezmoi_bin" ${chezmoi_config_args[@]+"${chezmoi_config_args[@]}"} --source="$repo_root" execute-template \
     '{{ includeTemplate "desktop-platform-supported" . }}'
 )"
 
@@ -74,8 +77,8 @@ override_data="$(printf '{"desktopPlatformSupported":%s,"desktopFontFamily":"%s"
   "$desktop_platform_supported_json" "$MAPLE_MONO_FAMILY")"
 
 xdg_chezmoi=(
-  chezmoi
-  "${chezmoi_config_args[@]}"
+  "$chezmoi_bin"
+  ${chezmoi_config_args[@]+"${chezmoi_config_args[@]}"}
   --persistent-state="$xdg_persistent_state"
   --source="$xdg_source"
   --destination="$XDG_CONFIG_HOME"

@@ -21,12 +21,6 @@ fi
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091
 source "$script_dir/common.sh"
-# shellcheck disable=SC1091
-source "$script_dir/go-env.sh"
-
-# Export the internal GOPROXY override before `go install`; external mode
-# leaves the environment untouched. See bootstrap/scripts/mirrors.sh.
-dotfiles_apply_mirror_env
 
 setup_go_env
 
@@ -45,8 +39,9 @@ if [[ ${#tools[@]} -eq 0 ]]; then
 fi
 
 # Every entry must pin an exact module version before anything is installed.
+versions=()
 for tool in "${tools[@]}"; do
-  go_tool_version "$tool" >/dev/null || exit 1
+  versions+=("$(go_tool_version "$tool")") || exit 1
 done
 
 installed_go_tool_version() {
@@ -66,9 +61,10 @@ installed_go_tool_version() {
 echo "==> Syncing Go tools from $MANIFEST"
 echo "==> Using GOBIN=$GOBIN"
 
-for tool in "${tools[@]}"; do
+for index in "${!tools[@]}"; do
+  tool="${tools[$index]}"
   binary="$(go_tool_binary_name "$tool")"
-  requested_version="$(go_tool_version "$tool")"
+  requested_version="${versions[$index]}"
 
   current_version=""
   if [[ "$force_reinstall" != "1" ]]; then
