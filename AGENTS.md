@@ -19,7 +19,7 @@ The smoke suite renders templates, checks behavior and contracts, exercises sele
 
 ## Coding Style & Naming Conventions
 
-Write Bash with `set -euo pipefail`, two-space indentation, quoted expansions, and `snake_case` functions and variables. Keep shared behavior in `bootstrap/scripts/common.sh`. Preserve chezmoi naming (`dot_zshrc.tmpl`, `private_dot_ssh/`) and numbered hook ordering such as `run_onchange_after_40-install-runtimes.sh.tmpl`. Match existing Markdown and YAML formatting; ShellCheck is the enforced shell linter.
+Write Bash with `set -euo pipefail`, two-space indentation, quoted expansions, and `snake_case` functions and variables. All repository Bash code, including Linux-only scripts and managed Bash dotfiles, must be compatible with Bash 3.2, the macOS `/bin/bash`. Keep shared behavior in `bootstrap/scripts/common.sh`. Preserve chezmoi naming (`dot_zshrc.tmpl`, `private_dot_ssh/`) and numbered hook ordering such as `run_onchange_after_40-install-runtimes.sh.tmpl`. Match existing Markdown and YAML formatting; ShellCheck is the enforced shell linter.
 
 ## Design Principles
 

@@ -1,9 +1,9 @@
 # macOS Preflight Checklist
 
 The `smoke-tests-macos` GitHub Actions job runs the smoke suite on
-`macos-latest`. It renders and syntax-checks templates, validates contracts and
-deployment boundaries, and exercises selected behavior with stubs and temporary
-roots. What CI still does **not** do on macOS is a complete install: it never
+`macos-latest` using the system `/bin/bash` (Bash 3.2). It renders and
+syntax-checks templates, validates contracts and deployment boundaries, and
+exercises selected behavior with stubs and temporary roots. What CI still does **not** do on macOS is a complete install: it never
 runs `brew bundle`, installs mise runtimes, or builds the Go/uv tools. Personal
 Macs are intentionally not mounted as self-hosted runners.
 
@@ -167,6 +167,10 @@ example a Darwin-only template arm that ShellCheck would not render on Linux):
 ```bash
 bash bootstrap/scripts/run-smoke-tests.sh
 ```
+
+If a newer Bash is first on `PATH`, use the
+[system Bash check in `CONTRIBUTING.md`](../CONTRIBUTING.md#templates-and-rendering)
+to verify Bash 3.2 compatibility.
 
 Expected outcome: `Smoke tests passed.` You may reuse a passing local Mac result
 for the same reviewed source and relevant check environment, or the
