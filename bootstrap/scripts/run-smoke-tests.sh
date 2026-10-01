@@ -1188,27 +1188,34 @@ printf '%s\n' '--bad-option' >"$pacman_manifest"
 expect_failure "$tmp_dir/pacman.err" run_pacman_installer
 assert_file_contains "$tmp_dir/pacman.err" "invalid pacman package"
 
-log_step "🔍" "Checking Bash 3.2 compatibility and running shellcheck..."
-# All Bash code must run on macOS /bin/bash 3.2. `bash -n` rejects newer syntax;
-# the pattern below rejects Bash 4+ builtins and expansions that only fail when
-# executed, which ShellCheck does not flag.
-# Bracketed letters keep the pattern from matching its own definition.
-bash4_pattern='(^|[^[:alnum:]_])(ma[p]file|rea[d]array|co[p]roc)([^[:alnum:]_]|$)|declare -[a-zA-Z]*A|local -[a-zA-Z]*A|\$\{[^}]*(,,|\^\^)[^}]*\}'
-for bash_source in \
-  "$repo_root"/bootstrap/scripts/*.sh \
-  "$repo_root"/.chezmoiscripts/*.sh.tmpl \
-  "$repo_root"/dot_bashrc.tmpl \
-  "$repo_root"/dot_bash/env.bash.tmpl \
-  "$repo_root"/dot_bash_profile \
-  "$repo_root"/dot_profile \
-  "$repo_root"/dot_local/share/oh-my-devenv/xdg.sh; do
-  if [[ "$bash_source" == *.sh && "$bash_source" != */.chezmoiscripts/* ]]; then
+log_step "🐚" "Checking Bash 3.2 compatibility..."
+# All Bash code must run on macOS /bin/bash 3.2. Bash sources are discovered:
+# files with a Bash shebang or ShellCheck directive, Bash dotfiles, and Bash
+# overlay examples. `bash -n` rejects newer syntax; the pattern rejects Bash 4+
+# features that parse under Bash 3.2 and fail only when executed, which
+# ShellCheck does not flag: mapfile/readarray/coproc, wait -n, declare/typeset/
+# local attributes -A -g -l -n -u, case-modifying and @ transformations,
+# negative subscripts, and [[ -v ]]. Bracketed letters keep the pattern from
+# matching its own definition.
+bash4_pattern='(^|[^[:alnum:]_])(ma[p]file|rea[d]array|co[p]roc)([^[:alnum:]_]|$)|wa[i]t +-n|(de[c]lare|ty[p]eset|lo[c]al) +-[a-zA-Z]*[Aglnu]|\$\{#?[A-Za-z_][A-Za-z0-9_]*(\[[^]]*\])?([\^,]|@[QEPAaKk])|\[[ ]*-[0-9]+[ ]*\]\}|\[\[ +-[v] '
+bash_sources="$(
+  {
+    grep -rlE --exclude-dir=.git --exclude='*.md' '^#!.*bash|^# shellcheck shell=bash' "$repo_root"
+    find "$repo_root" -path "$repo_root/.git" -prune -o -type f \
+      \( -name 'dot_bash*' -o -path '*/dot_bash/*' -o -name dot_profile \
+      -o -name '*.bash' -o -name '*.bash.example' \) -print
+  } | sort -u
+)"
+[[ -n "$bash_sources" ]] || fail_test "no Bash sources discovered"
+while IFS= read -r bash_source; do
+  if [[ "$bash_source" != *.tmpl ]]; then
     syntax_check bash "$bash_source"
   fi
   if grep -nE -- "$bash4_pattern" "$bash_source" | grep -vE '^[0-9]+:[[:space:]]*#'; then
     fail_test "Bash 4+ construct in $bash_source; Bash code must run on Bash 3.2"
   fi
-done
+done <<<"$bash_sources"
+log_step "🔍" "Running shellcheck on bootstrap scripts..."
 shellcheck "$repo_root"/bootstrap/scripts/*.sh \
   "$repo_root/docs/local-overlay-examples/git-pre-push.example"
 
