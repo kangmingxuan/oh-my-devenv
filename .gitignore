@@ -15,8 +15,16 @@ Desktop.ini
 *.swn
 *~
 
-# Local agent / assistant state
-.agents/
+# Keep the repository skill. Ignore other agent / assistant state.
+.agents/*
+!.agents/skills/
+.agents/skills/*
+!.agents/skills/refresh-devenv-baseline/
+.agents/skills/refresh-devenv-baseline/*
+!.agents/skills/refresh-devenv-baseline/SKILL.md
+!.agents/skills/refresh-devenv-baseline/agents/
+.agents/skills/refresh-devenv-baseline/agents/*
+!.agents/skills/refresh-devenv-baseline/agents/openai.yaml
 .claude/
 .codex/
 .kimi-code/

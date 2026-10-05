@@ -12,7 +12,7 @@ docs/**
 .github
 .github/**
 
-# Local or assistant/runtime state must not be deployed from this source tree.
+# Repository skills and local agent state must not be deployed into HOME.
 .agents
 .agents/**
 .claude
