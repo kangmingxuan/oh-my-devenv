@@ -271,6 +271,32 @@ check_manifest_cmds() {
   done <<<"$entries"
 }
 
+# An installed uv tool must still run on the Python its environment was built on.
+check_uv_tool_envs() {
+  local manifest="$1"
+  local entries=""
+  local tool_dir=""
+  local tool_spec=""
+  local name=""
+  local problem=""
+
+  if ! entries="$(manifest_entries "$manifest")" || ! tool_dir="$(uv tool dir 2>/dev/null)"; then
+    errors=$((errors + 1))
+    return 0
+  fi
+
+  while IFS= read -r tool_spec; do
+    [[ -n "$tool_spec" ]] || continue
+    name="$(uv_tool_binary_name "$tool_spec")"
+    # check_manifest_cmds reports a tool that is not installed.
+    [[ -d "$tool_dir/$name" ]] || continue
+    if ! problem="$(uv_tool_env_healthy "$tool_dir" "$name")"; then
+      log_warning "uv tool $name: $problem. Run \`bash $scripts_dir/install-uv-tools.sh $manifest\` to rebuild it."
+      errors=$((errors + 1))
+    fi
+  done <<<"$entries"
+}
+
 check_oh_my_zsh_plugins() {
   local manifest="$1"
   local zsh_custom_dir="$2"
@@ -333,6 +359,7 @@ check_mise_toolchain
 # Ecosystem tools
 check_manifest_cmds "$manifests_dir/ecosystem/go-tools.txt" go_tool_binary_name
 check_manifest_cmds "$manifests_dir/ecosystem/uv-tools.txt" uv_tool_binary_name
+check_uv_tool_envs "$manifests_dir/ecosystem/uv-tools.txt"
 
 # Shell assets
 oh_my_zsh_dir="$(oh_my_devenv_oh_my_zsh_dir)"

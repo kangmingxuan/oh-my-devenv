@@ -349,14 +349,16 @@ uv = "0.11.28"
 
 - Read `uv-tools.txt` from a source-only manifest path under `bootstrap/manifests/`
 - Install tools from the manifest using the declared requirement specifiers
-- Reinstall tools so version changes in the manifest take effect on the next bootstrap run
+- Skip tools already installed at the pinned version unless `DOTFILES_FORCE_REINSTALL=1`
+- Rebuild an installed tool whose environment interpreter is missing or reports a different version than the environment records; uninstall it first, because `uv tool install --reinstall` keeps the stale environment
+- Run again when the mise configuration changes, because the tools run on the mise-managed Python
 - Repeated execution must be safe
 
 ### `run_onchange_after_60-check`
 
 - Consume the same declared inventories as the installers instead of a second hard-coded tool list
 - Validate apt manifests with `dpkg-query`, Brewfiles with `brew bundle check`, and the mise configuration with `mise ls --missing`
-- Check ecosystem manifests by binary name, the completion manifest through the installer's `check` action, and the font manifest's family and faces through Fontconfig on Linux or the user font directory on macOS
+- Check ecosystem manifests by binary name, report uv tool environments that no longer run on the Python they were built on, the completion manifest through the installer's `check` action, and the font manifest's family and faces through Fontconfig on Linux or the user font directory on macOS
 - Print the mise-managed toolchain from `mise current` so the summary follows the configuration
 
 ## 11. PATH and Compatibility

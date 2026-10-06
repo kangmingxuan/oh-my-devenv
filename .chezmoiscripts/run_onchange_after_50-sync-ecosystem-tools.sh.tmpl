@@ -2,6 +2,8 @@
 #!/bin/bash
 # go-tools.txt hash: {{ include "bootstrap/manifests/ecosystem/go-tools.txt" | sha256sum }}
 # uv-tools.txt hash: {{ include "bootstrap/manifests/ecosystem/uv-tools.txt" | sha256sum }}
+# uv tools run on the mise-managed Python, so a Python change must rebuild them.
+# mise config hash: {{ include "xdg_config/mise/config.toml.tmpl" | sha256sum }}
 
 set -euo pipefail
 

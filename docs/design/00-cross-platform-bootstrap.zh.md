@@ -349,14 +349,16 @@ uv = "0.11.28"
 
 - 从 `bootstrap/manifests/` 中的 source-only manifest 路径读取 `uv-tools.txt` 清单文件
 - 按 manifest 中声明的 requirement 安装工具
-- 使用重装模式确保版本变更在下一次 bootstrap 时生效
+- 已安装版本与固定版本一致时跳过，除非设置 `DOTFILES_FORCE_REINSTALL=1`
+- 已安装工具的环境解释器缺失，或解释器版本与环境记录的版本不一致时，重建该工具；先卸载再安装，因为 `uv tool install --reinstall` 会保留过期的环境
+- mise 配置变化时重新执行，因为这些工具运行在 mise 管理的 Python 上
 - 重复执行必须安全
 
 ### `run_onchange_after_60-check`
 
 - 复用安装器消费的同一份清单，而不是维护第二份硬编码工具列表
 - 用 `dpkg-query` 校验 apt 清单，用 `brew bundle check` 校验 Brewfile，用 `mise ls --missing` 校验 mise 配置
-- 按二进制名称检查生态工具清单，通过安装器的 `check` 动作检查补全清单，并在 Linux 上通过 Fontconfig、在 macOS 上通过用户字体目录检查字体清单声明的字体族与字面
+- 按二进制名称检查生态工具清单，报告不再运行在构建时 Python 上的 uv 工具环境，通过安装器的 `check` 动作检查补全清单，并在 Linux 上通过 Fontconfig、在 macOS 上通过用户字体目录检查字体清单声明的字体族与字面
 - 用 `mise current` 输出 mise 管理的工具链，使摘要跟随配置变化
 
 ## 11. PATH 与兼容性

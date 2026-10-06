@@ -1597,6 +1597,63 @@ printf '%s\n' '--bad-option' >"$pacman_manifest"
 expect_failure "$tmp_dir/pacman.err" run_pacman_installer
 assert_file_contains "$tmp_dir/pacman.err" "invalid pacman package"
 
+log_step "🐍" "Exercising the uv tool installer against stale tool environments..."
+# Every fixture interpreter reports Python 3.13.16. The environments record the
+# Python they were built on, as uv writes it into pyvenv.cfg.
+uv_stub_bin="$tmp_dir/uv-stub-bin"
+uv_tool_dir="$tmp_dir/uv-tools"
+uv_manifest="$tmp_dir/uv-tools.txt"
+uv_log="$tmp_dir/uv-args"
+mkdir -p "$uv_stub_bin" "$tmp_dir/uv-python"
+cat >"$uv_stub_bin/uv" <<'STUB'
+#!/usr/bin/env bash
+case "$1 $2" in
+  "tool dir") printf '%s\n' "$UV_TEST_TOOL_DIR" ;;
+  "tool list") [[ -z "${UV_TEST_LIST_EXIT:-}" ]] || exit "$UV_TEST_LIST_EXIT"; printf 'healthy v1.0\n- healthy\ndrifted v1.0\n- drifted\norphaned v1.0\n- orphaned\nbumped v0.9\n- bumped\n' ;;
+  *) printf '%s\n' "$*" >>"$UV_TEST_LOG" ;;
+esac
+STUB
+printf '#!/bin/sh\necho 3.13.16\n' >"$tmp_dir/uv-python/python"
+chmod +x "$uv_stub_bin/uv" "$tmp_dir/uv-python/python"
+make_uv_tool_env() {
+  mkdir -p "$uv_tool_dir/$1/bin"
+  printf 'home = %s\nversion_info = %s\n' "$tmp_dir/uv-python" "$2" >"$uv_tool_dir/$1/pyvenv.cfg"
+  ln -s "$3" "$uv_tool_dir/$1/bin/python"
+}
+make_uv_tool_env healthy 3.13.16.final.0 "$tmp_dir/uv-python/python"
+make_uv_tool_env drifted 3.13.14 "$tmp_dir/uv-python/python"
+make_uv_tool_env orphaned 3.13.14 "$tmp_dir/uv-python-removed/python"
+make_uv_tool_env bumped 3.13.14 "$tmp_dir/uv-python/python"
+printf 'healthy==1.0\ndrifted==1.0\norphaned==1.0\nbumped==1.0\nabsent==1.0\n' >"$uv_manifest"
+
+uv_tool_env_healthy "$uv_tool_dir" healthy >/dev/null \
+  || fail_test "a uv tool environment on its recorded Python must be healthy"
+[[ "$(uv_tool_env_healthy "$uv_tool_dir" drifted)" == "built on Python 3.13.14 but runs Python 3.13.16" ]] \
+  || fail_test "a uv tool environment on a different Python must report the drift"
+[[ "$(uv_tool_env_healthy "$uv_tool_dir" orphaned)" == "interpreter is missing" ]] \
+  || fail_test "a uv tool environment without its interpreter must report it"
+
+run_uv_installer() {
+  : >"$uv_log"
+  PATH="$uv_stub_bin:$PATH" UV_TEST_TOOL_DIR="$uv_tool_dir" UV_TEST_LOG="$uv_log" \
+    bash "$repo_root/bootstrap/scripts/install-uv-tools.sh" "$uv_manifest" >/dev/null
+}
+run_uv_installer
+printf '%s\n' 'tool uninstall drifted' 'tool install drifted==1.0' \
+  'tool uninstall orphaned' 'tool install orphaned==1.0' 'tool uninstall bumped' 'tool install bumped==1.0' \
+  'tool install absent==1.0' >"$tmp_dir/uv-expected"
+cmp -s "$tmp_dir/uv-expected" "$uv_log" \
+  || fail_test "uv installer must rebuild only stale tool environments: $(<"$uv_log")"
+DOTFILES_FORCE_REINSTALL=1 run_uv_installer
+printf '%s\n' 'tool uninstall healthy' 'tool install healthy==1.0' 'tool uninstall drifted' \
+  'tool install drifted==1.0' 'tool uninstall orphaned' 'tool install orphaned==1.0' \
+  'tool uninstall bumped' 'tool install bumped==1.0' 'tool install absent==1.0' >"$tmp_dir/uv-expected"
+cmp -s "$tmp_dir/uv-expected" "$uv_log" \
+  || fail_test "uv installer must rebuild every installed tool on force reinstall: $(<"$uv_log")"
+if UV_TEST_LIST_EXIT=42 run_uv_installer 2>/dev/null; then
+  fail_test "uv installer must fail when uv cannot list installed tools"
+fi
+
 log_step "🐚" "Checking Bash 3.2 compatibility..."
 # All Bash code must run on macOS /bin/bash 3.2. Bash sources are discovered:
 # files with a Bash shebang or ShellCheck directive, Bash dotfiles, and Bash

@@ -23,8 +23,8 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$script_dir/common.sh"
 
 # When DOTFILES_FORCE_REINSTALL=1 the script skips the idempotency probe and
-# reinstalls every tool. Useful for recovering from a partially broken tool
-# directory.
+# rebuilds every installed tool. Useful for recovering from a partially broken
+# tool directory.
 force_reinstall="${DOTFILES_FORCE_REINSTALL:-0}"
 
 tools=()
@@ -41,7 +41,7 @@ echo "==> Syncing uv tools from $MANIFEST"
 
 # Snapshot the current `uv tool list` once. Output format is stable as
 # "<package> v<version>" lines followed by indented binary entries.
-installed_snapshot="$(uv tool list 2>/dev/null || true)"
+installed_snapshot="$(uv tool list)"
 
 installed_version_for() {
   local name="$1"
@@ -64,6 +64,15 @@ requirement_version_spec() {
   esac
 }
 
+tool_dir="$(uv tool dir)"
+
+# `uv tool install --reinstall` keeps the environment's pyvenv.cfg, so an
+# environment built on another Python must be removed and created again.
+rebuild_tool() {
+  uv tool uninstall "$1"
+  uv tool install "$2"
+}
+
 for tool in "${tools[@]}"; do
   name="$(uv_tool_binary_name "$tool")"
   wanted="$(requirement_version_spec "$tool")"
@@ -73,18 +82,25 @@ for tool in "${tools[@]}"; do
     current="$(installed_version_for "$name")"
   fi
 
-  if [[ "$force_reinstall" != "1" && -n "$current" && -n "$wanted" && "$current" == "$wanted" ]]; then
-    echo "  == $tool (already at $current, skipping)"
-    continue
+  if [[ -n "$current" ]]; then
+    if [[ "$force_reinstall" == "1" ]]; then
+      echo "  -> $tool (force reinstall)"
+      rebuild_tool "$name" "$tool"
+      continue
+    fi
+    if ! problem="$(uv_tool_env_healthy "$tool_dir" "$name")"; then
+      echo "  -> $tool (rebuilding: $problem)"
+      rebuild_tool "$name" "$tool"
+      continue
+    fi
+    if [[ -n "$wanted" && "$current" == "$wanted" ]]; then
+      echo "  == $tool (already at $current, skipping)"
+      continue
+    fi
   fi
 
-  if [[ "$force_reinstall" == "1" ]]; then
-    echo "  -> $tool (force reinstall)"
-    uv tool install --reinstall "$tool"
-  else
-    echo "  -> $tool"
-    uv tool install "$tool"
-  fi
+  echo "  -> $tool"
+  uv tool install "$tool"
 done
 
 echo "==> uv tools synced."
