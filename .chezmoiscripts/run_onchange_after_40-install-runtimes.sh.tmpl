@@ -3,13 +3,13 @@
 
 set -euo pipefail
 
-export PATH="$HOME/.local/bin:$HOME/.local/share/mise/shims:$PATH"
-
 bootstrap_dir='{{ joinPath .chezmoi.sourceDir "bootstrap" }}'
 scripts_dir="$bootstrap_dir/scripts"
 
 source "$scripts_dir/common.sh"
 install_error_trap "$0"
+
+export_tool_path
 
 if ! command -v mise >/dev/null 2>&1; then
   echo "ERROR: mise not found in PATH" >&2

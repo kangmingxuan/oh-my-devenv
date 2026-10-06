@@ -101,7 +101,7 @@ not add cleanup commands to this checklist.
 ```bash
 brew list --cask ghostty font-maple-mono-nf-cn orbstack
 ghostty_cli="$(command -v ghostty || true)"
-: "${ghostty_cli:=/Applications/Ghostty.app/Contents/MacOS/Ghostty}"
+: "${ghostty_cli:=/Applications/Ghostty.app/Contents/MacOS/ghostty}"
 test -x "$ghostty_cli"
 "$ghostty_cli" +validate-config
 ```

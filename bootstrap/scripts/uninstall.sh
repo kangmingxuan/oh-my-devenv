@@ -49,9 +49,10 @@ done
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "$script_dir/../.." && pwd)"
+# common.sh resolves the XDG directories and loads bootstrap.env, so this
+# process and the producers it calls see the same paths.
 # shellcheck disable=SC1091
-source "$repo_root/dot_local/share/oh-my-devenv/xdg.sh"
-oh_my_devenv_setup_xdg_dirs
+source "$script_dir/common.sh"
 # shellcheck disable=SC1091
 source "$script_dir/local-overlays.sh"
 local_overlay_load
@@ -86,9 +87,9 @@ can_remove_chezmoi_source() {
 
 is_whitelist_dir() {
   case "$1" in
-    "$HOME/.oh-my-zsh" | \
-      "${XDG_DATA_HOME:-$HOME/.local/share}/fonts/maple-mono-nf-cn" | \
-      "${XDG_STATE_HOME:-$HOME/.local/state}/chezmoi-first-run-backup" | \
+    "$(oh_my_devenv_oh_my_zsh_dir)" | \
+      "$(maple_mono_font_dir)" | \
+      "$(first_run_backup_root)" | \
       "$HOME/.local/share/chezmoi" | "$HOME/.local/share/chezmoi/"*)
       return 0
       ;;
@@ -132,19 +133,18 @@ candidates+=$'\n'"$("$BASH" "$script_dir/install-shell-completions.sh" list "$co
   printf 'ERROR: shell completion inventory failed.\n' >&2
   exit 1
 }
-candidates+=$'\n'"${XDG_STATE_HOME:-$HOME/.local/state}/chezmoi/oh-my-devenv-xdg.boltdb"
+candidates+=$'\n'"$(xdg_chezmoi_state_file)"
 
-if [[ -d "$HOME/.oh-my-zsh" ]]; then
-  candidates+=$'\n'"$HOME/.oh-my-zsh"
+if [[ -d "$(oh_my_devenv_oh_my_zsh_dir)" ]]; then
+  candidates+=$'\n'"$(oh_my_devenv_oh_my_zsh_dir)"
 fi
 
-managed_font_dir="${XDG_DATA_HOME:-$HOME/.local/share}/fonts/maple-mono-nf-cn"
-if [[ -f "$managed_font_dir/.oh-my-devenv-managed" ]]; then
-  candidates+=$'\n'"$managed_font_dir"
+if [[ -f "$(maple_mono_font_marker)" ]]; then
+  candidates+=$'\n'"$(maple_mono_font_dir)"
 fi
 
-if [[ -d "${XDG_STATE_HOME:-$HOME/.local/state}/chezmoi-first-run-backup" ]]; then
-  candidates+=$'\n'"${XDG_STATE_HOME:-$HOME/.local/state}/chezmoi-first-run-backup"
+if [[ -d "$(first_run_backup_root)" ]]; then
+  candidates+=$'\n'"$(first_run_backup_root)"
 fi
 
 source_path="$(chezmoi --source="$repo_root" source-path 2>/dev/null || true)"

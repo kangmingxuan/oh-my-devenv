@@ -151,6 +151,26 @@ check_tool_manifest_parser() {
   done < <(manifest_entries "$manifest")
 }
 
+# The zsh-completions fallback must sit after user completions and before
+# oh-my-zsh runs compinit.
+check_zsh_completions_fpath_order() {
+  local rendered_zshrc="$1"
+  local fallback_path="$2"
+  local user_fpath_line=""
+  local fallback_fpath_line=""
+  local omz_source_line=""
+
+  # shellcheck disable=SC2016
+  user_fpath_line="$(grep -nF 'fpath=("$XDG_DATA_HOME/zsh/site-functions" $fpath)' "$rendered_zshrc" | cut -d: -f1)"
+  fallback_fpath_line="$(grep -nF "$fallback_path" "$rendered_zshrc" | cut -d: -f1)"
+  # shellcheck disable=SC2016
+  omz_source_line="$(grep -nF 'source "$ZSH/oh-my-zsh.sh"' "$rendered_zshrc" | cut -d: -f1)"
+  if [[ -z "$user_fpath_line" || -z "$fallback_fpath_line" || -z "$omz_source_line" \
+    || "$user_fpath_line" -ge "$fallback_fpath_line" || "$fallback_fpath_line" -ge "$omz_source_line" ]]; then
+    fail_test "Zsh completion fpath precedence must be user, system/oh-my-zsh, then zsh-completions fallback"
+  fi
+}
+
 check_oh_my_zsh_manifest_contract() {
   local manifest="$1"
   local rendered_zshrc="$2"
@@ -170,8 +190,8 @@ check_oh_my_zsh_manifest_contract() {
     plugin_name="${plugin_path##*/}"
 
     if [[ "$plugin_name" == "zsh-completions" ]]; then
-      assert_file_contains "$rendered_zshrc" "$plugin_path/src"
       assert_file_not_contains "$rendered_zshrc" "    zsh-completions"
+      check_zsh_completions_fpath_order "$rendered_zshrc" "$plugin_path/src"
       continue
     fi
 
@@ -327,15 +347,6 @@ render_template dot_zshrc.tmpl "$tmp_dir/dot_zshrc"
 syntax_check zsh "$tmp_dir/dot_zshrc"
 assert_file_contains "$tmp_dir/dot_zshrc" "$shared_secrets_literal"
 assert_file_contains "$tmp_dir/dot_zshrc" "$zsh_overlay_literal"
-# shellcheck disable=SC2016
-user_fpath_line="$(grep -nF 'fpath=("$XDG_DATA_HOME/zsh/site-functions" $fpath)' "$tmp_dir/dot_zshrc" | cut -d: -f1)"
-fallback_fpath_line="$(grep -nF 'zsh-completions/src' "$tmp_dir/dot_zshrc" | cut -d: -f1)"
-# shellcheck disable=SC2016
-omz_source_line="$(grep -nF 'source "$ZSH/oh-my-zsh.sh"' "$tmp_dir/dot_zshrc" | cut -d: -f1)"
-if [[ -z "$user_fpath_line" || -z "$fallback_fpath_line" || -z "$omz_source_line" \
-  || "$user_fpath_line" -ge "$fallback_fpath_line" || "$fallback_fpath_line" -ge "$omz_source_line" ]]; then
-  fail_test "Zsh completion fpath precedence must be user, system/oh-my-zsh, then zsh-completions fallback"
-fi
 synthetic_macos_zshrc="$tmp_dir/dot_zshrc.macos"
 chezmoi --source="$repo_root" \
   --override-data '{"chezmoi":{"os":"darwin","osRelease":null,"kernel":null}}' \
@@ -355,6 +366,50 @@ assert_file_contains "$tmp_dir/env.zsh" "$env_overlay_literal"
 assert_file_not_contains "$tmp_dir/env.zsh" "$bootstrap_overlay_literal"
 assert_file_not_contains "$tmp_dir/env.zsh" "$shared_secrets_literal"
 assert_file_not_contains "$tmp_dir/env.zsh" "$zsh_overlay_literal"
+
+# The oh-my-zsh location comes from the shared resolver; inherited ZSH and
+# ZSH_CUSTOM values must not redirect the zshrc or the installer.
+omz_home="$tmp_dir/omz-home"
+omz_elsewhere="$tmp_dir/omz-elsewhere"
+mkdir -p "$omz_home/.zsh" "$omz_home/.local/share/oh-my-devenv" "$tmp_dir/omz-empty-config"
+cp "$xdg_resolver" "$omz_home/.local/share/oh-my-devenv/xdg.sh"
+cp "$tmp_dir/env.zsh" "$omz_home/.zsh/env.zsh"
+cp "$tmp_dir/dot_zshrc" "$omz_home/.zshrc"
+omz_dir="$(HOME="$omz_home" bash -c 'source "$1"; oh_my_devenv_oh_my_zsh_dir' _ "$xdg_resolver")"
+mkdir -p "$omz_dir"
+# The stub stops the shell after reporting, so the rest of the zshrc never
+# initializes host tools such as mise or fzf.
+# shellcheck disable=SC2016
+printf 'print -r -- "$ZSH|$ZSH_CUSTOM"\nexit 0\n' >"$omz_dir/oh-my-zsh.sh"
+# shellcheck disable=SC2016
+omz_loaded="$(env -i HOME="$omz_home" PATH=/usr/bin:/bin XDG_CONFIG_HOME="$tmp_dir/omz-empty-config" \
+  ZSH="$omz_elsewhere" ZSH_CUSTOM="$omz_elsewhere/custom" \
+  zsh -fc 'source "$HOME/.zshrc"')"
+[[ "$omz_loaded" == "$omz_dir|$omz_dir/custom" ]] \
+  || fail_test "zshrc loaded oh-my-zsh as '$omz_loaded'; expected '$omz_dir|$omz_dir/custom'"
+
+omz_stub_bin="$tmp_dir/omz-stub-bin"
+omz_git_log="$tmp_dir/omz-git.log"
+mkdir -p "$omz_stub_bin"
+cat >"$omz_stub_bin/git" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+target="${!#}"
+printf '%s\n' "$target" >>"$OMZ_GIT_LOG"
+mkdir -p "$target/.git"
+EOF
+chmod +x "$omz_stub_bin/git"
+ln -s "$(command -v zsh)" "$omz_stub_bin/zsh"
+printf '%s\n' 'example/plugin plugins/example-plugin' >"$tmp_dir/omz-plugins.txt"
+env -i HOME="$omz_home" PATH="$omz_stub_bin:/usr/bin:/bin" XDG_CONFIG_HOME="$tmp_dir/omz-empty-config" \
+  ZSH="$omz_elsewhere" ZSH_CUSTOM="$omz_elsewhere/custom" OMZ_GIT_LOG="$omz_git_log" \
+  bash "$repo_root/bootstrap/scripts/install-oh-my-zsh-assets.sh" "$tmp_dir/omz-plugins.txt" >/dev/null
+printf '%s\n' "$omz_dir/custom/plugins/example-plugin" >"$tmp_dir/omz-git.expected"
+# The fixture oh-my-zsh directory already exists without .git, so only the
+# plugin is cloned; the installer must target the resolved custom directory.
+cmp -s "$tmp_dir/omz-git.expected" "$omz_git_log" \
+  || fail_test "oh-my-zsh installer cloned into: $(<"$omz_git_log")"
+[[ ! -e "$omz_elsewhere" ]] || fail_test "oh-my-zsh installer followed an inherited ZSH or ZSH_CUSTOM"
 
 render_template dot_bashrc.tmpl "$tmp_dir/dot_bashrc"
 syntax_check bash "$tmp_dir/dot_bashrc"
@@ -608,6 +663,50 @@ if [[ "$path_case_output" != "$path_case_expected" ]]; then
   fail_test "bash path_reorder_front must compare directories case-sensitively under nocasematch"
 fi
 
+# Both shells put the mise shim directory first, resolved with mise's own
+# precedence: MISE_SHIMS_DIR, then MISE_DATA_DIR, then XDG_DATA_HOME.
+# The fixture root contains spaces so every path stays a single argument.
+mise_root="$tmp_dir/mise shims fixture"
+mise_home="$mise_root/home"
+# The default data root comes from the XDG resolver, which has its own tests;
+# only mise's "<data root>/mise/shims" layout is asserted here.
+# shellcheck disable=SC2016
+mise_default_data="$(env -i HOME="$mise_home" bash -c 'source "$1"; oh_my_devenv_resolve_xdg_data_home' _ "$xdg_resolver")"
+mkdir -p "$mise_default_data/mise/shims" "$mise_root/xdg-data/mise/shims" \
+  "$mise_root/mise-data/shims" "$mise_root/shims-override" "$mise_root/empty-config"
+cp "$tmp_dir/env.bash" "$mise_root/env.bash"
+cp "$tmp_dir/env.zsh" "$mise_root/env.zsh"
+mkdir -p "$mise_home/.local/share/oh-my-devenv"
+cp "$xdg_resolver" "$mise_home/.local/share/oh-my-devenv/xdg.sh"
+for mise_case in default xdg-data mise-data shims-dir; do
+  mise_env=()
+  case "$mise_case" in
+    default)
+      expected_shims="$mise_default_data/mise/shims"
+      ;;
+    xdg-data)
+      mise_env=("XDG_DATA_HOME=$mise_root/xdg-data")
+      expected_shims="$mise_root/xdg-data/mise/shims"
+      ;;
+    mise-data)
+      mise_env=("XDG_DATA_HOME=$mise_root/xdg-data" "MISE_DATA_DIR=$mise_root/mise-data")
+      expected_shims="$mise_root/mise-data/shims"
+      ;;
+    shims-dir)
+      mise_env=("MISE_DATA_DIR=$mise_root/mise-data" "MISE_SHIMS_DIR=$mise_root/shims-override")
+      expected_shims="$mise_root/shims-override"
+      ;;
+  esac
+  for mise_shell in bash zsh; do
+    # shellcheck disable=SC2016
+    actual_shims="$(env -i HOME="$mise_home" PATH=/usr/bin:/bin XDG_CONFIG_HOME="$mise_root/empty-config" \
+      ${mise_env[@]+"${mise_env[@]}"} \
+      "$mise_shell" -c '. "$1"; printf "%s\n" "${PATH%%:*}"' _ "$mise_root/env.$mise_shell")"
+    [[ "$actual_shims" == "$expected_shims" ]] \
+      || fail_test "$mise_shell mise shims for $mise_case resolved to '$actual_shims'; expected '$expected_shims'"
+  done
+done
+
 render_template dot_gitconfig.tmpl "$tmp_dir/dot_gitconfig"
 assert_file_contains "$tmp_dir/dot_gitconfig" "$gitconfig_include_literal"
 # The managed gitconfig must stay host-neutral: no hard-coded URL rewrites, so
@@ -661,6 +760,18 @@ done
 run_rendered_hook wsl run_onchange_after_22-install-desktop-assets >/dev/null 2>"$tmp_dir/wsl-desktop.err" \
   || fail_test "desktop hook must not install anything on a platform without desktop support"
 assert_file_contains "$tmp_dir/wsl-desktop.err" "Desktop baseline requested"
+
+# The runtime hook finds mise through the resolved shim directory before any
+# runtime exists and without GOBIN.
+hook_mise_data="$tmp_dir/hook-mise-data"
+mkdir -p "$hook_mise_data/shims"
+printf '#!/bin/sh\necho "mise stub: $*"\n' >"$hook_mise_data/shims/mise"
+chmod +x "$hook_mise_data/shims/mise"
+env -i PATH="$hook_stub_bin" HOME="$tmp_dir/hook-home" XDG_CONFIG_HOME="$XDG_CONFIG_HOME" \
+  MISE_DATA_DIR="$hook_mise_data" \
+  bash "$tmp_dir/hook-ubuntu-run_onchange_after_40-install-runtimes.sh" >"$tmp_dir/hook-mise.out" 2>&1 \
+  || fail_test "runtime hook did not find mise in the resolved shim directory: $(<"$tmp_dir/hook-mise.out")"
+assert_file_contains "$tmp_dir/hook-mise.out" "mise stub: install --yes"
 
 render_template .chezmoiscripts/run_onchange_after_60-check.sh.tmpl "$tmp_dir/run_onchange_after_60-check.sh"
 
@@ -1132,15 +1243,60 @@ if [[ "$desktop_platform_supported_data" == true ]]; then
 elif [[ -s "$xdg_desktop_home/ghostty/config.ghostty" ]]; then
   fail_test "nested XDG apply wrote a Ghostty config on an unsupported desktop platform"
 fi
-# Disabling the baseline renders the desktop templates empty, and chezmoi then
-# removes the targets an earlier apply wrote.
-XDG_CONFIG_HOME="$xdg_desktop_home" XDG_STATE_HOME="$tmp_dir/xdg-desktop-state-home" \
-  bash "$repo_root/bootstrap/scripts/xdg-config.sh" apply "$xdg_test_config"
-for desktop_target in ghostty/config.ghostty fontconfig/conf.d/99-oh-my-devenv-maple-mono-nf-cn.conf; do
-  if [[ -e "$xdg_desktop_home/$desktop_target" ]]; then
-    fail_test "disabling the desktop baseline left $desktop_target in place"
+# Desktop targets are the nested XDG targets that render content with the
+# baseline enabled and render empty with it disabled. Derive them for each
+# synthetic platform, then check that enabling writes them and disabling makes
+# chezmoi remove them.
+desktop_empty_config="$tmp_dir/desktop-empty-chezmoi.toml"
+: >"$desktop_empty_config"
+desktop_chezmoi() {
+  local destination="$1"
+  local override_data="$2"
+  shift 2
+
+  chezmoi --config="$desktop_empty_config" --persistent-state="$destination.boltdb" \
+    --source="$repo_root/xdg_config" --destination="$destination" \
+    --override-data="$override_data" "$@"
+}
+desktop_platform_cases=(
+  "macos|true|$darwin_chezmoi_data"
+  "ubuntu|true|$supported_linux_chezmoi_data"
+  "unsupported|false|$unsupported_chezmoi_data"
+)
+for desktop_case in "${desktop_platform_cases[@]}"; do
+  IFS='|' read -r desktop_name desktop_supported desktop_platform_data <<<"$desktop_case"
+  desktop_home="$tmp_dir/desktop-$desktop_name-home"
+  mkdir -p "$desktop_home"
+  desktop_enabled="$(printf '{"desktopBaseline":true,"desktopPlatformSupported":%s,"desktopFontFamily":"%s","chezmoi":%s}' \
+    "$desktop_supported" "$MAPLE_MONO_FAMILY" "$desktop_platform_data")"
+  desktop_disabled="${desktop_enabled/\"desktopBaseline\":true/\"desktopBaseline\":false}"
+  desktop_targets=()
+  while IFS= read -r desktop_target; do
+    [[ -n "$(desktop_chezmoi "$desktop_home" "$desktop_enabled" cat "$desktop_target")" ]] || continue
+    [[ -z "$(desktop_chezmoi "$desktop_home" "$desktop_disabled" cat "$desktop_target")" ]] || continue
+    desktop_targets+=("$desktop_target")
+  done < <(desktop_chezmoi "$desktop_home" "$desktop_enabled" managed --include=files --path-style=absolute --format=)
+  if [[ "$desktop_supported" == true && ${#desktop_targets[@]} -eq 0 ]]; then
+    fail_test "desktop baseline renders no targets on supported platform $desktop_name"
   fi
+  if [[ "$desktop_supported" != true && ${#desktop_targets[@]} -ne 0 ]]; then
+    fail_test "desktop baseline renders targets on unsupported platform $desktop_name: ${desktop_targets[*]}"
+  fi
+  desktop_chezmoi "$desktop_home" "$desktop_enabled" apply
+  for desktop_target in ${desktop_targets[@]+"${desktop_targets[@]}"}; do
+    [[ -s "$desktop_target" ]] || fail_test "enabling the desktop baseline did not write $desktop_target"
+  done
+  desktop_chezmoi "$desktop_home" "$desktop_disabled" apply
+  for desktop_target in ${desktop_targets[@]+"${desktop_targets[@]}"}; do
+    [[ ! -e "$desktop_target" ]] || fail_test "disabling the desktop baseline left $desktop_target in place"
+  done
+  printf '%s\n' ${desktop_targets[@]+"${desktop_targets[@]}"} >"$tmp_dir/desktop-$desktop_name-targets"
 done
+# Only the Ubuntu desktop adds the Fontconfig workaround, so it manages more
+# desktop targets than macOS.
+if [[ "$(wc -l <"$tmp_dir/desktop-ubuntu-targets")" -le "$(wc -l <"$tmp_dir/desktop-macos-targets")" ]]; then
+  fail_test "Ubuntu desktop targets must include the Fontconfig workaround beyond the macOS set"
+fi
 xdg_status="$(XDG_CONFIG_HOME="$xdg_test_home" XDG_STATE_HOME="$xdg_test_state" \
   bash "$repo_root/bootstrap/scripts/xdg-config.sh" status "$xdg_test_config")"
 if [[ -n "$xdg_status" ]]; then
@@ -1192,12 +1348,32 @@ done <<<"$overlay_fixture_listing"
 if grep -Fq "$tmp_dir/uninstall-home/.config/${uninstall_xdg_fixture#"$xdg_test_home"/}" <<<"$uninstall_preview"; then
   fail_test "uninstall preview fell back to HOME/.config instead of custom XDG_CONFIG_HOME"
 fi
-if ! grep -Fq "$tmp_dir/uninstall-home/.local/state/chezmoi/oh-my-devenv-xdg.boltdb" <<<"$uninstall_preview"; then
+# shellcheck disable=SC2016
+uninstall_state_file="$(HOME="$tmp_dir/uninstall-home" XDG_CONFIG_HOME="$xdg_test_home" \
+  bash -c 'source "$1"; xdg_chezmoi_state_file' _ "$script_dir/common.sh")"
+if ! grep -Fq "$uninstall_state_file" <<<"$uninstall_preview"; then
   fail_test "uninstall preview does not include the nested chezmoi state file"
 fi
 if ! grep -Fq "[would-remove] file: $uninstall_completion_fixture" <<<"$uninstall_preview"; then
   fail_test "uninstall preview does not include generated shell completion files"
 fi
+
+# uninstall.sh and the nested XDG producer it calls both load bootstrap.env,
+# so an overlay that moves XDG_STATE_HOME moves the listed state file and the
+# directory the producer creates together.
+uninstall_bootstrap_env="$xdg_test_home/oh-my-devenv/bootstrap.env"
+uninstall_state_home="$tmp_dir/uninstall-overlay-state"
+printf 'export XDG_STATE_HOME=%q\n' "$uninstall_state_home" >"$uninstall_bootstrap_env"
+uninstall_overlay_preview="$(HOME="$tmp_dir/uninstall-home" XDG_CONFIG_HOME="$xdg_test_home" XDG_DATA_HOME="$uninstall_data_home" \
+  bash "$repo_root/bootstrap/scripts/uninstall.sh")"
+: >"$uninstall_bootstrap_env"
+uninstall_overlay_state="$(grep -F "$uninstall_state_home/" <<<"$uninstall_overlay_preview" || true)"
+if [[ -z "$uninstall_overlay_state" ]]; then
+  fail_test "uninstall preview ignored XDG_STATE_HOME from bootstrap.env"
+fi
+uninstall_overlay_state_file="${uninstall_overlay_state##* }"
+[[ -d "$(dirname "$uninstall_overlay_state_file")" ]] \
+  || fail_test "uninstall.sh and the nested XDG producer disagree on the state directory"
 
 log_step "🧩" "Running manifest and template contract checks..."
 # WSL never receives the desktop baseline, whatever the distribution.
@@ -1292,6 +1468,23 @@ chezmoi --source="$repo_root" execute-template --with-stdin '{{ .chezmoi.stdin |
   <"$tmp_dir/mise-config.toml" >/dev/null \
   || fail_test "mise config does not parse as TOML"
 check_oh_my_zsh_manifest_contract "$repo_root/bootstrap/manifests/shell/oh-my-zsh-plugins.txt" "$tmp_dir/dot_zshrc"
+# Synthetic manifests render the zshrc from a minimal source copy: one without
+# zsh-completions, and one that keeps it under a different parent directory.
+omz_contract_source="$tmp_dir/omz-contract-source"
+mkdir -p "$omz_contract_source/bootstrap/manifests/shell"
+cp "$repo_root/dot_zshrc.tmpl" "$omz_contract_source/dot_zshrc.tmpl"
+omz_contract_manifest="$omz_contract_source/bootstrap/manifests/shell/oh-my-zsh-plugins.txt"
+while IFS='|' read -r omz_contract_case omz_contract_rows; do
+  printf '%b\n' "$omz_contract_rows" >"$omz_contract_manifest"
+  chezmoi --source="$omz_contract_source" execute-template \
+    --file "$omz_contract_source/dot_zshrc.tmpl" >"$tmp_dir/dot_zshrc.$omz_contract_case"
+  syntax_check zsh "$tmp_dir/dot_zshrc.$omz_contract_case"
+  check_oh_my_zsh_manifest_contract "$omz_contract_manifest" "$tmp_dir/dot_zshrc.$omz_contract_case"
+done <<'OMZ_CASES'
+without-completions|example/one plugins/one
+vendor-completions|example/one plugins/one\nzsh-users/zsh-completions vendor/zsh-completions
+OMZ_CASES
+assert_file_not_contains "$tmp_dir/dot_zshrc.without-completions" '/src")'
 # The desktop font manifest already passed schema validation while loading the
 # smoke data; the loader must reject missing and malformed manifests.
 font_manifest_errors="$tmp_dir/font-manifest.err"

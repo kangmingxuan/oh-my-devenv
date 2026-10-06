@@ -2,8 +2,6 @@
 set -euo pipefail
 
 MANIFEST="${1:-}"
-ZSH_DIR="${ZSH:-$HOME/.oh-my-zsh}"
-ZSH_CUSTOM_DIR="${ZSH_CUSTOM:-$ZSH_DIR/custom}"
 
 if [[ -z "$MANIFEST" ]]; then
   echo "USAGE: $0 <manifest-path>" >&2
@@ -28,6 +26,9 @@ fi
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091
 source "$script_dir/common.sh"
+
+ZSH_DIR="$(oh_my_devenv_oh_my_zsh_dir)"
+ZSH_CUSTOM_DIR="$ZSH_DIR/custom"
 
 # bootstrap.env may point the oh-my-zsh clone elsewhere; plugin repositories
 # are cloned from github.com.

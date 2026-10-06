@@ -1,5 +1,5 @@
 # shellcheck shell=bash
-# Shared XDG directory resolution for managed Bash/Zsh and bootstrap scripts.
+# Shared directory resolution for managed Bash/Zsh and bootstrap scripts.
 # This file is sourced by Bash and Zsh, so keep it portable between both.
 
 oh_my_devenv_resolve_xdg_config_home() {
@@ -47,6 +47,23 @@ oh_my_devenv_setup_xdg_data_home() {
 oh_my_devenv_setup_xdg_dirs() {
   oh_my_devenv_setup_xdg_config_home
   oh_my_devenv_setup_xdg_data_home
+}
+
+# Print the mise shim directory with mise's own precedence: MISE_SHIMS_DIR,
+# then MISE_DATA_DIR, then XDG_DATA_HOME. Call after oh_my_devenv_setup_xdg_dirs.
+oh_my_devenv_mise_shims_dir() {
+  if [[ -n "${MISE_SHIMS_DIR:-}" ]]; then
+    printf '%s\n' "$MISE_SHIMS_DIR"
+  elif [[ -n "${MISE_DATA_DIR:-}" ]]; then
+    printf '%s\n' "$MISE_DATA_DIR/shims"
+  else
+    printf '%s\n' "$XDG_DATA_HOME/mise/shims"
+  fi
+}
+
+# Print the oh-my-zsh directory. Plugins live in its custom/ subdirectory.
+oh_my_devenv_oh_my_zsh_dir() {
+  printf '%s\n' "$HOME/.oh-my-zsh"
 }
 
 oh_my_devenv_source_env_file() {
