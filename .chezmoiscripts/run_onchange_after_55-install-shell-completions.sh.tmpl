@@ -15,7 +15,7 @@ source "$scripts_dir/common.sh"
 install_error_trap "$0"
 
 setup_go_env
-export PATH="$HOME/.local/bin:$HOME/.local/share/mise/shims:$GOBIN:$PATH"
+export_tool_path "$GOBIN"
 
 log_step "🧩" "Installing shell completions..."
 bash "$scripts_dir/install-shell-completions.sh" install '{{ .chezmoi.os }}' "$manifests_dir/shell/completions.txt"

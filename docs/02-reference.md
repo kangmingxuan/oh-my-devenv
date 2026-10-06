@@ -121,7 +121,7 @@ For a one-off setting not persisted in `bootstrap.env`, export it before
 | Variable | Default | Effect |
 |----------|---------|--------|
 | `XDG_CONFIG_HOME` | `$HOME/.config` | Absolute destination for managed mise, Ghostty, and Fontconfig files plus the `oh-my-devenv` and Ghostty overlays. Export a custom value before starting the shell or running `chezmoi`; local env files must not change it. Relative values are ignored with a warning. |
-| `XDG_DATA_HOME` | `$HOME/.local/share` | Absolute root for generated Bash and Zsh completion assets and other user data. Export it before starting the shell or running `chezmoi`; local env files must not change it. Relative values are ignored with a warning. |
+| `XDG_DATA_HOME` | `$HOME/.local/share` | Absolute root for generated Bash and Zsh completion assets, the default mise data directory, and other user data. Export it before starting the shell or running `chezmoi`; local env files must not change it. Relative values are ignored with a warning. |
 
 ### Shell completion contract
 
@@ -184,7 +184,15 @@ Two downloads have no native variable, so the baseline reads its own:
 
 | Variable | Default | Effect |
 |----------|---------|--------|
-| `MISE_SHIMS_DIR` | `$HOME/.local/share/mise/shims` | Shim directory placed on `PATH`. |
+| `MISE_DATA_DIR` | `$XDG_DATA_HOME/mise` | mise's data root. Its `shims` subdirectory is the default shim directory. |
+| `MISE_SHIMS_DIR` | `$MISE_DATA_DIR/shims` | mise's shim directory. The managed shells and the bootstrap hooks put it on `PATH`. |
+
+The shells and hooks resolve the shim directory with mise's own precedence:
+`MISE_SHIMS_DIR`, then `MISE_DATA_DIR`, then `XDG_DATA_HOME`. Export these
+variables before starting the shell or running `chezmoi`, or put them in
+`bootstrap.env` for the hooks. The shell `env.sh` overlay loads after the
+baseline builds `PATH`, so a value set only there does not move the shim
+directory on `PATH`.
 
 The managed `$XDG_CONFIG_HOME/mise/config.toml` disables GitHub attestation
 verification (`github_attestations` and `aqua.github_attestations`) because

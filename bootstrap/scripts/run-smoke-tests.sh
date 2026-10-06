@@ -608,6 +608,31 @@ if [[ "$path_case_output" != "$path_case_expected" ]]; then
   fail_test "bash path_reorder_front must compare directories case-sensitively under nocasematch"
 fi
 
+# Both shells put the mise shim directory first, resolved with mise's own
+# precedence: MISE_SHIMS_DIR, then MISE_DATA_DIR, then XDG_DATA_HOME.
+mise_root="$tmp_dir/mise-shims-fixture"
+mise_home="$mise_root/home"
+mkdir -p "$mise_home/.local/share/mise/shims" "$mise_root/xdg-data/mise/shims" \
+  "$mise_root/mise-data/shims" "$mise_root/shims-override" "$mise_root/empty-config"
+cp "$tmp_dir/env.bash" "$mise_root/env.bash"
+cp "$tmp_dir/env.zsh" "$mise_root/env.zsh"
+mkdir -p "$mise_home/.local/share/oh-my-devenv"
+cp "$xdg_resolver" "$mise_home/.local/share/oh-my-devenv/xdg.sh"
+while IFS='|' read -r mise_case mise_env expected_shims; do
+  for mise_shell in bash zsh; do
+    # shellcheck disable=SC2016,SC2086
+    actual_shims="$(env -i HOME="$mise_home" PATH=/usr/bin:/bin XDG_CONFIG_HOME="$mise_root/empty-config" $mise_env \
+      "$mise_shell" -c '. "$1"; printf "%s\n" "${PATH%%:*}"' _ "$mise_root/env.$mise_shell")"
+    [[ "$actual_shims" == "$expected_shims" ]] \
+      || fail_test "$mise_shell mise shims for $mise_case resolved to '$actual_shims'; expected '$expected_shims'"
+  done
+done <<EOF
+default||$mise_home/.local/share/mise/shims
+xdg-data|XDG_DATA_HOME=$mise_root/xdg-data|$mise_root/xdg-data/mise/shims
+mise-data|XDG_DATA_HOME=$mise_root/xdg-data MISE_DATA_DIR=$mise_root/mise-data|$mise_root/mise-data/shims
+shims-dir|MISE_DATA_DIR=$mise_root/mise-data MISE_SHIMS_DIR=$mise_root/shims-override|$mise_root/shims-override
+EOF
+
 render_template dot_gitconfig.tmpl "$tmp_dir/dot_gitconfig"
 assert_file_contains "$tmp_dir/dot_gitconfig" "$gitconfig_include_literal"
 # The managed gitconfig must stay host-neutral: no hard-coded URL rewrites, so
@@ -661,6 +686,18 @@ done
 run_rendered_hook wsl run_onchange_after_22-install-desktop-assets >/dev/null 2>"$tmp_dir/wsl-desktop.err" \
   || fail_test "desktop hook must not install anything on a platform without desktop support"
 assert_file_contains "$tmp_dir/wsl-desktop.err" "Desktop baseline requested"
+
+# The runtime hook finds mise through the resolved shim directory before any
+# runtime exists and without GOBIN.
+hook_mise_data="$tmp_dir/hook-mise-data"
+mkdir -p "$hook_mise_data/shims"
+printf '#!/bin/sh\necho "mise stub: $*"\n' >"$hook_mise_data/shims/mise"
+chmod +x "$hook_mise_data/shims/mise"
+env -i PATH="$hook_stub_bin" HOME="$tmp_dir/hook-home" XDG_CONFIG_HOME="$XDG_CONFIG_HOME" \
+  MISE_DATA_DIR="$hook_mise_data" \
+  bash "$tmp_dir/hook-ubuntu-run_onchange_after_40-install-runtimes.sh" >"$tmp_dir/hook-mise.out" 2>&1 \
+  || fail_test "runtime hook did not find mise in the resolved shim directory: $(<"$tmp_dir/hook-mise.out")"
+assert_file_contains "$tmp_dir/hook-mise.out" "mise stub: install --yes"
 
 render_template .chezmoiscripts/run_onchange_after_60-check.sh.tmpl "$tmp_dir/run_onchange_after_60-check.sh"
 

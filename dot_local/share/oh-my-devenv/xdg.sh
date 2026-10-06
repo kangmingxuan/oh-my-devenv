@@ -49,6 +49,18 @@ oh_my_devenv_setup_xdg_dirs() {
   oh_my_devenv_setup_xdg_data_home
 }
 
+# Print the mise shim directory with mise's own precedence: MISE_SHIMS_DIR,
+# then MISE_DATA_DIR, then XDG_DATA_HOME. Call after oh_my_devenv_setup_xdg_dirs.
+oh_my_devenv_mise_shims_dir() {
+  if [[ -n "${MISE_SHIMS_DIR:-}" ]]; then
+    printf '%s\n' "$MISE_SHIMS_DIR"
+  elif [[ -n "${MISE_DATA_DIR:-}" ]]; then
+    printf '%s\n' "$MISE_DATA_DIR/shims"
+  else
+    printf '%s\n' "$XDG_DATA_HOME/mise/shims"
+  fi
+}
+
 oh_my_devenv_source_env_file() {
   local env_file="$1"
   local expected_xdg_config_home="$XDG_CONFIG_HOME"
