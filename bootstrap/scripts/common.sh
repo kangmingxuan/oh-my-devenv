@@ -174,11 +174,32 @@ require_sudo() {
   fi
 }
 
+# Paths the bootstrap creates and owns. They depend on XDG_STATE_HOME and
+# XDG_DATA_HOME, so call them after this file has loaded bootstrap.env.
+first_run_backup_root() {
+  printf '%s\n' "${XDG_STATE_HOME:-$HOME/.local/state}/chezmoi-first-run-backup"
+}
+
+xdg_chezmoi_state_file() {
+  printf '%s\n' "${XDG_STATE_HOME:-$HOME/.local/state}/chezmoi/oh-my-devenv-xdg.boltdb"
+}
+
+maple_mono_font_dir() {
+  printf '%s\n' "$XDG_DATA_HOME/fonts/maple-mono-nf-cn"
+}
+
+# The installer writes this marker into the font directory it owns.
+maple_mono_font_marker() {
+  printf '%s\n' "$(maple_mono_font_dir)/.oh-my-devenv-managed"
+}
+
 # Shared "what to try next" hints, printed to stderr. Used by both the
 # bootstrap error trap and the final environment check so the guidance lives
 # in one place instead of drifting across two copies.
 print_diagnostic_hints() {
-  local backup_root="${XDG_STATE_HOME:-$HOME/.local/state}/chezmoi-first-run-backup"
+  local backup_root=""
+
+  backup_root="$(first_run_backup_root)"
 
   printf 'What to try next:\n' >&2
   printf '  1. Re-run with verbose output:\n' >&2

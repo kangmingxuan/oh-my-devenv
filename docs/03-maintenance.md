@@ -359,7 +359,9 @@ of bootstrap-owned directories (`~/.oh-my-zsh`,
 user-font directory, and the chezmoi source tree under `~/.local/share/` when
 that is the canonical data path). Both `chezmoi managed` calls request plain
 line output explicitly with `--format=`, and a failing producer aborts the run
-rather than shrinking the candidate list.
+rather than shrinking the candidate list. Like the bootstrap hooks, the script
+sources `bootstrap/scripts/common.sh`, so it resolves the XDG directories and
+loads `bootstrap.env` before it computes any path.
 
 ### Defaults and flags
 

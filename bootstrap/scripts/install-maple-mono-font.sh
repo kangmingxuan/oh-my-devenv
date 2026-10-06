@@ -50,9 +50,9 @@ checksum_matches() {
   printf '%s  %s\n' "$MAPLE_MONO_SHA256" "$archive_path" | sha256sum --check --status
 }
 
-fonts_root="${XDG_DATA_HOME:-$HOME/.local/share}/fonts"
-font_dir="$fonts_root/maple-mono-nf-cn"
-managed_marker="$font_dir/.oh-my-devenv-managed"
+font_dir="$(maple_mono_font_dir)"
+fonts_root="$(dirname "$font_dir")"
+managed_marker="$(maple_mono_font_marker)"
 expected_marker="version=$MAPLE_MONO_VERSION sha256=$MAPLE_MONO_SHA256"
 
 if [[ -f "$managed_marker" ]] && \
@@ -153,11 +153,11 @@ if [[ -d "$font_dir" && ! -f "$managed_marker" ]]; then
 fi
 
 mkdir -p "$fonts_root"
-stage_dir="$(mktemp -d "$fonts_root/.maple-mono-nf-cn.XXXXXX")"
+stage_dir="$(mktemp -d "$fonts_root/.$(basename "$font_dir").XXXXXX")"
 for font_file in "${font_files[@]}"; do
   install -m 0644 "$font_file" "$stage_dir/$(basename "$font_file")"
 done
-printf '%s\n' "$expected_marker" >"$stage_dir/.oh-my-devenv-managed"
+printf '%s\n' "$expected_marker" >"$stage_dir/$(basename "$managed_marker")"
 
 # Swap the staged directory into place, keeping the previous managed copy
 # beside it until Fontconfig confirms the new faces.

@@ -49,5 +49,6 @@ jobs:
         run: |
           grep -Fq "All checks passed." "$HOME/apply.log"
           test -f "$XDG_CONFIG_HOME/mise/config.toml"
-          grep -Fxq "# pre-existing zshrc" "$HOME"/.local/state/chezmoi-first-run-backup/*"$HOME/.zshrc"
+          backup_root="$(bash -c 'source bootstrap/scripts/common.sh; first_run_backup_root')"
+          grep -Fxq "# pre-existing zshrc" "$backup_root"/*"$HOME/.zshrc"
           grep -Fxq "unmanaged_sentinel = true" "$HOME/.config/mise/config.toml"

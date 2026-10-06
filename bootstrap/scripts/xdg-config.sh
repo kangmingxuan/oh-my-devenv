@@ -32,8 +32,8 @@ if ! command -v "$chezmoi_bin" >/dev/null 2>&1; then
 fi
 
 xdg_source="$repo_root/xdg_config"
-xdg_state_dir="${XDG_STATE_HOME:-$HOME/.local/state}/chezmoi"
-xdg_persistent_state="$xdg_state_dir/oh-my-devenv-xdg.boltdb"
+xdg_persistent_state="$(xdg_chezmoi_state_file)"
+xdg_state_dir="$(dirname "$xdg_persistent_state")"
 
 if [[ ! -d "$xdg_source" ]]; then
   printf 'ERROR: XDG chezmoi source not found: %s\n' "$xdg_source" >&2

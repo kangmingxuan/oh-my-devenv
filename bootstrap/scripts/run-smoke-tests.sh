@@ -1271,12 +1271,32 @@ done <<<"$overlay_fixture_listing"
 if grep -Fq "$tmp_dir/uninstall-home/.config/${uninstall_xdg_fixture#"$xdg_test_home"/}" <<<"$uninstall_preview"; then
   fail_test "uninstall preview fell back to HOME/.config instead of custom XDG_CONFIG_HOME"
 fi
-if ! grep -Fq "$tmp_dir/uninstall-home/.local/state/chezmoi/oh-my-devenv-xdg.boltdb" <<<"$uninstall_preview"; then
+# shellcheck disable=SC2016
+uninstall_state_file="$(HOME="$tmp_dir/uninstall-home" XDG_CONFIG_HOME="$xdg_test_home" \
+  bash -c 'source "$1"; xdg_chezmoi_state_file' _ "$script_dir/common.sh")"
+if ! grep -Fq "$uninstall_state_file" <<<"$uninstall_preview"; then
   fail_test "uninstall preview does not include the nested chezmoi state file"
 fi
 if ! grep -Fq "[would-remove] file: $uninstall_completion_fixture" <<<"$uninstall_preview"; then
   fail_test "uninstall preview does not include generated shell completion files"
 fi
+
+# uninstall.sh and the nested XDG producer it calls both load bootstrap.env,
+# so an overlay that moves XDG_STATE_HOME moves the listed state file and the
+# directory the producer creates together.
+uninstall_bootstrap_env="$xdg_test_home/oh-my-devenv/bootstrap.env"
+uninstall_state_home="$tmp_dir/uninstall-overlay-state"
+printf 'export XDG_STATE_HOME=%q\n' "$uninstall_state_home" >"$uninstall_bootstrap_env"
+uninstall_overlay_preview="$(HOME="$tmp_dir/uninstall-home" XDG_CONFIG_HOME="$xdg_test_home" XDG_DATA_HOME="$uninstall_data_home" \
+  bash "$repo_root/bootstrap/scripts/uninstall.sh")"
+: >"$uninstall_bootstrap_env"
+uninstall_overlay_state="$(grep -F "$uninstall_state_home/" <<<"$uninstall_overlay_preview" || true)"
+if [[ -z "$uninstall_overlay_state" ]]; then
+  fail_test "uninstall preview ignored XDG_STATE_HOME from bootstrap.env"
+fi
+uninstall_overlay_state_file="${uninstall_overlay_state##* }"
+[[ -d "$(dirname "$uninstall_overlay_state_file")" ]] \
+  || fail_test "uninstall.sh and the nested XDG producer disagree on the state directory"
 
 log_step "🧩" "Running manifest and template contract checks..."
 # WSL never receives the desktop baseline, whatever the distribution.
