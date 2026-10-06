@@ -337,8 +337,9 @@ check_manifest_cmds "$manifests_dir/ecosystem/go-tools.txt" go_tool_binary_name
 check_manifest_cmds "$manifests_dir/ecosystem/uv-tools.txt" uv_tool_binary_name
 
 # Shell assets
-check_path "$HOME/.oh-my-zsh/oh-my-zsh.sh" "oh-my-zsh"
-check_oh_my_zsh_plugins "$manifests_dir/shell/oh-my-zsh-plugins.txt" "${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}"
+oh_my_zsh_dir="$(oh_my_devenv_oh_my_zsh_dir)"
+check_path "$oh_my_zsh_dir/oh-my-zsh.sh" "oh-my-zsh"
+check_oh_my_zsh_plugins "$manifests_dir/shell/oh-my-zsh-plugins.txt" "$oh_my_zsh_dir/custom"
 if ! bash "$scripts_dir/install-shell-completions.sh" check '{{ .chezmoi.os }}' "$manifests_dir/shell/completions.txt"; then
   errors=$((errors + 1))
 fi

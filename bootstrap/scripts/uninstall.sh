@@ -86,7 +86,7 @@ can_remove_chezmoi_source() {
 
 is_whitelist_dir() {
   case "$1" in
-    "$HOME/.oh-my-zsh" | \
+    "$(oh_my_devenv_oh_my_zsh_dir)" | \
       "${XDG_DATA_HOME:-$HOME/.local/share}/fonts/maple-mono-nf-cn" | \
       "${XDG_STATE_HOME:-$HOME/.local/state}/chezmoi-first-run-backup" | \
       "$HOME/.local/share/chezmoi" | "$HOME/.local/share/chezmoi/"*)
@@ -134,8 +134,8 @@ candidates+=$'\n'"$("$BASH" "$script_dir/install-shell-completions.sh" list "$co
 }
 candidates+=$'\n'"${XDG_STATE_HOME:-$HOME/.local/state}/chezmoi/oh-my-devenv-xdg.boltdb"
 
-if [[ -d "$HOME/.oh-my-zsh" ]]; then
-  candidates+=$'\n'"$HOME/.oh-my-zsh"
+if [[ -d "$(oh_my_devenv_oh_my_zsh_dir)" ]]; then
+  candidates+=$'\n'"$(oh_my_devenv_oh_my_zsh_dir)"
 fi
 
 managed_font_dir="${XDG_DATA_HOME:-$HOME/.local/share}/fonts/maple-mono-nf-cn"

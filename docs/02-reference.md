@@ -168,6 +168,10 @@ Two downloads have no native variable, so the baseline reads its own:
 | `DOTFILES_MISE_INSTALL_URL` | `https://mise.run` | Linux mise installer URL. |
 | `DOTFILES_OH_MY_ZSH_GIT_URL` | `https://github.com/ohmyzsh/ohmyzsh.git` | oh-my-zsh clone URL. Plugin repositories always clone from github.com. |
 
+oh-my-zsh always lives in `~/.oh-my-zsh`, with plugins in its `custom/`
+directory. The installer, the managed `~/.zshrc`, the environment check, and
+`uninstall.sh` ignore inherited `ZSH` and `ZSH_CUSTOM` values.
+
 ### Pinned artifact downloads
 
 | Variable | Default | Effect |

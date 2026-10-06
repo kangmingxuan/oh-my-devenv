@@ -356,6 +356,48 @@ assert_file_not_contains "$tmp_dir/env.zsh" "$bootstrap_overlay_literal"
 assert_file_not_contains "$tmp_dir/env.zsh" "$shared_secrets_literal"
 assert_file_not_contains "$tmp_dir/env.zsh" "$zsh_overlay_literal"
 
+# The oh-my-zsh location comes from the shared resolver; inherited ZSH and
+# ZSH_CUSTOM values must not redirect the zshrc or the installer.
+omz_home="$tmp_dir/omz-home"
+omz_elsewhere="$tmp_dir/omz-elsewhere"
+mkdir -p "$omz_home/.zsh" "$omz_home/.local/share/oh-my-devenv" "$tmp_dir/omz-empty-config"
+cp "$xdg_resolver" "$omz_home/.local/share/oh-my-devenv/xdg.sh"
+cp "$tmp_dir/env.zsh" "$omz_home/.zsh/env.zsh"
+cp "$tmp_dir/dot_zshrc" "$omz_home/.zshrc"
+omz_dir="$(HOME="$omz_home" bash -c 'source "$1"; oh_my_devenv_oh_my_zsh_dir' _ "$xdg_resolver")"
+mkdir -p "$omz_dir"
+# shellcheck disable=SC2016
+printf 'print -r -- "$ZSH|$ZSH_CUSTOM"\n' >"$omz_dir/oh-my-zsh.sh"
+# shellcheck disable=SC2016
+omz_loaded="$(env -i HOME="$omz_home" PATH=/usr/bin:/bin XDG_CONFIG_HOME="$tmp_dir/omz-empty-config" \
+  ZSH="$omz_elsewhere" ZSH_CUSTOM="$omz_elsewhere/custom" \
+  zsh -fc 'source "$HOME/.zshrc"')"
+[[ "$omz_loaded" == "$omz_dir|$omz_dir/custom" ]] \
+  || fail_test "zshrc loaded oh-my-zsh as '$omz_loaded'; expected '$omz_dir|$omz_dir/custom'"
+
+omz_stub_bin="$tmp_dir/omz-stub-bin"
+omz_git_log="$tmp_dir/omz-git.log"
+mkdir -p "$omz_stub_bin"
+cat >"$omz_stub_bin/git" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+target="${!#}"
+printf '%s\n' "$target" >>"$OMZ_GIT_LOG"
+mkdir -p "$target/.git"
+EOF
+chmod +x "$omz_stub_bin/git"
+ln -s "$(command -v zsh)" "$omz_stub_bin/zsh"
+printf '%s\n' 'example/plugin plugins/example-plugin' >"$tmp_dir/omz-plugins.txt"
+env -i HOME="$omz_home" PATH="$omz_stub_bin:/usr/bin:/bin" XDG_CONFIG_HOME="$tmp_dir/omz-empty-config" \
+  ZSH="$omz_elsewhere" ZSH_CUSTOM="$omz_elsewhere/custom" OMZ_GIT_LOG="$omz_git_log" \
+  bash "$repo_root/bootstrap/scripts/install-oh-my-zsh-assets.sh" "$tmp_dir/omz-plugins.txt" >/dev/null
+printf '%s\n' "$omz_dir/custom/plugins/example-plugin" >"$tmp_dir/omz-git.expected"
+# The fixture oh-my-zsh directory already exists without .git, so only the
+# plugin is cloned; the installer must target the resolved custom directory.
+cmp -s "$tmp_dir/omz-git.expected" "$omz_git_log" \
+  || fail_test "oh-my-zsh installer cloned into: $(<"$omz_git_log")"
+[[ ! -e "$omz_elsewhere" ]] || fail_test "oh-my-zsh installer followed an inherited ZSH or ZSH_CUSTOM"
+
 render_template dot_bashrc.tmpl "$tmp_dir/dot_bashrc"
 syntax_check bash "$tmp_dir/dot_bashrc"
 shellcheck_rendered_bash "$tmp_dir/dot_bashrc"
