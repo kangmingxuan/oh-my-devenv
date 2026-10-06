@@ -151,6 +151,26 @@ check_tool_manifest_parser() {
   done < <(manifest_entries "$manifest")
 }
 
+# The zsh-completions fallback must sit after user completions and before
+# oh-my-zsh runs compinit.
+check_zsh_completions_fpath_order() {
+  local rendered_zshrc="$1"
+  local fallback_path="$2"
+  local user_fpath_line=""
+  local fallback_fpath_line=""
+  local omz_source_line=""
+
+  # shellcheck disable=SC2016
+  user_fpath_line="$(grep -nF 'fpath=("$XDG_DATA_HOME/zsh/site-functions" $fpath)' "$rendered_zshrc" | cut -d: -f1)"
+  fallback_fpath_line="$(grep -nF "$fallback_path" "$rendered_zshrc" | cut -d: -f1)"
+  # shellcheck disable=SC2016
+  omz_source_line="$(grep -nF 'source "$ZSH/oh-my-zsh.sh"' "$rendered_zshrc" | cut -d: -f1)"
+  if [[ -z "$user_fpath_line" || -z "$fallback_fpath_line" || -z "$omz_source_line" \
+    || "$user_fpath_line" -ge "$fallback_fpath_line" || "$fallback_fpath_line" -ge "$omz_source_line" ]]; then
+    fail_test "Zsh completion fpath precedence must be user, system/oh-my-zsh, then zsh-completions fallback"
+  fi
+}
+
 check_oh_my_zsh_manifest_contract() {
   local manifest="$1"
   local rendered_zshrc="$2"
@@ -170,8 +190,8 @@ check_oh_my_zsh_manifest_contract() {
     plugin_name="${plugin_path##*/}"
 
     if [[ "$plugin_name" == "zsh-completions" ]]; then
-      assert_file_contains "$rendered_zshrc" "$plugin_path/src"
       assert_file_not_contains "$rendered_zshrc" "    zsh-completions"
+      check_zsh_completions_fpath_order "$rendered_zshrc" "$plugin_path/src"
       continue
     fi
 
@@ -327,15 +347,6 @@ render_template dot_zshrc.tmpl "$tmp_dir/dot_zshrc"
 syntax_check zsh "$tmp_dir/dot_zshrc"
 assert_file_contains "$tmp_dir/dot_zshrc" "$shared_secrets_literal"
 assert_file_contains "$tmp_dir/dot_zshrc" "$zsh_overlay_literal"
-# shellcheck disable=SC2016
-user_fpath_line="$(grep -nF 'fpath=("$XDG_DATA_HOME/zsh/site-functions" $fpath)' "$tmp_dir/dot_zshrc" | cut -d: -f1)"
-fallback_fpath_line="$(grep -nF 'zsh-completions/src' "$tmp_dir/dot_zshrc" | cut -d: -f1)"
-# shellcheck disable=SC2016
-omz_source_line="$(grep -nF 'source "$ZSH/oh-my-zsh.sh"' "$tmp_dir/dot_zshrc" | cut -d: -f1)"
-if [[ -z "$user_fpath_line" || -z "$fallback_fpath_line" || -z "$omz_source_line" \
-  || "$user_fpath_line" -ge "$fallback_fpath_line" || "$fallback_fpath_line" -ge "$omz_source_line" ]]; then
-  fail_test "Zsh completion fpath precedence must be user, system/oh-my-zsh, then zsh-completions fallback"
-fi
 synthetic_macos_zshrc="$tmp_dir/dot_zshrc.macos"
 chezmoi --source="$repo_root" \
   --override-data '{"chezmoi":{"os":"darwin","osRelease":null,"kernel":null}}' \
@@ -1213,15 +1224,60 @@ if [[ "$desktop_platform_supported_data" == true ]]; then
 elif [[ -s "$xdg_desktop_home/ghostty/config.ghostty" ]]; then
   fail_test "nested XDG apply wrote a Ghostty config on an unsupported desktop platform"
 fi
-# Disabling the baseline renders the desktop templates empty, and chezmoi then
-# removes the targets an earlier apply wrote.
-XDG_CONFIG_HOME="$xdg_desktop_home" XDG_STATE_HOME="$tmp_dir/xdg-desktop-state-home" \
-  bash "$repo_root/bootstrap/scripts/xdg-config.sh" apply "$xdg_test_config"
-for desktop_target in ghostty/config.ghostty fontconfig/conf.d/99-oh-my-devenv-maple-mono-nf-cn.conf; do
-  if [[ -e "$xdg_desktop_home/$desktop_target" ]]; then
-    fail_test "disabling the desktop baseline left $desktop_target in place"
+# Desktop targets are the nested XDG targets that render content with the
+# baseline enabled and render empty with it disabled. Derive them for each
+# synthetic platform, then check that enabling writes them and disabling makes
+# chezmoi remove them.
+desktop_empty_config="$tmp_dir/desktop-empty-chezmoi.toml"
+: >"$desktop_empty_config"
+desktop_chezmoi() {
+  local destination="$1"
+  local override_data="$2"
+  shift 2
+
+  chezmoi --config="$desktop_empty_config" --persistent-state="$destination.boltdb" \
+    --source="$repo_root/xdg_config" --destination="$destination" \
+    --override-data="$override_data" "$@"
+}
+desktop_platform_cases=(
+  "macos|true|$darwin_chezmoi_data"
+  "ubuntu|true|$supported_linux_chezmoi_data"
+  "unsupported|false|$unsupported_chezmoi_data"
+)
+for desktop_case in "${desktop_platform_cases[@]}"; do
+  IFS='|' read -r desktop_name desktop_supported desktop_platform_data <<<"$desktop_case"
+  desktop_home="$tmp_dir/desktop-$desktop_name-home"
+  mkdir -p "$desktop_home"
+  desktop_enabled="$(printf '{"desktopBaseline":true,"desktopPlatformSupported":%s,"desktopFontFamily":"%s","chezmoi":%s}' \
+    "$desktop_supported" "$MAPLE_MONO_FAMILY" "$desktop_platform_data")"
+  desktop_disabled="${desktop_enabled/\"desktopBaseline\":true/\"desktopBaseline\":false}"
+  desktop_targets=()
+  while IFS= read -r desktop_target; do
+    [[ -n "$(desktop_chezmoi "$desktop_home" "$desktop_enabled" cat "$desktop_target")" ]] || continue
+    [[ -z "$(desktop_chezmoi "$desktop_home" "$desktop_disabled" cat "$desktop_target")" ]] || continue
+    desktop_targets+=("$desktop_target")
+  done < <(desktop_chezmoi "$desktop_home" "$desktop_enabled" managed --include=files --path-style=absolute --format=)
+  if [[ "$desktop_supported" == true && ${#desktop_targets[@]} -eq 0 ]]; then
+    fail_test "desktop baseline renders no targets on supported platform $desktop_name"
   fi
+  if [[ "$desktop_supported" != true && ${#desktop_targets[@]} -ne 0 ]]; then
+    fail_test "desktop baseline renders targets on unsupported platform $desktop_name: ${desktop_targets[*]}"
+  fi
+  desktop_chezmoi "$desktop_home" "$desktop_enabled" apply
+  for desktop_target in ${desktop_targets[@]+"${desktop_targets[@]}"}; do
+    [[ -s "$desktop_target" ]] || fail_test "enabling the desktop baseline did not write $desktop_target"
+  done
+  desktop_chezmoi "$desktop_home" "$desktop_disabled" apply
+  for desktop_target in ${desktop_targets[@]+"${desktop_targets[@]}"}; do
+    [[ ! -e "$desktop_target" ]] || fail_test "disabling the desktop baseline left $desktop_target in place"
+  done
+  printf '%s\n' ${desktop_targets[@]+"${desktop_targets[@]}"} >"$tmp_dir/desktop-$desktop_name-targets"
 done
+# Only the Ubuntu desktop adds the Fontconfig workaround, so it manages more
+# desktop targets than macOS.
+if [[ "$(wc -l <"$tmp_dir/desktop-ubuntu-targets")" -le "$(wc -l <"$tmp_dir/desktop-macos-targets")" ]]; then
+  fail_test "Ubuntu desktop targets must include the Fontconfig workaround beyond the macOS set"
+fi
 xdg_status="$(XDG_CONFIG_HOME="$xdg_test_home" XDG_STATE_HOME="$xdg_test_state" \
   bash "$repo_root/bootstrap/scripts/xdg-config.sh" status "$xdg_test_config")"
 if [[ -n "$xdg_status" ]]; then
@@ -1393,6 +1449,23 @@ chezmoi --source="$repo_root" execute-template --with-stdin '{{ .chezmoi.stdin |
   <"$tmp_dir/mise-config.toml" >/dev/null \
   || fail_test "mise config does not parse as TOML"
 check_oh_my_zsh_manifest_contract "$repo_root/bootstrap/manifests/shell/oh-my-zsh-plugins.txt" "$tmp_dir/dot_zshrc"
+# Synthetic manifests render the zshrc from a minimal source copy: one without
+# zsh-completions, and one that keeps it under a different parent directory.
+omz_contract_source="$tmp_dir/omz-contract-source"
+mkdir -p "$omz_contract_source/bootstrap/manifests/shell"
+cp "$repo_root/dot_zshrc.tmpl" "$omz_contract_source/dot_zshrc.tmpl"
+omz_contract_manifest="$omz_contract_source/bootstrap/manifests/shell/oh-my-zsh-plugins.txt"
+while IFS='|' read -r omz_contract_case omz_contract_rows; do
+  printf '%b\n' "$omz_contract_rows" >"$omz_contract_manifest"
+  chezmoi --source="$omz_contract_source" execute-template \
+    --file "$omz_contract_source/dot_zshrc.tmpl" >"$tmp_dir/dot_zshrc.$omz_contract_case"
+  syntax_check zsh "$tmp_dir/dot_zshrc.$omz_contract_case"
+  check_oh_my_zsh_manifest_contract "$omz_contract_manifest" "$tmp_dir/dot_zshrc.$omz_contract_case"
+done <<'OMZ_CASES'
+without-completions|example/one plugins/one
+vendor-completions|example/one plugins/one\nzsh-users/zsh-completions vendor/zsh-completions
+OMZ_CASES
+assert_file_not_contains "$tmp_dir/dot_zshrc.without-completions" '/src")'
 # The desktop font manifest already passed schema validation while loading the
 # smoke data; the loader must reject missing and malformed manifests.
 font_manifest_errors="$tmp_dir/font-manifest.err"
