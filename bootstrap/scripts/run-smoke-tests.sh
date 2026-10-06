@@ -366,8 +366,10 @@ cp "$tmp_dir/env.zsh" "$omz_home/.zsh/env.zsh"
 cp "$tmp_dir/dot_zshrc" "$omz_home/.zshrc"
 omz_dir="$(HOME="$omz_home" bash -c 'source "$1"; oh_my_devenv_oh_my_zsh_dir' _ "$xdg_resolver")"
 mkdir -p "$omz_dir"
+# The stub stops the shell after reporting, so the rest of the zshrc never
+# initializes host tools such as mise or fzf.
 # shellcheck disable=SC2016
-printf 'print -r -- "$ZSH|$ZSH_CUSTOM"\n' >"$omz_dir/oh-my-zsh.sh"
+printf 'print -r -- "$ZSH|$ZSH_CUSTOM"\nexit 0\n' >"$omz_dir/oh-my-zsh.sh"
 # shellcheck disable=SC2016
 omz_loaded="$(env -i HOME="$omz_home" PATH=/usr/bin:/bin XDG_CONFIG_HOME="$tmp_dir/omz-empty-config" \
   ZSH="$omz_elsewhere" ZSH_CUSTOM="$omz_elsewhere/custom" \
