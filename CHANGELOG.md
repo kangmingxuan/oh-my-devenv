@@ -69,3 +69,10 @@ versioning and release policy lives in
   Dependabot for GitHub Actions.
 - English and Chinese landing pages, onboarding, reference, maintenance, and
   design documentation.
+
+### Fixed
+
+- Rebuild uv tools whose environment no longer runs on the Python it was built
+  on, such as after a mise Python upgrade. The ecosystem tool hook now runs
+  again when the mise configuration changes, and the environment check reports
+  stale uv tool environments.

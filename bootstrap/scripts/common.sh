@@ -267,6 +267,26 @@ uv_tool_binary_name() {
   printf '%s\n' "$tool"
 }
 
+# Succeed when the uv tool environment <tool-dir>/<name> runs on the Python it
+# was built on. Otherwise print the problem and fail. A runtime manager upgrade
+# can remove that Python or swap it behind a version alias.
+uv_tool_env_healthy() {
+  local env_dir="$1/$2"
+  local built_on=""
+  local running=""
+
+  if ! running="$("$env_dir/bin/python" -c 'import sys; print("%d.%d.%d" % sys.version_info[:3])' 2>/dev/null)"; then
+    printf 'interpreter is missing\n'
+    return 1
+  fi
+
+  built_on="$(sed -n 's/^version_info[[:space:]]*=[[:space:]]*//p' "$env_dir/pyvenv.cfg" 2>/dev/null | cut -d. -f1-3 || true)"
+  if [[ "$built_on" != "$running" ]]; then
+    printf 'built on Python %s but runs Python %s\n' "${built_on:-unknown}" "$running"
+    return 1
+  fi
+}
+
 # Print the exact module version pinned by a go-tools.txt entry. Every entry
 # must use `module@vX.Y.Z` (pre-release and pseudo-version suffixes allowed).
 go_tool_version() {
