@@ -668,7 +668,11 @@ fi
 # The fixture root contains spaces so every path stays a single argument.
 mise_root="$tmp_dir/mise shims fixture"
 mise_home="$mise_root/home"
-mkdir -p "$mise_home/.local/share/mise/shims" "$mise_root/xdg-data/mise/shims" \
+# The default data root comes from the XDG resolver, which has its own tests;
+# only mise's "<data root>/mise/shims" layout is asserted here.
+# shellcheck disable=SC2016
+mise_default_data="$(env -i HOME="$mise_home" bash -c 'source "$1"; oh_my_devenv_resolve_xdg_data_home' _ "$xdg_resolver")"
+mkdir -p "$mise_default_data/mise/shims" "$mise_root/xdg-data/mise/shims" \
   "$mise_root/mise-data/shims" "$mise_root/shims-override" "$mise_root/empty-config"
 cp "$tmp_dir/env.bash" "$mise_root/env.bash"
 cp "$tmp_dir/env.zsh" "$mise_root/env.zsh"
@@ -678,7 +682,7 @@ for mise_case in default xdg-data mise-data shims-dir; do
   mise_env=()
   case "$mise_case" in
     default)
-      expected_shims="$mise_home/.local/share/mise/shims"
+      expected_shims="$mise_default_data/mise/shims"
       ;;
     xdg-data)
       mise_env=("XDG_DATA_HOME=$mise_root/xdg-data")
