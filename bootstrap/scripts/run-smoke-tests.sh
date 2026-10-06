@@ -665,7 +665,8 @@ fi
 
 # Both shells put the mise shim directory first, resolved with mise's own
 # precedence: MISE_SHIMS_DIR, then MISE_DATA_DIR, then XDG_DATA_HOME.
-mise_root="$tmp_dir/mise-shims-fixture"
+# The fixture root contains spaces so every path stays a single argument.
+mise_root="$tmp_dir/mise shims fixture"
 mise_home="$mise_root/home"
 mkdir -p "$mise_home/.local/share/mise/shims" "$mise_root/xdg-data/mise/shims" \
   "$mise_root/mise-data/shims" "$mise_root/shims-override" "$mise_root/empty-config"
@@ -673,20 +674,34 @@ cp "$tmp_dir/env.bash" "$mise_root/env.bash"
 cp "$tmp_dir/env.zsh" "$mise_root/env.zsh"
 mkdir -p "$mise_home/.local/share/oh-my-devenv"
 cp "$xdg_resolver" "$mise_home/.local/share/oh-my-devenv/xdg.sh"
-while IFS='|' read -r mise_case mise_env expected_shims; do
+for mise_case in default xdg-data mise-data shims-dir; do
+  mise_env=()
+  case "$mise_case" in
+    default)
+      expected_shims="$mise_home/.local/share/mise/shims"
+      ;;
+    xdg-data)
+      mise_env=("XDG_DATA_HOME=$mise_root/xdg-data")
+      expected_shims="$mise_root/xdg-data/mise/shims"
+      ;;
+    mise-data)
+      mise_env=("XDG_DATA_HOME=$mise_root/xdg-data" "MISE_DATA_DIR=$mise_root/mise-data")
+      expected_shims="$mise_root/mise-data/shims"
+      ;;
+    shims-dir)
+      mise_env=("MISE_DATA_DIR=$mise_root/mise-data" "MISE_SHIMS_DIR=$mise_root/shims-override")
+      expected_shims="$mise_root/shims-override"
+      ;;
+  esac
   for mise_shell in bash zsh; do
-    # shellcheck disable=SC2016,SC2086
-    actual_shims="$(env -i HOME="$mise_home" PATH=/usr/bin:/bin XDG_CONFIG_HOME="$mise_root/empty-config" $mise_env \
+    # shellcheck disable=SC2016
+    actual_shims="$(env -i HOME="$mise_home" PATH=/usr/bin:/bin XDG_CONFIG_HOME="$mise_root/empty-config" \
+      ${mise_env[@]+"${mise_env[@]}"} \
       "$mise_shell" -c '. "$1"; printf "%s\n" "${PATH%%:*}"' _ "$mise_root/env.$mise_shell")"
     [[ "$actual_shims" == "$expected_shims" ]] \
       || fail_test "$mise_shell mise shims for $mise_case resolved to '$actual_shims'; expected '$expected_shims'"
   done
-done <<EOF
-default||$mise_home/.local/share/mise/shims
-xdg-data|XDG_DATA_HOME=$mise_root/xdg-data|$mise_root/xdg-data/mise/shims
-mise-data|XDG_DATA_HOME=$mise_root/xdg-data MISE_DATA_DIR=$mise_root/mise-data|$mise_root/mise-data/shims
-shims-dir|MISE_DATA_DIR=$mise_root/mise-data MISE_SHIMS_DIR=$mise_root/shims-override|$mise_root/shims-override
-EOF
+done
 
 render_template dot_gitconfig.tmpl "$tmp_dir/dot_gitconfig"
 assert_file_contains "$tmp_dir/dot_gitconfig" "$gitconfig_include_literal"
