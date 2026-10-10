@@ -182,7 +182,7 @@ directory. The installer, the managed `~/.zshrc`, the environment check, and
 
 | Variable | Default | Effect |
 |----------|---------|--------|
-| `DOTFILES_FORCE_REINSTALL=1` | off | Skip the idempotency probe and reinstall the Go / Python tools. |
+| `DOTFILES_FORCE_REINSTALL=1` | off | Skip the idempotency probe and rebuild the installed uv tools. Go tools are always reinstalled when their hook runs. |
 
 ### mise
 

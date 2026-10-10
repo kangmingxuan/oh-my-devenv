@@ -12,6 +12,11 @@ versioning and release policy lives in
 - The desktop hook's warning on an unsupported platform now states that no
   desktop assets were installed and points to `docs/02-reference.md` for the
   supported platforms instead of restating the support rule.
+- Install every Go tool each time the ecosystem hook runs instead of skipping
+  tools that report the pinned version, so a Go upgrade rebuilds them.
+  `DOTFILES_FORCE_REINSTALL` now applies only to uv tools.
+- Rerun a bootstrap hook when an installer script it runs changes, not only
+  when its manifest changes.
 
 ## [0.1.0] - 2026-10-10
 

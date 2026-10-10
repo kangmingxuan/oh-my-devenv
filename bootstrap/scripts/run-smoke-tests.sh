@@ -1107,6 +1107,27 @@ fi
   [[ "$errors" == 1 ]] || fail_test "missing desktop fonts must still fail validation"
 )
 
+# The shared check helpers count every missing command and path.
+(
+  eval "$(sed -n '/^check_cmd() {$/,/^}$/p; /^check_path() {$/,/^}$/p' "$tmp_dir/run_onchange_after_60-check.sh")"
+  errors=0
+  check_cmd smoke-missing-command 2>/dev/null
+  check_path "$tmp_dir/smoke-missing-path" "smoke missing path" 2>/dev/null
+  [[ "$errors" == 2 ]] || fail_test "check helpers must count each missing command and path; counted $errors"
+)
+
+# On a machine without the baseline, the environment check fails through its
+# final gate instead of reporting success.
+check_stub_bin="$tmp_dir/check-stub-bin"
+mkdir -p "$check_stub_bin"
+for fixture_command in bash dirname mkdir sed cut grep awk basename; do
+  ln -s "$(command -v "$fixture_command")" "$check_stub_bin/$fixture_command"
+done
+expect_failure "$tmp_dir/hook-check.err" \
+  env -i PATH="$check_stub_bin" HOME="$tmp_dir/hook-home" XDG_CONFIG_HOME="$XDG_CONFIG_HOME" \
+  bash "$tmp_dir/hook-ubuntu-run_onchange_after_60-check.sh"
+assert_file_contains "$tmp_dir/hook-check.err" "required tool(s) or asset(s) are missing."
+
 log_step "🤖" "Verifying the main source deploys only dotfiles..."
 # Repository documentation, metadata, and the nested sources are not targets:
 # every path the main source manages is a dot-path directly under HOME.
@@ -1393,6 +1414,22 @@ true|{"os":"linux","osRelease":{"id":"smoke-arch-derivative","idLike":"smoke arc
 |{"os":"linux","osRelease":{"id":"arch","idLike":"","versionID":""},"kernel":{"osrelease":"microsoft-standard-WSL2"}}
 |$unsupported_chezmoi_data
 EOF
+
+# A run_onchange hook reruns only when its rendered text changes, so it must
+# hash every script it runs and every manifest it passes to a script.
+for hook_template in "$repo_root"/.chezmoiscripts/run_onchange_*.sh.tmpl; do
+  # The patterns match the literal $scripts_dir and $manifests_dir hook text.
+  # shellcheck disable=SC2016
+  hook_inputs="$(
+    grep -oE '(bash "\$scripts_dir|"\$manifests_dir)/[^"]+"' "$hook_template" \
+      | sed -E 's|^bash "\$scripts_dir/|bootstrap/scripts/|; s|^"\$manifests_dir/|bootstrap/manifests/|; s|"$||' \
+      | sort -u
+  )" || true
+  while IFS= read -r hook_input; do
+    [[ -n "$hook_input" ]] || continue
+    assert_file_contains "$hook_template" "include \"$hook_input\" | sha256sum"
+  done <<<"$hook_inputs"
+done
 
 # The Ghostty font workaround renders only for the supported Ubuntu desktop.
 synthetic_fontconfig_template="$repo_root/xdg_config/fontconfig/conf.d/99-oh-my-devenv-maple-mono-nf-cn.conf.tmpl"

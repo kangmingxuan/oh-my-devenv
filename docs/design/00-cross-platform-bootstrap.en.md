@@ -353,7 +353,7 @@ Notes:
 - Call `setup_go_env` from `bootstrap/scripts/common.sh` to keep Go tools on a stable install path
 - Default `GOBIN` to `$HOME/go/bin` when no override is provided
 - Require every entry to pin an exact `module@vX.Y.Z` version and fail before installing anything otherwise
-- Skip tools already installed at the pinned version unless `DOTFILES_FORCE_REINSTALL=1`
+- Install every tool on each run; the hook runs only when its inputs change, a Go upgrade must rebuild the tools, and the Go build cache keeps an unchanged tool fast
 - Tool ownership follows the manifest that declares the tool: the mise configuration owns binary-distributed tools such as `golangci-lint`, and `go-tools.txt` owns `go install` tools
 
 ### `install-uv-tools`

@@ -353,7 +353,7 @@ bat
 - 通过 `bootstrap/scripts/common.sh` 中的 `setup_go_env` 固定 Go 工具安装路径
 - 在未显式覆盖时，将 `GOBIN` 默认设置为 `$HOME/go/bin`
 - 要求每一项都固定为精确的 `module@vX.Y.Z` 版本，否则在安装任何工具之前直接失败
-- 已安装版本与固定版本一致时跳过，除非设置 `DOTFILES_FORCE_REINSTALL=1`
+- 每次运行都安装全部工具：hook 只在输入变化时运行，Go 升级后必须重新构建工具，未变化的工具由 Go 构建缓存保证速度
 - 工具归属由声明它的清单决定：mise 配置负责 `golangci-lint` 等二进制分发工具，`go-tools.txt` 负责 `go install` 工具
 
 ### `install-uv-tools`
