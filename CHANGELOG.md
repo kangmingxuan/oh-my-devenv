@@ -7,6 +7,8 @@ versioning and release policy lives in
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-10-10
+
 ### Changed
 
 - Move the Go toolchain off the unsupported 1.25 line to Go 1.27.1, with
@@ -76,3 +78,6 @@ versioning and release policy lives in
   on, such as after a mise Python upgrade. The ecosystem tool hook now runs
   again when the mise configuration changes, and the environment check reports
   stale uv tool environments.
+
+[Unreleased]: https://github.com/kangmingxuan/oh-my-devenv/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/kangmingxuan/oh-my-devenv/releases/tag/v0.1.0
