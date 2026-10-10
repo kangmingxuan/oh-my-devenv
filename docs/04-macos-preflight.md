@@ -98,19 +98,21 @@ not add cleanup commands to this checklist.
 
 ## 4. Hand-Validate The Desktop Baseline
 
+The desktop Brewfile check in step 3 already proves that the declared desktop
+casks are installed. This step validates Ghostty's behavior with the managed
+configuration:
+
 ```bash
-brew list --cask ghostty font-maple-mono-nf-cn orbstack
 ghostty_cli="$(command -v ghostty || true)"
 : "${ghostty_cli:=/Applications/Ghostty.app/Contents/MacOS/ghostty}"
 test -x "$ghostty_cli"
 "$ghostty_cli" +validate-config
 ```
 
-Expected outcome: all three casks are installed and Ghostty accepts the
-effective managed configuration, including any machine-local
-`$XDG_CONFIG_HOME/ghostty/config.local.ghostty` overrides. This check does not
-launch OrbStack or assert Docker daemon, context, socket, or license readiness;
-first-launch setup remains a user action.
+Expected outcome: Ghostty accepts the effective managed configuration,
+including any machine-local `$XDG_CONFIG_HOME/ghostty/config.local.ghostty`
+overrides. This check does not launch OrbStack or assert Docker daemon,
+context, socket, or license readiness; first-launch setup remains a user action.
 
 ## 5. Hand-Validate mise Runtime State
 
@@ -146,18 +148,45 @@ machine for this check.
 
 ## 6. Hand-Validate go / uv Tool State
 
+`60-check.sh` already checks that every command declared in
+[`bootstrap/manifests/ecosystem/go-tools.txt`](../bootstrap/manifests/ecosystem/go-tools.txt)
+and
+[`bootstrap/manifests/ecosystem/uv-tools.txt`](../bootstrap/manifests/ecosystem/uv-tools.txt)
+is on `PATH`, and it reports uv tool environments that no longer run on the
+Python they were built on. It does not execute the tools. Run each declared
+tool once from the repository root so a corrupt, wrong-architecture, or crashing
+binary cannot pass the preflight:
+
 ```bash
-gopls version
-dlv version
-ruff --version
-basedpyright --version
-pre-commit --version
+/bin/bash -c '
+  source bootstrap/scripts/common.sh
+  setup_go_env
+  export_tool_path "$GOBIN"
+  failed=0
+  while IFS="|" read -r parser manifest; do
+    while IFS= read -r entry; do
+      tool="$("$parser" "$entry")"
+      if "$tool" --help >/dev/null 2>&1; then
+        printf "[ok] %s\n" "$tool"
+      else
+        printf "[failed] %s\n" "$tool" >&2
+        failed=1
+      fi
+    done < <(manifest_entries "$manifest")
+  done <<EOF
+go_tool_binary_name|bootstrap/manifests/ecosystem/go-tools.txt
+uv_tool_binary_name|bootstrap/manifests/ecosystem/uv-tools.txt
+EOF
+  exit "$failed"
+'
 ```
 
-Expected outcome: each command prints a version and exits 0. A missing command
-means `50-sync-ecosystem-tools.sh` did not finish cleanly on this machine.
-Capture the log and hold the signoff and merge while authorized diagnosis,
-source repair, and safe retesting continue.
+Expected outcome: step 2 reported `All checks passed.`, and this probe prints
+`[ok]` for every declared tool and exits 0. A missing command means
+`50-sync-ecosystem-tools.sh` did not finish cleanly on this machine. A
+`[failed]` tool is installed but does not start; run it by hand to see the
+error. Capture the log and hold the signoff and merge while authorized
+diagnosis, source repair, and safe retesting continue.
 
 ## 7. Confirm The Local Smoke Suite
 
@@ -192,9 +221,9 @@ Copy the template below verbatim into the review description (append to the exis
 - [ ] Hardware / OS: `<arm64 | x86_64>` — macOS `<version>`
 - [ ] `chezmoi init --apply` completed; `60-check.sh` reported `All checks passed.`
 - [ ] Both `brew bundle check` commands reported `The Brewfile's dependencies are satisfied.` (declared dependencies only)
-- [ ] Ghostty, Maple Mono, and OrbStack casks are installed; `ghostty +validate-config` succeeds
+- [ ] `ghostty +validate-config` succeeds
 - [ ] Managed XDG status is clean; active mise config sources and effective versions recorded
-- [ ] `gopls`, `dlv`, `ruff`, `basedpyright`, `pre-commit` all print versions
+- [ ] The ecosystem tool probe printed `[ok]` for every declared tool
 - [ ] macOS smoke passed: `<local Mac | smoke-tests-macos CI run>`
 - Deviations / notes: `<free-form, or "none">`
 - Preflight run by: `@<your-handle>` on `<YYYY-MM-DD>`
