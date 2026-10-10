@@ -16,6 +16,7 @@ install_error_trap "$0"
 
 {{ if eq .chezmoi.os "darwin" -}}
 # Desktop Brewfile hash: {{ include "bootstrap/manifests/desktop/Brewfile" | sha256sum }}
+# Homebrew installer hash: {{ include "bootstrap/scripts/install-brew-packages.sh" | sha256sum }}
 log_step "🖥️" "Installing the desktop baseline via Homebrew..."
 bash "$scripts_dir/install-brew-packages.sh" "$manifests_dir/desktop/Brewfile"
 log_step "✅" "Desktop baseline installation complete."
@@ -25,6 +26,7 @@ log_step "✅" "Desktop baseline installation complete."
 # pacman installer hash: {{ include "bootstrap/scripts/install-pacman-packages.sh" | sha256sum }}
 {{ else -}}
 # Desktop apt manifest hash: {{ include "bootstrap/manifests/desktop/apt-packages.txt" | sha256sum }}
+# apt installer hash: {{ include "bootstrap/scripts/install-apt-packages.sh" | sha256sum }}
 {{ end -}}
 # Maple Mono manifest hash: {{ include "bootstrap/manifests/desktop/maple-mono-nf-cn.env" | sha256sum }}
 # Maple Mono installer hash: {{ include "bootstrap/scripts/install-maple-mono-font.sh" | sha256sum }}

@@ -26,6 +26,7 @@
 # uv-tools.txt hash: {{ include "bootstrap/manifests/ecosystem/uv-tools.txt" | sha256sum }}
 # oh-my-zsh-plugins.txt hash: {{ include "bootstrap/manifests/shell/oh-my-zsh-plugins.txt" | sha256sum }}
 # completions.txt hash: {{ include "bootstrap/manifests/shell/completions.txt" | sha256sum }}
+# completion installer hash: {{ include "bootstrap/scripts/install-shell-completions.sh" | sha256sum }}
 # mise config hash: {{ include "xdg_config/mise/config.toml.tmpl" | sha256sum }}
 
 set -euo pipefail

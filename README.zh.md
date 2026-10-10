@@ -8,7 +8,7 @@
 [![Apply Tests](https://github.com/kangmingxuan/oh-my-devenv/actions/workflows/apply-tests.yml/badge.svg)](https://github.com/kangmingxuan/oh-my-devenv/actions/workflows/apply-tests.yml)
 [![Secret Scan](https://github.com/kangmingxuan/oh-my-devenv/actions/workflows/secret-scan.yml/badge.svg)](https://github.com/kangmingxuan/oh-my-devenv/actions/workflows/secret-scan.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-![Platforms](https://img.shields.io/badge/platforms-macOS%20%7C%20Ubuntu%2FDebian%20%7C%20WSL-informational)
+![Platforms](https://img.shields.io/badge/platforms-macOS%20%7C%20Ubuntu%2FDebian%20%7C%20Arch%20Linux%20%7C%20WSL-informational)
 
 oh-my-devenv 是一套主观鲜明、可复现的开发环境。它公开的是维护者当前认可的一整套选择：认同这些选择就使用，不认同就不使用。在一台全新机器上让 `chezmoi` 指向它，几分钟后你就拥有受管的 shell、语言运行时和精选 CLI 工具链，全部来自同一份事实来源。密钥与机器私有事实留在本地 overlay 中，使公开基线可以安全检出。
 
@@ -18,7 +18,7 @@ oh-my-devenv 是一套主观鲜明、可复现的开发环境。它公开的是�
 - **一条命令完成引导** —— `chezmoi init --apply` 通过有序 hook 安装全部内容；重复运行幂等且安全。
 - **分层且可复现** —— chezmoi 统一编排系统软件包、可选桌面资产、shell 资产、[mise](https://mise.jdx.dev/) 运行时与各语言工具，每一层都有自己的清单（manifest）。
 - **受管的 shell** —— 所有平台上的 Zsh 与 Linux / WSL 上的 Bash 都提供完整自动补全；macOS Bash 则刻意只保留有限支持。
-- **锁定版本的运行时** —— 通过 mise 管理 Go、Node、Python 与 golangci-lint，外加 `gopls`、`dlv`、`ruff`、`basedpyright`、`pre-commit` 等生态工具。
+- **锁定版本的运行时** —— 通过 mise 管理 Go、Node、Python 与 golangci-lint，外加 `gopls`、`dlv`、`ruff`、`basedpyright`、`pre-commit` 等生态工具。系统软件包、mise 本身以及 oh-my-zsh 与其插件跟随上游发布。
 - **现代 CLI 工具箱** —— ripgrep、fd、bat、fzf、jq、direnv、tmux、shellcheck、shfmt 等。
 - **可选桌面基线** —— 一个全有或全无的平台包：受支持的工作站安装 Ghostty 与 Maple Mono NF CN，macOS 额外安装 OrbStack，Ubuntu 26.04+ 另有仅针对 Ghostty 的 Fontconfig 兼容补丁。
 - **安全的首次运行** —— 自动备份已存在的受管 dotfiles，并仅在首次询问 Git 身份和桌面基线选择。
