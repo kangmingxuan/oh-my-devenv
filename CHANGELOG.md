@@ -7,8 +7,17 @@ versioning and release policy lives in
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-10-10
+
 ### Changed
 
+- **Breaking:** Install oh-my-zsh and its plugins only in `~/.oh-my-zsh`. The
+  installer, the managed `~/.zshrc`, the environment check, and `uninstall.sh`
+  now ignore inherited `ZSH` and `ZSH_CUSTOM` values. Move an installation from
+  a custom location, or let bootstrap install a new copy in `~/.oh-my-zsh`.
+- **Breaking:** Shell overlays must call `path_reorder_front` to order `PATH`.
+  The `path_prepend` and `path_remove` helpers are removed without aliases;
+  update local `env.sh` overlays that call them.
 - Move the Go toolchain off the unsupported 1.25 line to Go 1.27.1, with
   gopls 0.23.0, Delve 1.27.2, and golangci-lint 2.14.0. The selected tools
   support Go 1.27; Go 1.26 remains a supported alternative, but the shared
@@ -76,3 +85,6 @@ versioning and release policy lives in
   on, such as after a mise Python upgrade. The ecosystem tool hook now runs
   again when the mise configuration changes, and the environment check reports
   stale uv tool environments.
+
+[Unreleased]: https://github.com/kangmingxuan/oh-my-devenv/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/kangmingxuan/oh-my-devenv/releases/tag/v0.1.0
