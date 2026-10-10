@@ -7,6 +7,12 @@ versioning and release policy lives in
 
 ## [Unreleased]
 
+### Changed
+
+- The desktop hook's warning on an unsupported platform now states that no
+  desktop assets were installed and points to `docs/02-reference.md` for the
+  supported platforms instead of restating the support rule.
+
 ## [0.1.0] - 2026-10-10
 
 ### Changed

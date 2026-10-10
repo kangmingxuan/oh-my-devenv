@@ -37,6 +37,6 @@ bash "$scripts_dir/install-apt-packages.sh" "$manifests_dir/desktop/apt-packages
 bash "$scripts_dir/install-maple-mono-font.sh" "$manifests_dir/desktop/maple-mono-nf-cn.env"
 log_step "✅" "Desktop baseline installation complete."
 {{- else }}
-log_warning "Desktop baseline requested, but automatic installation is supported only on macOS, Arch Linux, and Ubuntu 26.04+ outside WSL."
+log_warning "Desktop baseline requested, but automatic installation is not supported on this platform. No desktop assets were installed. See docs/02-reference.md for supported platforms."
 {{- end }}
 {{- end -}}

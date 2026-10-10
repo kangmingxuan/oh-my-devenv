@@ -6,6 +6,7 @@
 
 - macOS
 - Ubuntu / Debian
+- Arch Linux 家族
 - Windows WSL
 
 要求：
@@ -23,6 +24,7 @@
 2. **系统包管理器**：
    - macOS 使用 `Homebrew`
    - Ubuntu / Debian / WSL 使用 `apt`
+   - Arch Linux 家族使用 `pacman`
 3. **桌面资产安装器**：用户选择后，从独立清单安装完整的平台包：所有受支持平台包含 Ghostty 与 Maple Mono NF CN，macOS 额外包含 OrbStack
 4. **mise**：负责语言运行时与二进制分发工具的版本管理，如 Go / Node / Python / `golangci-lint` / `uv`
 5. **生态工具安装器**：负责语言生态内工具
@@ -67,7 +69,7 @@
 - `tree`
 - `zip`
 - `unzip`
-- `build-essential`（Linux）
+- `build-essential`（Debian / Ubuntu）或 `base-devel`（Arch Linux）
 
 ### mise 负责
 
@@ -184,7 +186,7 @@
 - bootstrap 的 manifest 与脚本都放在 source 根目录下的 `bootstrap/`，并通过 `.chezmoiignore` 保持 source-only；运行时由 `.chezmoiscripts` 基于 `{{ .chezmoi.sourceDir }}` 调用
 - 所有脚本必须幂等
 - 使用 `bash` 和 `set -euo pipefail`
-- 避免不必要的交互式提示（如 apt 询问）；Linux / WSL 的 apt 路径应先统一执行 `sudo -v`，并以非交互模式运行安装命令
+- 避免不必要的交互式提示（如 apt 或 pacman 询问）；Linux / WSL 的 apt 与 pacman 路径应先统一执行 `sudo -v`，并以非交互模式运行安装命令
 - 失败时输出清晰错误信息
 
 ## 7. 平台策略
@@ -208,6 +210,16 @@
 - 只有非 WSL 的 Ubuntu 26.04+ 参与已选择的桌面基线：Ghostty 通过 apt 安装，固定并校验过的 Maple Mono 归档安装到用户字体目录
 - 仅在受支持的 Ubuntu 桌面基线保留 Ghostty 未遵守显式字体设置的 Fontconfig 补丁，同时匹配 `prgname=ghostty` 和 `monospace`；其他应用和平台保留自己的字体偏好。其他环境或关闭桌面基线时模板渲染为空，chezmoi 不管理该文件；字体检查验证已注册的字体样式，不要求改变系统等宽字体
 
+### Arch Linux 家族
+
+- 系统工具只使用 `pacman`
+- 包清单存放于 `pacman-packages.txt`
+- 通过 `.chezmoi.osRelease.idLike` 识别衍生发行版
+- 使用 `pacman -S --needed` 基于已同步的数据库安装；绝不单独用 `-Sy` 刷新，因为完整系统升级是单独的用户操作
+- 当 shell 层依赖 zsh 时，通过 `pacman` 安装 `zsh`
+- 复用与 macOS 相同的 shell 资产脚本安装 `oh-my-zsh` 与插件
+- 非 WSL 的 Arch 参与已选择的桌面基线：Ghostty 与 Fontconfig 通过 pacman 安装，固定并校验过的 Maple Mono 归档安装到用户字体目录；Ubuntu 的 Fontconfig 补丁不适用
+
 ### WSL
 
 - 视为 Linux 子类处理
@@ -220,10 +232,10 @@
 直接使用 `chezmoi` 原生模板变量来做系统级别区分，不再维护额外的 `detect-platform`：
 
 - 区分操作系统：`{{ if eq .chezmoi.os "darwin" }}` 或 `{{ if eq .chezmoi.os "linux" }}`
-- 通过 `.chezmoi.osRelease.id` 与 `.chezmoi.osRelease.versionID` 区分 Linux 发行版及版本
+- 通过 `.chezmoi.osRelease.id` 与 `.chezmoi.osRelease.versionID` 区分 Linux 发行版及版本；通过 `.chezmoi.osRelease.idLike` 将衍生发行版路由到对应的包管理器
 - 检查 `.chezmoi.kernel.osrelease` 是否包含 `microsoft` 来识别 WSL；无需持久化额外的平台标志
-- 将 macOS，或 `versionID >= 26.04` 且非 WSL 的 Ubuntu，视为支持自动安装的桌面平台
-- `XDG_CURRENT_DESKTOP`、`WAYLAND_DISPLAY` 与 `DISPLAY` 只用于决定 Ubuntu 首次提示的默认值；用户的 `desktopBaseline` 答案会持久化，日常 apply 不再重新推断
+- 将 macOS、非 WSL 的 Arch Linux 家族，或 `versionID >= 26.04` 且非 WSL 的 Ubuntu，视为支持自动安装的桌面平台
+- `XDG_CURRENT_DESKTOP`、`WAYLAND_DISPLAY` 与 `DISPLAY` 只用于决定受支持 Linux 桌面上首次提示的默认值；用户的 `desktopBaseline` 答案会持久化，日常 apply 不再重新推断
 
 ## 9. 清单文件规范
 
@@ -255,12 +267,14 @@ fd-find
 bat
 ```
 
+### `pacman-packages.txt`
+
+- 使用与 `apt-packages.txt` 相同的行格式
+- 列出 Arch 包名；安装器会拒绝不是合法 pacman 包名的条目
+
 ### `go-tools.txt`
 
-```text
-golang.org/x/tools/gopls@v0.21.1
-github.com/go-delve/delve/cmd/dlv@v1.27.0
-```
+当前条目见 [`bootstrap/manifests/ecosystem/go-tools.txt`](../../bootstrap/manifests/ecosystem/go-tools.txt)。
 
 说明：
 
@@ -271,11 +285,7 @@ github.com/go-delve/delve/cmd/dlv@v1.27.0
 
 ### `uv-tools.txt`
 
-```text
-ruff==0.15.21
-basedpyright==1.39.9
-pre-commit==4.6.0
-```
+当前条目见 [`bootstrap/manifests/ecosystem/uv-tools.txt`](../../bootstrap/manifests/ecosystem/uv-tools.txt)。
 
 说明：
 
@@ -284,14 +294,8 @@ pre-commit==4.6.0
 
 ### `config.toml.tmpl`
 
-```toml
-[tools]
-go = "1.25.12"
-golangci-lint = "v2.12.2"
-node = "24.18.0"
-python = "3.13.14"
-uv = "0.11.28"
-```
+- [`xdg_config/mise/config.toml.tmpl`](../../xdg_config/mise/config.toml.tmpl) 在 `[tools]` 表中固定每个运行时与二进制分发工具的版本
+- 运行时、生态工具与补全 hook 都包含它的 hash，因此修改它会重新运行这些 hook
 
 ## 10. helper script 职责
 
@@ -302,6 +306,13 @@ uv = "0.11.28"
 - 通过 shared helper 统一预热 `sudo -v`，在权限不足时给出明确错误提示
 - 使用非交互模式执行 `apt-get update` 与批量安装
 
+### `install-pacman-packages`
+
+- 仅在 Arch Linux 家族中运行
+- 从 `bootstrap/manifests/` 中的 source-only manifest 路径读取 `pacman-packages.txt`
+- 调用 pacman 前校验每个包名，并通过 shared helper 预热 `sudo -v`
+- 基于已有数据库执行一次批量的 `pacman -S --needed --noconfirm`，并传递其失败状态
+
 ### `install-brew-packages`
 
 - 仅在 macOS 中运行
@@ -311,7 +322,7 @@ uv = "0.11.28"
 
 ### `install-maple-mono-font`
 
-- 仅由受支持的 Ubuntu 桌面路径调用
+- 仅由受支持的 Linux 桌面路径（Arch Linux 家族与 Ubuntu）调用
 - 通过 `common.sh` 中的共享加载函数，从 `bootstrap/manifests/desktop/maple-mono-nf-cn.env` 读取字体族、所需 PostScript 字面、固定版本的发布 URL 与 SHA-256 摘要；同一份清单也供环境检查使用，并经由 `xdg-config.sh` 作为模板数据传给 Ghostty 与 Fontconfig 模板
 - 复用兼容的已有字体安装，避免制造副本
 - 支持断点续传，校验摘要与所需 PostScript 名称，并且只替换带 baseline 所有权标记的目录
@@ -330,7 +341,7 @@ uv = "0.11.28"
 
 - 读取 `bootstrap/manifests/shell/completions.txt`，每行声明一个命令以及以逗号分隔、需要生成补全的平台（`linux`、`darwin`）；当平台的包管理器已经提供补全时不列出该平台
 - 按平台应用统一的 shell 策略：Linux 生成 Bash 与 Zsh 资产，macOS 仅生成 Zsh 资产
-- 各命令的生成适配器保留在脚本中，因为各 CLI 通过不同的子命令或参数暴露补全生成；`bat` 包装 Debian 包自带的 `batcat` 补全，而不运行生成器
+- 各命令的生成适配器保留在脚本中，因为各 CLI 通过不同的子命令或参数暴露补全生成；`bat` 在 Arch 上复制包自带的原生补全，在 Debian 上包装包自带的 `batcat` 补全，而不运行生成器
 - 以原子方式写入每个资产，生成失败时保留先前有效的文件
 - 为每个生成文件写入稳定的归属标记（Zsh 文件放在 `#compdef` 之后）；所有当前条目安装成功后，清理两个补全目录中不再被当前条目指向的已标记文件，绝不删除未标记文件，也不跟随符号链接
 - `install`、`check`、`list` 共用同一份清单；`check` 将过时的归属文件报告为 stale，`list` 在当前目标之后附加它们，`uninstall.sh` 通过 `list` 枚举资产
@@ -357,7 +368,7 @@ uv = "0.11.28"
 ### `run_onchange_after_60-check`
 
 - 复用安装器消费的同一份清单，而不是维护第二份硬编码工具列表
-- 用 `dpkg-query` 校验 apt 清单，用 `brew bundle check` 校验 Brewfile，用 `mise ls --missing` 校验 mise 配置
+- 用 `dpkg-query` 校验 apt 清单，用 `pacman -Q` 校验 pacman 清单，用 `brew bundle check` 校验 Brewfile，用 `mise ls --current --missing` 校验 mise 配置
 - 按二进制名称检查生态工具清单，报告不再运行在构建时 Python 上的 uv 工具环境，通过安装器的 `check` 动作检查补全清单，并在 Linux 上通过 Fontconfig、在 macOS 上通过用户字体目录检查字体清单声明的字体族与字面
 - 用 `mise current` 输出 mise 管理的工具链，使摘要跟随配置变化
 
@@ -414,6 +425,7 @@ dotfiles 需要保证：
 - macOS 用 Homebrew 管系统工具
 - 可选 vendor 应用的 shell 与 SSH 初始化保留在用户自有的本地 overlay 中
 - Ubuntu / Debian / WSL 用 `apt` 管系统工具
+- Arch Linux 家族用 `pacman` 管系统工具
 - `mise` 管语言运行时
 - 语言生态工具用各自原生方式安装
 - 整体方案必须轻量、显式、幂等、易维护

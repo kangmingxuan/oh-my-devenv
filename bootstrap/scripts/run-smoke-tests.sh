@@ -231,8 +231,8 @@ EOF
 # Synthetic chezmoi platform data for boundary renders. --override-data merges
 # into the host data, so every osRelease field the templates read is explicit.
 darwin_chezmoi_data='{"os":"darwin","osRelease":null,"kernel":null}'
-supported_linux_chezmoi_data='{"os":"linux","osRelease":{"id":"ubuntu","versionID":"26.04","idLike":""},"kernel":{"osrelease":"linux"}}'
-wsl_chezmoi_data='{"os":"linux","osRelease":{"id":"ubuntu","versionID":"26.04","idLike":""},"kernel":{"osrelease":"microsoft-standard-WSL2"}}'
+supported_linux_chezmoi_data='{"os":"linux","osRelease":{"id":"ubuntu","versionID":"99.04","idLike":""},"kernel":{"osrelease":"linux"}}'
+wsl_chezmoi_data='{"os":"linux","osRelease":{"id":"ubuntu","versionID":"99.04","idLike":""},"kernel":{"osrelease":"microsoft-standard-WSL2"}}'
 unsupported_chezmoi_data='{"os":"linux","osRelease":{"id":"unsupported-smoke-distro","idLike":"","versionID":""},"kernel":{"osrelease":"linux"}}'
 
 # Literal strings asserted against rendered templates.
@@ -1376,8 +1376,23 @@ uninstall_overlay_state_file="${uninstall_overlay_state##* }"
   || fail_test "uninstall.sh and the nested XDG producer disagree on the state directory"
 
 log_step "🧩" "Running manifest and template contract checks..."
+# The real desktop support rule. Ubuntu versions sit far on either side of the
+# release floor, so these cases check that the floor exists, not its value.
 # WSL never receives the desktop baseline, whatever the distribution.
-assert_desktop_platform_support "{\"chezmoi\":$wsl_chezmoi_data}" ''
+while IFS='|' read -r desktop_support_expected desktop_support_platform; do
+  assert_desktop_platform_support "{\"chezmoi\":$desktop_support_platform}" "$desktop_support_expected"
+done <<EOF
+true|$darwin_chezmoi_data
+true|$supported_linux_chezmoi_data
+true|{"os":"linux","osRelease":{"id":"arch","idLike":"","versionID":""},"kernel":{"osrelease":"linux"}}
+true|{"os":"linux","osRelease":{"id":"smoke-arch-derivative","idLike":"smoke arch","versionID":""},"kernel":{"osrelease":"linux"}}
+|{"os":"linux","osRelease":{"id":"ubuntu","versionID":"20.04","idLike":""},"kernel":{"osrelease":"linux"}}
+|{"os":"linux","osRelease":{"id":"ubuntu","versionID":"","idLike":""},"kernel":{"osrelease":"linux"}}
+|{"os":"linux","osRelease":{"id":"debian","versionID":"13","idLike":""},"kernel":{"osrelease":"linux"}}
+|$wsl_chezmoi_data
+|{"os":"linux","osRelease":{"id":"arch","idLike":"","versionID":""},"kernel":{"osrelease":"microsoft-standard-WSL2"}}
+|$unsupported_chezmoi_data
+EOF
 
 # The Ghostty font workaround renders only for the supported Ubuntu desktop.
 synthetic_fontconfig_template="$repo_root/xdg_config/fontconfig/conf.d/99-oh-my-devenv-maple-mono-nf-cn.conf.tmpl"

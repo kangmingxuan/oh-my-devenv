@@ -6,6 +6,7 @@ Provide a repeatable and maintainable development environment bootstrap plan for
 
 - macOS
 - Ubuntu / Debian
+- Arch Linux family
 - Windows WSL
 
 Requirements:
@@ -23,6 +24,7 @@ Use the following layered model:
 2. **System package manager**:
    - macOS uses `Homebrew`
    - Ubuntu / Debian / WSL use `apt`
+   - Arch Linux family uses `pacman`
 3. **Desktop asset installer**: when selected, installs the complete platform bundle from a separate manifest: Ghostty and Maple Mono NF CN everywhere supported, plus OrbStack on macOS
 4. **mise**: manages runtime versions and binary-distributed tools such as Go / Node / Python / `golangci-lint` / `uv`
 5. **Ecosystem tool installers**: manage language-specific tools
@@ -67,7 +69,7 @@ Examples:
 - `tree`
 - `zip`
 - `unzip`
-- `build-essential` (Linux)
+- `build-essential` (Debian / Ubuntu) or `base-devel` (Arch Linux)
 
 ### Managed by mise
 
@@ -184,7 +186,7 @@ Requirements:
 - Keep bootstrap manifests and scripts in a root-level `bootstrap/` directory, exclude that directory from the target state via `.chezmoiignore`, and call them from `.chezmoiscripts` via absolute paths built from `{{ .chezmoi.sourceDir }}`
 - All scripts must be idempotent
 - Use `bash` with `set -euo pipefail`
-- Avoid unnecessary interactive prompts (such as apt confirmation); the Linux / WSL apt path should preflight `sudo -v` once and run installs in noninteractive mode
+- Avoid unnecessary interactive prompts (such as apt or pacman confirmation); the Linux / WSL apt and pacman paths should preflight `sudo -v` once and run installs in noninteractive mode
 - Print clear error messages on failure
 
 ## 7. Platform Strategy
@@ -208,6 +210,16 @@ Requirements:
 - Only non-WSL Ubuntu 26.04+ participates in the selected desktop baseline: install Ghostty through apt and the pinned, verified Maple Mono archive in the user font directory
 - Only on the supported Ubuntu desktop baseline, retain the Fontconfig workaround for Ghostty ignoring its explicit font-family setting; match `prgname=ghostty` and `monospace`. Other applications and platforms keep their font preferences. Elsewhere, or when disabled, the template renders empty and chezmoi does not manage the file; font validation checks registered faces rather than the system monospace alias
 
+### Arch Linux Family
+
+- Use only `pacman` for system tools
+- Store package list in `pacman-packages.txt`
+- Detect derivatives through `.chezmoi.osRelease.idLike`
+- Install with `pacman -S --needed` against the existing synchronized databases; never refresh with `-Sy` alone, because a full system upgrade is a separate user action
+- Install `zsh` via `pacman` when the shell layer depends on it
+- Reuse the same shell asset script as macOS to install `oh-my-zsh` and plugins
+- Non-WSL Arch participates in the selected desktop baseline: install Ghostty and Fontconfig through pacman and the pinned, verified Maple Mono archive in the user font directory; the Ubuntu Fontconfig workaround does not apply
+
 ### WSL
 
 - Treated as a Linux subtype
@@ -220,10 +232,10 @@ Requirements:
 Use native `chezmoi` template variables for OS-level branching, and do not maintain an extra `detect-platform` script:
 
 - Distinguish OS: `{{ if eq .chezmoi.os "darwin" }}` or `{{ if eq .chezmoi.os "linux" }}`
-- Distinguish Linux distribution and release through `.chezmoi.osRelease.id` and `.chezmoi.osRelease.versionID`
+- Distinguish Linux distribution and release through `.chezmoi.osRelease.id` and `.chezmoi.osRelease.versionID`; route derivatives to a package manager through `.chezmoi.osRelease.idLike`
 - Distinguish WSL by checking `.chezmoi.kernel.osrelease` for `microsoft`; no persisted custom platform flag is needed
-- Treat macOS, or non-WSL Ubuntu with `versionID >= 26.04`, as an installation-supported desktop platform
-- Use `XDG_CURRENT_DESKTOP`, `WAYLAND_DISPLAY`, or `DISPLAY` only to choose the initial Ubuntu prompt default. Persist the user's `desktopBaseline` answer and never infer it again during routine applies
+- Treat macOS, the non-WSL Arch Linux family, or non-WSL Ubuntu with `versionID >= 26.04`, as an installation-supported desktop platform
+- Use `XDG_CURRENT_DESKTOP`, `WAYLAND_DISPLAY`, or `DISPLAY` only to choose the initial prompt default on a supported Linux desktop. Persist the user's `desktopBaseline` answer and never infer it again during routine applies
 
 ## 9. Manifest File Conventions
 
@@ -255,12 +267,14 @@ fd-find
 bat
 ```
 
+### `pacman-packages.txt`
+
+- Use the same line format as `apt-packages.txt`
+- List Arch package names; the installer rejects entries that are not valid pacman package names
+
 ### `go-tools.txt`
 
-```text
-golang.org/x/tools/gopls@v0.21.1
-github.com/go-delve/delve/cmd/dlv@v1.27.0
-```
+The current entries live in [`bootstrap/manifests/ecosystem/go-tools.txt`](../../bootstrap/manifests/ecosystem/go-tools.txt).
 
 Notes:
 
@@ -271,11 +285,7 @@ Notes:
 
 ### `uv-tools.txt`
 
-```text
-ruff==0.15.21
-basedpyright==1.39.9
-pre-commit==4.6.0
-```
+The current entries live in [`bootstrap/manifests/ecosystem/uv-tools.txt`](../../bootstrap/manifests/ecosystem/uv-tools.txt).
 
 Notes:
 
@@ -284,14 +294,8 @@ Notes:
 
 ### `config.toml.tmpl`
 
-```toml
-[tools]
-go = "1.25.12"
-golangci-lint = "v2.12.2"
-node = "24.18.0"
-python = "3.13.14"
-uv = "0.11.28"
-```
+- [`xdg_config/mise/config.toml.tmpl`](../../xdg_config/mise/config.toml.tmpl) pins each runtime and binary-distributed tool in its `[tools]` table
+- The runtime, ecosystem-tool, and completion hooks include its hash, so a change re-runs them
 
 ## 10. Helper Script Responsibilities
 
@@ -302,6 +306,13 @@ uv = "0.11.28"
 - Use a shared helper to preflight `sudo -v` and fail with an explicit error when credentials cannot be acquired
 - Run `apt-get update` and batch installs in noninteractive mode
 
+### `install-pacman-packages`
+
+- Run only on the Arch Linux family
+- Read `pacman-packages.txt` from a source-only manifest path under `bootstrap/manifests/`
+- Validate every package name before calling pacman, and preflight `sudo -v` through the shared helper
+- Run one batched `pacman -S --needed --noconfirm` against the existing databases and propagate its failure
+
 ### `install-brew-packages`
 
 - Run only on macOS
@@ -311,7 +322,7 @@ uv = "0.11.28"
 
 ### `install-maple-mono-font`
 
-- Run only from the supported Ubuntu desktop path
+- Run only from the supported Linux desktop path (the Arch Linux family and Ubuntu)
 - Load the font family, required PostScript faces, pinned release URL, and SHA-256 digest from `bootstrap/manifests/desktop/maple-mono-nf-cn.env` through the shared loader in `common.sh`; the same manifest feeds the environment check and, through `xdg-config.sh` template data, the Ghostty and Fontconfig templates
 - Reuse a compatible existing font installation instead of creating a duplicate
 - Resume interrupted downloads, verify the digest and required PostScript names, and only replace a directory marked as baseline-owned
@@ -330,7 +341,7 @@ uv = "0.11.28"
 
 - Read `bootstrap/manifests/shell/completions.txt`, whose rows declare a command and the comma-separated platforms (`linux`, `darwin`) that generate its completion; leave a platform out when its package manager already ships the asset
 - Apply one shell policy per platform: Linux receives Bash and Zsh assets, macOS receives Zsh assets only
-- Keep the command-specific generator adapters in the script, because the CLIs expose completion generation through different subcommands and flags; `bat` wraps the Debian package-owned `batcat` completion instead of running a generator
+- Keep the command-specific generator adapters in the script, because the CLIs expose completion generation through different subcommands and flags; `bat` copies the native package-owned completion on Arch or wraps the Debian package-owned `batcat` completion instead of running a generator
 - Write each asset atomically so a failing generator leaves the previous valid file in place
 - Stamp each generated file with a stable ownership marker (after `#compdef` in Zsh files); after every current entry installs, prune marked files in the two completion directories that no current entry targets, and never delete unmarked files or follow symlinks
 - Serve `install`, `check`, and `list` from the same inventory; `check` reports obsolete owned files as stale, `list` appends them to the current targets, and `uninstall.sh` enumerates the assets through `list`
@@ -357,7 +368,7 @@ uv = "0.11.28"
 ### `run_onchange_after_60-check`
 
 - Consume the same declared inventories as the installers instead of a second hard-coded tool list
-- Validate apt manifests with `dpkg-query`, Brewfiles with `brew bundle check`, and the mise configuration with `mise ls --missing`
+- Validate apt manifests with `dpkg-query`, pacman manifests with `pacman -Q`, Brewfiles with `brew bundle check`, and the mise configuration with `mise ls --current --missing`
 - Check ecosystem manifests by binary name, report uv tool environments that no longer run on the Python they were built on, the completion manifest through the installer's `check` action, and the font manifest's family and faces through Fontconfig on Linux or the user font directory on macOS
 - Print the mise-managed toolchain from `mise current` so the summary follows the configuration
 
@@ -414,6 +425,7 @@ The final chosen approach is:
 - macOS uses Homebrew for system tools
 - Optional vendor applications keep their shell and SSH initialization in user-owned local overlays
 - Ubuntu / Debian / WSL use `apt` for system tools
+- The Arch Linux family uses `pacman` for system tools
 - `mise` manages language runtimes
 - Language ecosystem tools are installed through native ecosystem methods
 - The overall solution must stay lightweight, explicit, idempotent, and maintainable
