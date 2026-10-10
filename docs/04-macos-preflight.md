@@ -146,21 +146,47 @@ runtime coverage is required, use an explicitly authorized isolated environment
 without user overlays. Do not disable or delete overlays on the contributor's
 machine for this check.
 
-## 6. Confirm go / uv Tool State
+## 6. Hand-Validate go / uv Tool State
 
-`60-check.sh` already checks every command declared in
+`60-check.sh` already checks that every command declared in
 [`bootstrap/manifests/ecosystem/go-tools.txt`](../bootstrap/manifests/ecosystem/go-tools.txt)
 and
-[`bootstrap/manifests/ecosystem/uv-tools.txt`](../bootstrap/manifests/ecosystem/uv-tools.txt),
-and it reports uv tool environments that no longer run on the Python they were
-built on. Use its `All checks passed.` result from step 2 as the evidence for
-this step.
+[`bootstrap/manifests/ecosystem/uv-tools.txt`](../bootstrap/manifests/ecosystem/uv-tools.txt)
+is on `PATH`, and it reports uv tool environments that no longer run on the
+Python they were built on. It does not execute the tools. Run each declared
+tool once from the repository root so a corrupt, wrong-architecture, or crashing
+binary cannot pass the preflight:
 
-Expected outcome: the check reports no missing ecosystem tool and no stale uv
-tool environment. A missing command means `50-sync-ecosystem-tools.sh` did not
-finish cleanly on this machine. To diagnose a reported tool, run its version
-command by hand. Capture the log and hold the signoff and merge while
-authorized diagnosis, source repair, and safe retesting continue.
+```bash
+/bin/bash -c '
+  source bootstrap/scripts/common.sh
+  setup_go_env
+  export_tool_path "$GOBIN"
+  failed=0
+  while IFS="|" read -r parser manifest; do
+    while IFS= read -r entry; do
+      tool="$("$parser" "$entry")"
+      if "$tool" --help >/dev/null 2>&1; then
+        printf "[ok] %s\n" "$tool"
+      else
+        printf "[failed] %s\n" "$tool" >&2
+        failed=1
+      fi
+    done < <(manifest_entries "$manifest")
+  done <<EOF
+go_tool_binary_name|bootstrap/manifests/ecosystem/go-tools.txt
+uv_tool_binary_name|bootstrap/manifests/ecosystem/uv-tools.txt
+EOF
+  exit "$failed"
+'
+```
+
+Expected outcome: step 2 reported `All checks passed.`, and this probe prints
+`[ok]` for every declared tool and exits 0. A missing command means
+`50-sync-ecosystem-tools.sh` did not finish cleanly on this machine. A
+`[failed]` tool is installed but does not start; run it by hand to see the
+error. Capture the log and hold the signoff and merge while authorized
+diagnosis, source repair, and safe retesting continue.
 
 ## 7. Confirm The Local Smoke Suite
 
@@ -197,6 +223,7 @@ Copy the template below verbatim into the review description (append to the exis
 - [ ] Both `brew bundle check` commands reported `The Brewfile's dependencies are satisfied.` (declared dependencies only)
 - [ ] `ghostty +validate-config` succeeds
 - [ ] Managed XDG status is clean; active mise config sources and effective versions recorded
+- [ ] The ecosystem tool probe printed `[ok]` for every declared tool
 - [ ] macOS smoke passed: `<local Mac | smoke-tests-macos CI run>`
 - Deviations / notes: `<free-form, or "none">`
 - Preflight run by: `@<your-handle>` on `<YYYY-MM-DD>`
