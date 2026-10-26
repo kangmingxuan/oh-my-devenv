@@ -2,7 +2,7 @@
 {{- if .desktopBaseline -}}
 {{- $isSupportedDesktop := eq (includeTemplate "desktop-platform-supported" .) "true" -}}
 #!/bin/bash
-
+{{ includeTemplate "common-bootstrap-hashes" . }}
 set -euo pipefail
 
 bootstrap_dir='{{ joinPath .chezmoi.sourceDir "bootstrap" }}'

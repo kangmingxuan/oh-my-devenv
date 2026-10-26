@@ -427,10 +427,15 @@ check_all() {
   (( errors == 0 ))
 }
 
-# Current targets first, then obsolete owned files, so uninstall can remove
-# both before any reinstall has pruned them.
+# Owned current targets first, then obsolete owned files. Missing targets,
+# unmarked files, and symlinks are not uninstall candidates.
 list_all() {
-  completion_targets
+  local target=""
+
+  while IFS= read -r target; do
+    completion_file_owned "$target" || continue
+    printf '%s\n' "$target"
+  done < <(completion_targets)
   obsolete_completion_targets
 }
 

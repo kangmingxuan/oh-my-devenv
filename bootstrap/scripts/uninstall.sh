@@ -17,9 +17,11 @@ Usage: uninstall.sh [--confirm] [--no-backup]
   --no-backup     With --confirm, skip the pre-delete tarball (for CI).
 
   Never removes apt/Homebrew packages, mise shims, or Go/uv-managed installs.
+  Always keeps the chezmoi source checkout. Confirmation also clears the main
+  scriptState and entryState buckets so the next apply can rerun the hooks.
 
   Structured log prefixes (grep-friendly):
-    [would-remove] [would-skip] [removed] [skipped] [backed-up]
+    [would-remove] [would-skip] [would-reset] [removed] [skipped] [backed-up] [reset]
 USAGE
 }
 
@@ -78,19 +80,11 @@ backed_up() {
   printf '[backed-up] %s\n' "$*"
 }
 
-# Only auto-delete the chezmoi source tree when it lives under the
-# canonical per-user data dir. A `chezmoi init --apply --source=$PWD`
-# checkout (CI, contributors hacking the repo) must not be removed.
-can_remove_chezmoi_source() {
-  [[ "$1" == "$HOME/.local/share/"* ]]
-}
-
 is_whitelist_dir() {
   case "$1" in
     "$(oh_my_devenv_oh_my_zsh_dir)" | \
       "$(maple_mono_font_dir)" | \
-      "$(first_run_backup_root)" | \
-      "$HOME/.local/share/chezmoi" | "$HOME/.local/share/chezmoi/"*)
+      "$(first_run_backup_root)")
       return 0
       ;;
   esac
@@ -115,6 +109,11 @@ case "$(uname -s)" in
   *) completion_platform=linux ;;
 esac
 
+list_owned_completions() {
+  "$BASH" "$script_dir/install-shell-completions.sh" list "$completion_platform" \
+    "$repo_root/bootstrap/manifests/shell/completions.txt"
+}
+
 candidates="$(
   chezmoi --source="$repo_root" managed \
     --include=files,symlinks \
@@ -128,11 +127,11 @@ candidates+=$'\n'"$("$BASH" "$script_dir/xdg-config.sh" managed)" || {
   printf 'ERROR: XDG chezmoi managed failed.\n' >&2
   exit 1
 }
-candidates+=$'\n'"$("$BASH" "$script_dir/install-shell-completions.sh" list "$completion_platform" \
-  "$repo_root/bootstrap/manifests/shell/completions.txt")" || {
+completion_candidates="$(list_owned_completions)" || {
   printf 'ERROR: shell completion inventory failed.\n' >&2
   exit 1
 }
+candidates+=$'\n'"$completion_candidates"
 candidates+=$'\n'"$(xdg_chezmoi_state_file)"
 
 if [[ -d "$(oh_my_devenv_oh_my_zsh_dir)" ]]; then
@@ -145,15 +144,6 @@ fi
 
 if [[ -d "$(first_run_backup_root)" ]]; then
   candidates+=$'\n'"$(first_run_backup_root)"
-fi
-
-source_path="$(chezmoi --source="$repo_root" source-path 2>/dev/null || true)"
-if [[ -n "$source_path" && -e "$source_path" ]]; then
-  if can_remove_chezmoi_source "$source_path"; then
-    candidates+=$'\n'"$source_path"
-  else
-    would_skip "chezmoi source-path $source_path (outside ~/.local/share — not auto-deleted)"
-  fi
 fi
 
 rem_files=()
@@ -194,6 +184,7 @@ while IFS= read -r p; do
 done < <(local_overlay_existing_paths)
 
 if (( CONFIRM == 0 )); then
+  printf '[would-reset] main chezmoi state bucket: %s\n' scriptState entryState
   printf '\nDry-run complete (--confirm not passed). No files were deleted.\n'
   exit 0
 fi
@@ -208,7 +199,7 @@ if (( NO_BACKUP == 0 )); then
   trap 'rm -f "$listfile"' EXIT
 
   for p in ${rem_files[@]+"${rem_files[@]}"}; do
-    if [[ -e "$p" ]]; then
+    if [[ -e "$p" || -L "$p" ]]; then
       printf '%s\n' "$p" >>"$listfile"
     fi
   done
@@ -232,6 +223,15 @@ fi
 # --- Remove ---------------------------------------------------------------
 
 for p in ${rem_files[@]+"${rem_files[@]}"}; do
+  if [[ $'\n'"$completion_candidates"$'\n' == *$'\n'"$p"$'\n'* ]]; then
+    # Reuse the installer's ownership check immediately before deletion. A
+    # user may have replaced a generated file since the initial inventory.
+    current_completions="$(list_owned_completions)"
+    if [[ $'\n'"$current_completions"$'\n' != *$'\n'"$p"$'\n'* ]]; then
+      printf '[skipped] completion is no longer owned: %s\n' "$p"
+      continue
+    fi
+  fi
   if [[ -f "$p" || -L "$p" ]]; then
     rm -f "$p"
     removed "$p"
@@ -245,4 +245,11 @@ for d in ${rem_dirs[@]+"${rem_dirs[@]}"}; do
   fi
 done
 
-printf '\nUninstall finished (--confirm). Re-run chezmoi init when you want the baseline back.\n'
+# Use the same source and default config resolution as the managed inventory.
+# run_once scripts use scriptState; run_onchange scripts use entryState.
+for bucket in scriptState entryState; do
+  chezmoi --source="$repo_root" state delete-bucket --bucket="$bucket"
+  printf '[reset] main chezmoi state bucket: %s\n' "$bucket"
+done
+
+printf '\nUninstall finished (--confirm). Source checkout kept. Re-run chezmoi apply to restore the baseline.\n'

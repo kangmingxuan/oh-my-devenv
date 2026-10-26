@@ -1,5 +1,6 @@
 {{- $bootstrapDir := joinPath .chezmoi.sourceDir "bootstrap" -}}
 #!/bin/bash
+{{ includeTemplate "common-bootstrap-hashes" . -}}
 # go-tools.txt hash: {{ include "bootstrap/manifests/ecosystem/go-tools.txt" | sha256sum }}
 # uv-tools.txt hash: {{ include "bootstrap/manifests/ecosystem/uv-tools.txt" | sha256sum }}
 # Go installer hash: {{ include "bootstrap/scripts/install-go-tools.sh" | sha256sum }}

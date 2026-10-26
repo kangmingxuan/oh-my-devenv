@@ -1,6 +1,7 @@
 {{- $packageManager := includeTemplate "system-package-manager" . -}}
 {{- $isSupportedDesktop := eq (includeTemplate "desktop-platform-supported" .) "true" -}}
 #!/bin/bash
+{{ includeTemplate "common-bootstrap-hashes" . -}}
 {{ if eq $packageManager "pacman" -}}
 # pacman-packages.txt hash: {{ include "bootstrap/manifests/system/pacman-packages.txt" | sha256sum }}
 {{ else if eq $packageManager "apt" -}}

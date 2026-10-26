@@ -4,6 +4,7 @@ set -euo pipefail
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 bootstrap_dir="$(cd "$script_dir/.." && pwd)"
 repo_root="$(cd "$bootstrap_dir/.." && pwd)"
+real_home="$(cd "$HOME" && pwd -P)"
 tmp_dir="$(mktemp -d)"
 trap 'rm -rf "$tmp_dir"' EXIT
 
@@ -773,6 +774,54 @@ env -i PATH="$hook_stub_bin" HOME="$tmp_dir/hook-home" XDG_CONFIG_HOME="$XDG_CON
   || fail_test "runtime hook did not find mise in the resolved shim directory: $(<"$tmp_dir/hook-mise.out")"
 assert_file_contains "$tmp_dir/hook-mise.out" "mise stub: install --yes"
 
+# The top-level call reports an explicit function failure without errtrace.
+# Bash 3.2 errtrace would also report guarded command substitutions, so verify
+# both the diagnostic and the absence of that false positive.
+error_trap_env=(
+  HOME="$tmp_dir/hook-home"
+  PATH=/usr/bin:/bin
+  XDG_CONFIG_HOME="$XDG_CONFIG_HOME"
+)
+# shellcheck disable=SC2016
+expect_failure "$tmp_dir/error-trap-function.err" \
+  env -i "${error_trap_env[@]}" /bin/bash -c \
+  'set -euo pipefail; source "$1"; install_error_trap smoke; failing_function() { return 1; }; failing_function' \
+  _ "$script_dir/common.sh"
+assert_file_contains "$tmp_dir/error-trap-function.err" "Bootstrap step failed."
+# shellcheck disable=SC2016
+if ! env -i "${error_trap_env[@]}" /bin/bash -c \
+  'set -euo pipefail; source "$1"; install_error_trap smoke; x="$(false)" || true' \
+  _ "$script_dir/common.sh" >"$tmp_dir/error-trap-guarded.out" 2>"$tmp_dir/error-trap-guarded.err"; then
+  fail_test "a guarded command substitution must succeed after install_error_trap"
+fi
+assert_file_not_contains "$tmp_dir/error-trap-guarded.out" "Bootstrap step failed."
+assert_file_not_contains "$tmp_dir/error-trap-guarded.err" "Bootstrap step failed."
+
+# Resolve Homebrew independently of the parent PATH on macOS. The lookup stub
+# keeps the fixture away from the host's standard Homebrew prefixes.
+homebrew_fixture_bin="$tmp_dir/homebrew-fixture/bin"
+mkdir -p "$homebrew_fixture_bin"
+for fixture_command in brew mise; do
+  printf '#!/bin/sh\nexit 0\n' >"$homebrew_fixture_bin/$fixture_command"
+  chmod +x "$homebrew_fixture_bin/$fixture_command"
+done
+# shellcheck disable=SC2016
+env -i "${error_trap_env[@]}" OSTYPE=darwin HOMEBREW_FIXTURE_BIN="$homebrew_fixture_bin" \
+  /bin/bash -c 'set -euo pipefail; source "$1"; brew_command() { printf "%s/brew\n" "$HOMEBREW_FIXTURE_BIN"; }; export_tool_path; command -v brew; command -v mise' \
+  _ "$script_dir/common.sh" >"$tmp_dir/homebrew-tool-path.out" \
+  || fail_test "export_tool_path did not expose the resolved Homebrew bin directory"
+printf '%s/brew\n%s/mise\n' "$homebrew_fixture_bin" "$homebrew_fixture_bin" >"$tmp_dir/homebrew-tool-path.expected"
+cmp -s "$tmp_dir/homebrew-tool-path.expected" "$tmp_dir/homebrew-tool-path.out" \
+  || fail_test "export_tool_path resolved unexpected Homebrew tools: $(<"$tmp_dir/homebrew-tool-path.out")"
+# shellcheck disable=SC2016
+env -i "${error_trap_env[@]}" OSTYPE=darwin /bin/bash -c \
+  'set -euo pipefail; source "$1"; brew_command() { return 1; }; export_tool_path' \
+  _ "$script_dir/common.sh" || fail_test "export_tool_path must succeed when Homebrew is absent"
+# shellcheck disable=SC2016
+env -i "${error_trap_env[@]}" OSTYPE=linux HOMEBREW_FIXTURE_BIN="$homebrew_fixture_bin" \
+  /bin/bash -c 'set -euo pipefail; source "$1"; brew_command() { printf "%s/brew\n" "$HOMEBREW_FIXTURE_BIN"; }; export_tool_path; [[ "$PATH" == "$HOME/.local/bin:$(oh_my_devenv_mise_shims_dir):/usr/bin:/bin" ]]' \
+  _ "$script_dir/common.sh" || fail_test "export_tool_path changed Linux PATH construction"
+
 render_template .chezmoiscripts/run_onchange_after_60-check.sh.tmpl "$tmp_dir/run_onchange_after_60-check.sh"
 
 disabled_desktop_hook="$tmp_dir/run_onchange_after_22-install-desktop-assets.disabled"
@@ -831,25 +880,14 @@ while IFS= read -r completion_command; do
   ln -s completion-generator "$completion_stub_bin/$completion_command"
 done <<<"$production_completion_commands"
 
-# `list` names every asset a platform manages under XDG_DATA_HOME. Linux owns
-# Bash and Zsh assets; macOS stays Zsh-only.
+# `list` reports existing owned assets, not hypothetical manifest targets.
 completion_list_data="$tmp_dir/completion-list-data"
 for completion_platform in linux darwin; do
   completion_listing="$(run_completion_installer "$completion_list_data" \
     list "$completion_platform" "$completion_manifest")"
-  if [[ -z "$completion_listing" ]]; then
-    fail_test "completion manifest lists no commands for $completion_platform"
+  if [[ -n "$completion_listing" ]]; then
+    fail_test "completion list must be empty before installation: $completion_listing"
   fi
-  while IFS= read -r completion_target; do
-    case "$completion_target" in
-      "$completion_list_data/zsh/site-functions/_"*) ;;
-      "$completion_list_data/bash-completion/completions/"*.bash)
-        [[ "$completion_platform" == linux ]] \
-          || fail_test "macOS completion inventory must stay Zsh-only: $completion_target"
-        ;;
-      *) fail_test "unexpected completion target for $completion_platform: $completion_target" ;;
-    esac
-  done <<<"$completion_listing"
 done
 
 # The Linux inventory uses package-owned bat/batcat completions, so the
@@ -895,12 +933,14 @@ while IFS= read -r completion_command; do
     ln -s completion-generator "$completion_stub_bin/$completion_command"
   fi
 done <<<"$(manifest_entries "$synthetic_completion_manifest" | awk '{ print $1 }')"
+run_completion_installer "$synthetic_completion_data" install darwin "$synthetic_completion_manifest"
 synthetic_darwin_listing="$(run_completion_installer "$synthetic_completion_data" list darwin "$synthetic_completion_manifest")"
 expected_darwin_listing="$synthetic_completion_data/zsh/site-functions/_uv
 $synthetic_completion_data/zsh/site-functions/_chezmoi"
 if [[ "$synthetic_darwin_listing" != "$expected_darwin_listing" ]]; then
   fail_test "synthetic darwin completion inventory was: $synthetic_darwin_listing"
 fi
+run_completion_installer "$synthetic_completion_data" install linux "$synthetic_completion_manifest"
 synthetic_linux_listing="$(run_completion_installer "$synthetic_completion_data" list linux "$synthetic_completion_manifest")"
 expected_linux_listing="$synthetic_completion_data/zsh/site-functions/_uv
 $synthetic_completion_data/bash-completion/completions/uv.bash
@@ -910,7 +950,6 @@ if [[ "$synthetic_linux_listing" != "$expected_linux_listing" ]]; then
   fail_test "synthetic linux completion inventory was: $synthetic_linux_listing"
 fi
 
-run_completion_installer "$synthetic_completion_data" install linux "$synthetic_completion_manifest"
 run_completion_installer "$synthetic_completion_data" check linux "$synthetic_completion_manifest"
 while IFS= read -r completion_target; do
   [[ -s "$completion_target" ]] || fail_test "missing synthetic completion asset: $completion_target"
@@ -1324,77 +1363,214 @@ if [[ -n "$xdg_status" ]]; then
   fail_test "nested XDG source is not clean after apply: $xdg_status"
 fi
 
-# Preview uninstall against fixture roots.
-uninstall_data_home="$tmp_dir/uninstall-data-home"
+log_step "🧹" "Testing uninstall previews, backups, deletion, and state reset..."
+uninstall_home="$tmp_dir/uninstall-home"
+uninstall_config_home="$tmp_dir/uninstall-config"
+uninstall_data_home="$tmp_dir/uninstall-data"
+uninstall_state_home="$tmp_dir/uninstall-state"
+mkdir -p "$uninstall_home" "$uninstall_config_home/chezmoi" "$uninstall_state_home"
+cat >"$uninstall_config_home/chezmoi/chezmoi.toml" <<EOF
+persistentState = "$uninstall_state_home/main.boltdb"
+[data]
+name = "Uninstall Smoke"
+email = "uninstall@example.com"
+desktopBaseline = false
+EOF
+
+# Every command, including every --confirm invocation, uses explicit fixture
+# roots. Resolve symlinks before checking HOME so an alias cannot pass the guard.
+with_uninstall_fixture() (
+  export HOME="$uninstall_home"
+  export XDG_CONFIG_HOME="$uninstall_config_home"
+  export XDG_DATA_HOME="$uninstall_data_home"
+  export XDG_STATE_HOME="$uninstall_state_home"
+  export XDG_CACHE_HOME="$tmp_dir/uninstall-cache"
+  fixture_home="$(cd "$HOME" && pwd -P)"
+  fixture_root="$(cd "$tmp_dir" && pwd -P)"
+  if [[ "$fixture_home" == "$real_home" || "$fixture_home" != "$fixture_root/"* ]]; then
+    fail_test "refusing uninstall test outside a temporary HOME: $fixture_home"
+  fi
+  "$@"
+)
+
 case "$(uname -s)" in
   Darwin) uninstall_completion_platform=darwin ;;
   *) uninstall_completion_platform=linux ;;
 esac
-# uninstall.sh derives completion candidates from the installer inventory.
-uninstall_completion_fixture="$(run_completion_installer "$uninstall_data_home" \
+with_uninstall_fixture run_completion_installer "$uninstall_data_home" \
+  install "$uninstall_completion_platform" "$completion_manifest" >/dev/null
+uninstall_unowned_completion="$(with_uninstall_fixture run_completion_installer "$uninstall_data_home" \
   list "$uninstall_completion_platform" "$completion_manifest" | sed -n '1p')"
-mkdir -p "$(dirname "$uninstall_completion_fixture")"
-touch "$uninstall_completion_fixture"
-uninstall_xdg_fixture=""
-while IFS= read -r xdg_managed_path; do
-  if [[ -f "$xdg_managed_path" ]]; then
-    uninstall_xdg_fixture="$xdg_managed_path"
-    break
-  fi
-done <<<"$xdg_managed_listing"
-[[ -n "$uninstall_xdg_fixture" ]] || fail_test "nested XDG apply created no managed file"
-overlay_fixture_listing="$(
-  export HOME="$tmp_dir/uninstall-home"
-  export XDG_CONFIG_HOME="$xdg_test_home"
-  while IFS=$'\t' read -r -a overlay_fields; do
-    overlay_fixture="$(local_overlay_expand "${overlay_fields[2]}" exact)"
-    if [[ "${overlay_fields[3]}" == "glob" ]]; then
-      overlay_fixture="${overlay_fixture/\*/smoke}"
-    fi
-    mkdir -p "$(dirname "$overlay_fixture")"
-    touch "$overlay_fixture"
-    printf '%s\n' "$overlay_fixture"
-  done < <(local_overlay_inventory "$overlay_manifest")
-)"
-uninstall_preview="$(HOME="$tmp_dir/uninstall-home" XDG_CONFIG_HOME="$xdg_test_home" XDG_DATA_HOME="$uninstall_data_home" \
-  bash "$repo_root/bootstrap/scripts/uninstall.sh")"
-if ! grep -Fq "[would-remove] file: $uninstall_xdg_fixture" <<<"$uninstall_preview"; then
-  fail_test "uninstall preview does not include the custom-XDG managed file $uninstall_xdg_fixture"
-fi
-while IFS= read -r overlay_fixture; do
-  if ! grep -Fq "[would-skip] overlay-protected: $overlay_fixture" <<<"$uninstall_preview"; then
-    fail_test "uninstall preview does not protect overlay: $overlay_fixture"
-  fi
-done <<<"$overlay_fixture_listing"
-if grep -Fq "$tmp_dir/uninstall-home/.config/${uninstall_xdg_fixture#"$xdg_test_home"/}" <<<"$uninstall_preview"; then
-  fail_test "uninstall preview fell back to HOME/.config instead of custom XDG_CONFIG_HOME"
-fi
-# shellcheck disable=SC2016
-uninstall_state_file="$(HOME="$tmp_dir/uninstall-home" XDG_CONFIG_HOME="$xdg_test_home" \
-  bash -c 'source "$1"; xdg_chezmoi_state_file' _ "$script_dir/common.sh")"
-if ! grep -Fq "$uninstall_state_file" <<<"$uninstall_preview"; then
-  fail_test "uninstall preview does not include the nested chezmoi state file"
-fi
-if ! grep -Fq "[would-remove] file: $uninstall_completion_fixture" <<<"$uninstall_preview"; then
-  fail_test "uninstall preview does not include generated shell completion files"
-fi
+[[ -n "$uninstall_unowned_completion" ]] || fail_test "uninstall fixture generated no completions"
+printf '# user completion at a current manifest target\n' >"$uninstall_unowned_completion"
+# Reuse generated bytes so the installer remains the authority for ownership.
+uninstall_obsolete_completion="$uninstall_data_home/zsh/site-functions/_smoke-obsolete"
+cp "$reconcile_zsh_dir/_uv" "$uninstall_obsolete_completion"
+uninstall_linked_completion="$uninstall_data_home/zsh/site-functions/_smoke-linked"
+ln -s "$uninstall_obsolete_completion" "$uninstall_linked_completion"
+uninstall_owned_completions="$(with_uninstall_fixture run_completion_installer "$uninstall_data_home" \
+  list "$uninstall_completion_platform" "$completion_manifest")"
+uninstall_replaced_completion="$uninstall_data_home/zsh/site-functions/_smoke-replaced"
+cp "$reconcile_zsh_dir/_uv" "$uninstall_replaced_completion"
 
-# uninstall.sh and the nested XDG producer it calls both load bootstrap.env,
-# so an overlay that moves XDG_STATE_HOME moves the listed state file and the
-# directory the producer creates together.
-uninstall_bootstrap_env="$xdg_test_home/oh-my-devenv/bootstrap.env"
-uninstall_state_home="$tmp_dir/uninstall-overlay-state"
-printf 'export XDG_STATE_HOME=%q\n' "$uninstall_state_home" >"$uninstall_bootstrap_env"
-uninstall_overlay_preview="$(HOME="$tmp_dir/uninstall-home" XDG_CONFIG_HOME="$xdg_test_home" XDG_DATA_HOME="$uninstall_data_home" \
-  bash "$repo_root/bootstrap/scripts/uninstall.sh")"
+# Create ordinary and dangling-link fixtures from the real managed inventory.
+uninstall_main_listing="$(with_uninstall_fixture chezmoi --source="$repo_root" managed \
+  --include=files,symlinks --path-style=absolute --format=)"
+while IFS= read -r uninstall_target; do
+  [[ "$uninstall_target" == "$uninstall_home/"* ]] \
+    || fail_test "uninstall fixture manages a path outside temporary HOME: $uninstall_target"
+done <<<"$uninstall_main_listing"
+uninstall_main_file="$(sed -n '1p' <<<"$uninstall_main_listing")"
+uninstall_dangling_link="$(sed -n '2p' <<<"$uninstall_main_listing")"
+[[ -n "$uninstall_main_file" && -n "$uninstall_dangling_link" ]] \
+  || fail_test "uninstall test needs two managed fixture paths"
+mkdir -p "$(dirname "$uninstall_main_file")" "$(dirname "$uninstall_dangling_link")"
+printf 'managed fixture\n' >"$uninstall_main_file"
+ln -s "$uninstall_home/missing-link-target" "$uninstall_dangling_link"
+with_uninstall_fixture bash "$script_dir/xdg-config.sh" apply >/dev/null
+uninstall_xdg_listing="$(with_uninstall_fixture bash "$script_dir/xdg-config.sh" managed)"
+uninstall_xdg_listing="$(while IFS= read -r uninstall_target; do
+  if [[ -f "$uninstall_target" || -L "$uninstall_target" ]]; then
+    printf '%s\n' "$uninstall_target"
+  fi
+done <<<"$uninstall_xdg_listing")"
+[[ -n "$uninstall_xdg_listing" ]] || fail_test "nested XDG apply created no managed fixture"
+# shellcheck disable=SC2016
+uninstall_state_file="$(with_uninstall_fixture bash -c \
+  'source "$1"; xdg_chezmoi_state_file' _ "$script_dir/common.sh")"
+# shellcheck disable=SC2016
+uninstall_owned_directory="$(with_uninstall_fixture bash -c \
+  'source "$1"; oh_my_devenv_oh_my_zsh_dir' _ "$script_dir/common.sh")"
+mkdir -p "$uninstall_owned_directory"
+printf 'owned tree fixture\n' >"$uninstall_owned_directory/smoke-owned"
+uninstall_sentinel="$uninstall_home/unrelated/sentinel"
+mkdir -p "$(dirname "$uninstall_sentinel")"
+printf 'keep unrelated file\n' >"$uninstall_sentinel"
+create_uninstall_overlays() {
+  local fixture=""
+  local -a fields=()
+
+  while IFS=$'\t' read -r -a fields; do
+    fixture="$(local_overlay_expand "${fields[2]}" exact)"
+    if [[ "${fields[3]}" == glob ]]; then
+      fixture="${fixture/\*/smoke}"
+    fi
+    mkdir -p "$(dirname "$fixture")"
+    printf '# keep overlay\n' >"$fixture"
+    printf '%s\n' "$fixture"
+  done < <(local_overlay_inventory "$overlay_manifest")
+}
+overlay_fixture_listing="$(with_uninstall_fixture create_uninstall_overlays)"
+
+for uninstall_bucket in scriptState entryState smokePreserved; do
+  with_uninstall_fixture chezmoi --source="$repo_root" state set \
+    --bucket="$uninstall_bucket" --key=smoke --value='{"seeded":true}'
+done
+uninstall_preview="$(with_uninstall_fixture bash "$script_dir/uninstall.sh")"
+for uninstall_bucket in scriptState entryState; do
+  assert_file_contains <(printf '%s\n' "$uninstall_preview") \
+    "[would-reset] main chezmoi state bucket: $uninstall_bucket"
+  uninstall_bucket_data="$(with_uninstall_fixture chezmoi --source="$repo_root" state get-bucket --bucket="$uninstall_bucket")"
+  [[ "$uninstall_bucket_data" == *seeded* ]] || fail_test "uninstall preview changed $uninstall_bucket"
+done
+uninstall_removed_files="$uninstall_main_file
+$uninstall_dangling_link
+$uninstall_xdg_listing
+$uninstall_owned_completions
+$uninstall_state_file"
+while IFS= read -r uninstall_target; do
+  [[ -n "$uninstall_target" ]] || continue
+  assert_file_contains <(printf '%s\n' "$uninstall_preview") "[would-remove] file: $uninstall_target"
+  [[ -e "$uninstall_target" || -L "$uninstall_target" ]] \
+    || fail_test "uninstall preview removed a fixture: $uninstall_target"
+done <<<"$uninstall_removed_files"
+while IFS= read -r overlay_fixture; do
+  assert_file_contains <(printf '%s\n' "$uninstall_preview") "[would-skip] overlay-protected: $overlay_fixture"
+done <<<"$overlay_fixture_listing"
+for uninstall_target in "$uninstall_unowned_completion" "$uninstall_linked_completion"; do
+  if grep -Fxq "[would-remove] file: $uninstall_target" <<<"$uninstall_preview"; then
+    fail_test "uninstall preview includes an unowned completion: $uninstall_target"
+  fi
+done
+
+# bootstrap.env may move the state root; the producer and uninstall must agree.
+uninstall_bootstrap_env="$uninstall_config_home/oh-my-devenv/bootstrap.env"
+uninstall_overlay_state_home="$tmp_dir/uninstall-overlay-state"
+printf 'export XDG_STATE_HOME=%q\n' "$uninstall_overlay_state_home" >"$uninstall_bootstrap_env"
+uninstall_overlay_preview="$(with_uninstall_fixture bash "$script_dir/uninstall.sh")"
+assert_file_contains <(printf '%s\n' "$uninstall_overlay_preview") "$uninstall_overlay_state_home/"
 : >"$uninstall_bootstrap_env"
-uninstall_overlay_state="$(grep -F "$uninstall_state_home/" <<<"$uninstall_overlay_preview" || true)"
-if [[ -z "$uninstall_overlay_state" ]]; then
-  fail_test "uninstall preview ignored XDG_STATE_HOME from bootstrap.env"
+
+# Replace one owned file during backup to exercise the final ownership check.
+uninstall_backup_stub_bin="$tmp_dir/uninstall-backup-stub-bin"
+uninstall_real_tar="$(command -v tar)"
+mkdir -p "$uninstall_backup_stub_bin"
+cat >"$uninstall_backup_stub_bin/tar" <<'STUB'
+#!/usr/bin/env bash
+set -euo pipefail
+if [[ "$1" == -P ]]; then
+  printf '# replaced after inventory\n' >"$UNINSTALL_TEST_COMPLETION"
 fi
-uninstall_overlay_state_file="${uninstall_overlay_state##* }"
-[[ -d "$(dirname "$uninstall_overlay_state_file")" ]] \
-  || fail_test "uninstall.sh and the nested XDG producer disagree on the state directory"
+exec "$UNINSTALL_TEST_TAR" "$@"
+STUB
+chmod +x "$uninstall_backup_stub_bin/tar"
+uninstall_log="$tmp_dir/uninstall-confirm.log"
+with_uninstall_fixture env PATH="$uninstall_backup_stub_bin:$PATH" \
+  UNINSTALL_TEST_TAR="$uninstall_real_tar" UNINSTALL_TEST_COMPLETION="$uninstall_replaced_completion" \
+  bash "$script_dir/uninstall.sh" --confirm >"$uninstall_log"
+assert_file_contains "$uninstall_log" "[skipped] completion is no longer owned: $uninstall_replaced_completion"
+uninstall_archive="$(sed -n 's/^\[backed-up\] //p' "$uninstall_log" | sed -n '/\/managed-files\.tgz$/p')"
+[[ -f "$uninstall_archive" ]] || fail_test "confirmed uninstall did not create a file backup"
+tar -tzf "$uninstall_archive" 2>/dev/null | sed 's|^/||' >"$tmp_dir/uninstall-archive-list"
+while IFS= read -r uninstall_target; do
+  [[ -n "$uninstall_target" ]] || continue
+  [[ ! -e "$uninstall_target" && ! -L "$uninstall_target" ]] \
+    || fail_test "confirmed uninstall left a managed fixture: $uninstall_target"
+  grep -Fxq "${uninstall_target#/}" "$tmp_dir/uninstall-archive-list" \
+    || fail_test "uninstall archive omitted a removed file: $uninstall_target"
+done <<<"$uninstall_removed_files"
+[[ ! -e "$uninstall_owned_directory" ]] || fail_test "confirmed uninstall left an owned directory"
+uninstall_tree_archive="$(sed -n 's/^\[backed-up\] //p' "$uninstall_log" | sed -n '/\/tree-.*\.tgz$/p')"
+[[ -f "$uninstall_tree_archive" ]] || fail_test "confirmed uninstall did not back up the owned directory"
+tar -tzf "$uninstall_tree_archive" | grep -Fq '/smoke-owned' \
+  || fail_test "uninstall tree archive omitted the owned directory contents"
+for uninstall_bucket in scriptState entryState; do
+  [[ "$(with_uninstall_fixture chezmoi --source="$repo_root" state get-bucket --bucket="$uninstall_bucket")" == '{}' ]] \
+    || fail_test "confirmed uninstall did not clear $uninstall_bucket"
+done
+[[ "$(with_uninstall_fixture chezmoi --source="$repo_root" state get-bucket --bucket=smokePreserved)" == *seeded* ]] \
+  || fail_test "uninstall reset an unrelated state bucket"
+uninstall_preserved_files="$overlay_fixture_listing
+$uninstall_sentinel
+$uninstall_unowned_completion
+$uninstall_replaced_completion
+$uninstall_linked_completion"
+while IFS= read -r uninstall_target; do
+  [[ -e "$uninstall_target" || -L "$uninstall_target" ]] \
+    || fail_test "confirmed uninstall removed a protected fixture: $uninstall_target"
+done <<<"$uninstall_preserved_files"
+[[ -d "$repo_root" && -f "$script_dir/uninstall.sh" ]] \
+  || fail_test "uninstall removed the source checkout"
+
+# A second confirmed run skips backup while still deleting files and clearing
+# both script buckets. Keep the first run's archives for comparison.
+find "$uninstall_state_home" -name '*.tgz' | sort >"$tmp_dir/uninstall-backups-before"
+printf 'managed fixture without backup\n' >"$uninstall_main_file"
+for uninstall_bucket in scriptState entryState; do
+  with_uninstall_fixture chezmoi --source="$repo_root" state set \
+    --bucket="$uninstall_bucket" --key=smoke --value='{"seeded":true}'
+done
+with_uninstall_fixture bash "$script_dir/uninstall.sh" --confirm --no-backup >"$uninstall_log"
+assert_file_contains "$uninstall_log" '[skipped] backup (--no-backup)'
+assert_file_not_contains "$uninstall_log" '[backed-up]'
+[[ ! -e "$uninstall_main_file" ]] || fail_test "--no-backup did not remove the managed fixture"
+find "$uninstall_state_home" -name '*.tgz' | sort >"$tmp_dir/uninstall-backups-after"
+cmp -s "$tmp_dir/uninstall-backups-before" "$tmp_dir/uninstall-backups-after" \
+  || fail_test "--no-backup changed the backup inventory"
+for uninstall_bucket in scriptState entryState; do
+  [[ "$(with_uninstall_fixture chezmoi --source="$repo_root" state get-bucket --bucket="$uninstall_bucket")" == '{}' ]] \
+    || fail_test "--no-backup did not clear $uninstall_bucket"
+done
 
 log_step "🧩" "Running manifest and template contract checks..."
 # The real desktop support rule. Ubuntu versions sit far on either side of the
@@ -1416,19 +1592,49 @@ true|{"os":"linux","osRelease":{"id":"smoke-arch-derivative","idLike":"smoke arc
 EOF
 
 # A run_onchange hook reruns only when its rendered text changes, so it must
-# hash every script it runs and every manifest it passes to a script.
+# hash every script it runs or sources and every manifest it passes to a script.
 for hook_template in "$repo_root"/.chezmoiscripts/run_onchange_*.sh.tmpl; do
   # The patterns match the literal $scripts_dir and $manifests_dir hook text.
   # shellcheck disable=SC2016
   hook_inputs="$(
-    grep -oE '(bash "\$scripts_dir|"\$manifests_dir)/[^"]+"' "$hook_template" \
-      | sed -E 's|^bash "\$scripts_dir/|bootstrap/scripts/|; s|^"\$manifests_dir/|bootstrap/manifests/|; s|"$||' \
+    grep -oE '((bash|source) "\$scripts_dir|"\$manifests_dir)/[^"]+"' "$hook_template" \
+      | sed -E 's#^(bash|source) "\$scripts_dir/#bootstrap/scripts/#; s|^"\$manifests_dir/|bootstrap/manifests/|; s|"$||' \
       | sort -u
   )" || true
   while IFS= read -r hook_input; do
     [[ -n "$hook_input" ]] || continue
-    assert_file_contains "$hook_template" "include \"$hook_input\" | sha256sum"
+    if [[ "$hook_input" == bootstrap/scripts/common.sh ]]; then
+      assert_file_contains "$hook_template" 'includeTemplate "common-bootstrap-hashes" .'
+    else
+      assert_file_contains "$hook_template" "include \"$hook_input\" | sha256sum"
+    fi
   done <<<"$hook_inputs"
+done
+
+# Changes to either shared source file must change a rendered hook. Use a
+# minimal source fixture so the working tree remains untouched.
+shared_hash_source="$tmp_dir/shared-hash-source"
+shared_hash_hook=.chezmoiscripts/run_onchange_after_30-install-mise.sh.tmpl
+mkdir -p "$shared_hash_source/.chezmoiscripts" "$shared_hash_source/.chezmoitemplates" \
+  "$shared_hash_source/bootstrap/scripts" "$shared_hash_source/dot_local/share/oh-my-devenv"
+cp "$repo_root/$shared_hash_hook" "$shared_hash_source/$shared_hash_hook"
+cp "$repo_root/.chezmoitemplates/common-bootstrap-hashes" \
+  "$shared_hash_source/.chezmoitemplates/common-bootstrap-hashes"
+cp "$repo_root/bootstrap/scripts/common.sh" "$shared_hash_source/bootstrap/scripts/common.sh"
+cp "$repo_root/dot_local/share/oh-my-devenv/xdg.sh" \
+  "$shared_hash_source/dot_local/share/oh-my-devenv/xdg.sh"
+shared_hash_before="$tmp_dir/shared-hash.before"
+chezmoi --source="$shared_hash_source" execute-template \
+  --file "$shared_hash_source/$shared_hash_hook" >"$shared_hash_before"
+for shared_hash_input in bootstrap/scripts/common.sh dot_local/share/oh-my-devenv/xdg.sh; do
+  printf '\n# smoke hash change\n' >>"$shared_hash_source/$shared_hash_input"
+  shared_hash_after="$tmp_dir/shared-hash.$(basename "$shared_hash_input").after"
+  chezmoi --source="$shared_hash_source" execute-template \
+    --file "$shared_hash_source/$shared_hash_hook" >"$shared_hash_after"
+  if cmp -s "$shared_hash_before" "$shared_hash_after"; then
+    fail_test "changing $shared_hash_input did not change the rendered hook"
+  fi
+  shared_hash_before="$shared_hash_after"
 done
 
 # The Ghostty font workaround renders only for the supported Ubuntu desktop.
@@ -1675,7 +1881,7 @@ make_uv_tool_env() {
 make_uv_tool_env healthy 3.13.16.final.0 "$tmp_dir/uv-python/python"
 make_uv_tool_env drifted 3.13.14 "$tmp_dir/uv-python/python"
 make_uv_tool_env orphaned 3.13.14 "$tmp_dir/uv-python-removed/python"
-make_uv_tool_env bumped 3.13.14 "$tmp_dir/uv-python/python"
+make_uv_tool_env bumped 3.13.16.final.0 "$tmp_dir/uv-python/python"
 printf 'healthy==1.0\ndrifted==1.0\norphaned==1.0\nbumped==1.0\nabsent==1.0\n' >"$uv_manifest"
 
 uv_tool_env_healthy "$uv_tool_dir" healthy >/dev/null \
@@ -1692,7 +1898,7 @@ run_uv_installer() {
 }
 run_uv_installer
 printf '%s\n' 'tool uninstall drifted' 'tool install drifted==1.0' \
-  'tool uninstall orphaned' 'tool install orphaned==1.0' 'tool uninstall bumped' 'tool install bumped==1.0' \
+  'tool uninstall orphaned' 'tool install orphaned==1.0' 'tool install bumped==1.0' \
   'tool install absent==1.0' >"$tmp_dir/uv-expected"
 cmp -s "$tmp_dir/uv-expected" "$uv_log" \
   || fail_test "uv installer must rebuild only stale tool environments: $(<"$uv_log")"

@@ -17,6 +17,24 @@ versioning and release policy lives in
   `DOTFILES_FORCE_REINSTALL` now applies only to uv tools.
 - Rerun a bootstrap hook when an installer script it runs changes, not only
   when its manifest changes.
+- Rerun every `run_onchange_` bootstrap hook when the shared bootstrap code in
+  `bootstrap/scripts/common.sh` or `dot_local/share/oh-my-devenv/xdg.sh`
+  changes. The mise hook now also reruns on these changes.
+- **Breaking:** `uninstall.sh --confirm` no longer deletes the chezmoi source
+  checkout. Remove it manually if you no longer need it.
+- `uninstall.sh --confirm` now clears the main chezmoi `scriptState` and
+  `entryState` buckets after removal, so the next `chezmoi apply` reruns the
+  bootstrap hooks and restores removed assets. The dry run lists both resets.
+- On macOS, bootstrap hooks that run mise-managed tools now find a
+  Homebrew-installed mise even when Homebrew is not on the parent `PATH`.
+
+### Fixed
+
+- `uninstall.sh` removes only generated shell completion files that carry the
+  ownership marker. It no longer deletes a user file at a current completion
+  path, and it rechecks ownership immediately before deletion.
+- `uninstall.sh` now includes dangling symlinks in its pre-delete backup.
+- A first-run backup failure now prints the bootstrap diagnostic hints.
 
 ## [0.1.0] - 2026-10-10
 

@@ -312,13 +312,18 @@ setup_go_env() {
   mkdir -p "$GOBIN"
 }
 
-# Put user-local binaries, mise shims, and any extra directories ahead of PATH
-# for hooks that run mise-managed tools. Directories need not exist yet.
+# Put user-local binaries, mise shims, Homebrew on macOS, and any extra
+# directories ahead of PATH for hooks that run mise-managed tools. Directories
+# need not exist yet.
 export_tool_path() {
   local tool_path=""
   local extra_dir=""
+  local brew_bin=""
 
   tool_path="$HOME/.local/bin:$(oh_my_devenv_mise_shims_dir)"
+  if [[ "${OSTYPE:-}" == darwin* ]] && brew_bin="$(brew_command 2>/dev/null)"; then
+    tool_path="$tool_path:$(dirname "$brew_bin")"
+  fi
   for extra_dir in "$@"; do
     tool_path="$tool_path:$extra_dir"
   done
