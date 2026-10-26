@@ -86,7 +86,7 @@ Bootstrap is split into ordered hooks under `.chezmoiscripts/`:
 7. **`run_onchange_after_40-*`** — install language runtimes via mise.
 8. **`run_onchange_after_50-*`** — sync ecosystem tools (`go install`, `uv tool`, etc.).
 9. **`run_onchange_after_55-*`** — generate official Bash / Zsh completion assets in standard user data directories.
-10. **`run_onchange_after_60-*`** — final environment check and a short “welcome” summary.
+10. **`run_onchange_after_60-*`** — run the shared environment check and print a short “welcome” summary.
 
 The generated chezmoi config excludes scripts from `chezmoi status`, so routine hook runs do not make a clean setup look locally modified.
 
@@ -96,11 +96,17 @@ The managed `mise` config turns GitHub attestation verification off, because fre
 
 ## How to tell it worked
 
-The last hook runs `run_onchange_after_60-check.sh`. On success you should see:
+The last hook calls `bootstrap/scripts/check.sh`. Run the same check directly at any time:
+
+```bash
+bash "$(chezmoi source-path)/bootstrap/scripts/check.sh"
+```
+
+The script resolves the repository from its own location. You can run it from any directory. On success you should see:
 
 - The line **`All checks passed.`**
 - A block titled **`Core tools in this environment:`** listing versions for `chezmoi`, `git`, `mise`, and every tool in the current mise configuration (for example `go`, `node`, `python`, `uv`, and `golangci-lint`).
-- A short **`Next steps:`** list at the very end (shell reload hint, this onboarding doc, `docs/local-overlay-examples/`, restricted-network overrides, and the Bug issue template) so you are not dropped back to a silent prompt after a long apply.
+- A short **`Next steps:`** list at the very end of apply (shell reload hint, this onboarding doc, `docs/local-overlay-examples/`, restricted-network overrides, and the Bug issue template) so you are not dropped back to a silent prompt after a long apply. Direct checks do not print this list.
 
 If anything fails, the script exits non-zero and prints diagnostic hints — see **Something broke** below.
 
@@ -128,8 +134,9 @@ If you are on a corporate or otherwise restricted network, public registries may
 
 ## Something broke
 
-1. Re-run with **`chezmoi apply --verbose --debug`** (or `chezmoi init --apply ...` again) and capture the failing step.
-2. If the bootstrap warned about overwriting existing files, inspect backups under **`${XDG_STATE_HOME:-$HOME/.local/state}/chezmoi-first-run-backup/<timestamp>/`**, where each file keeps its original absolute path.
-3. Open an issue using the repository's bug-report workflow so the report includes OS, command, and logs.
+1. Run **`bash "$(chezmoi source-path)/bootstrap/scripts/check.sh"`** and capture its diagnostics. This command does not apply or install changes.
+2. Re-run with **`chezmoi apply --verbose --debug`** (or `chezmoi init --apply ...` again) and capture the failing step.
+3. If the bootstrap warned about overwriting existing files, inspect backups under **`${XDG_STATE_HOME:-$HOME/.local/state}/chezmoi-first-run-backup/<timestamp>/`**, where each file keeps its original absolute path.
+4. Open an issue using the repository's bug-report workflow so the report includes OS, command, and logs.
 
 Do **not** paste secrets, tokens, or internal hostnames into public issues.

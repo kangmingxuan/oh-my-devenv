@@ -822,8 +822,6 @@ env -i "${error_trap_env[@]}" OSTYPE=linux HOMEBREW_FIXTURE_BIN="$homebrew_fixtu
   /bin/bash -c 'set -euo pipefail; source "$1"; brew_command() { printf "%s/brew\n" "$HOMEBREW_FIXTURE_BIN"; }; export_tool_path; [[ "$PATH" == "$HOME/.local/bin:$(oh_my_devenv_mise_shims_dir):/usr/bin:/bin" ]]' \
   _ "$script_dir/common.sh" || fail_test "export_tool_path changed Linux PATH construction"
 
-render_template .chezmoiscripts/run_onchange_after_60-check.sh.tmpl "$tmp_dir/run_onchange_after_60-check.sh"
-
 disabled_desktop_hook="$tmp_dir/run_onchange_after_22-install-desktop-assets.disabled"
 disabled_ghostty_config="$tmp_dir/config.ghostty.disabled"
 disabled_fontconfig_fragment="$tmp_dir/99-oh-my-devenv-maple-mono-nf-cn.disabled.conf"
@@ -1133,7 +1131,7 @@ fi
 # These stubs are called by the extracted function, outside static analysis.
 # shellcheck disable=SC2317,SC2329
 (
-  eval "$(sed -n '/^check_desktop_font_fontconfig() {$/,/^}$/p' "$tmp_dir/run_onchange_after_60-check.sh")"
+  eval "$(sed -n '/^check_desktop_font_fontconfig() {$/,/^}$/p' "$script_dir/check.sh")"
   fc-list() {
     local face
     for face in $MAPLE_MONO_POSTSCRIPT_NAMES; do printf '%s\n' "$face"; done
@@ -1148,24 +1146,316 @@ fi
 
 # The shared check helpers count every missing command and path.
 (
-  eval "$(sed -n '/^check_cmd() {$/,/^}$/p; /^check_path() {$/,/^}$/p' "$tmp_dir/run_onchange_after_60-check.sh")"
+  eval "$(sed -n '/^check_cmd() {$/,/^}$/p; /^check_path() {$/,/^}$/p' "$script_dir/check.sh")"
   errors=0
   check_cmd smoke-missing-command 2>/dev/null
   check_path "$tmp_dir/smoke-missing-path" "smoke missing path" 2>/dev/null
   [[ "$errors" == 2 ]] || fail_test "check helpers must count each missing command and path; counted $errors"
 )
 
-# On a machine without the baseline, the environment check fails through its
-# final gate instead of reporting success.
-check_stub_bin="$tmp_dir/check-stub-bin"
-mkdir -p "$check_stub_bin"
-for fixture_command in bash dirname mkdir sed cut grep awk basename; do
-  ln -s "$(command -v "$fixture_command")" "$check_stub_bin/$fixture_command"
+log_step "🔎" "Testing the standalone environment check with stubbed tools..."
+check_root="$tmp_dir/check-fixture"
+check_stub_bin="$check_root/bin"
+check_config="$check_root/config/chezmoi/chezmoi.toml"
+mkdir -p "$check_stub_bin" "$check_root/bootstrap/scripts" "$check_root/.chezmoitemplates" \
+  "$check_root/dot_local/share/oh-my-devenv" "$check_root/config/mise" "$check_root/config/chezmoi" \
+  "$check_root/config/ghostty" "$check_root/home/Library/Fonts"
+cp "$script_dir/check.sh" "$script_dir/common.sh" "$check_root/bootstrap/scripts/"
+cp -R "$repo_root/bootstrap/manifests" "$check_root/bootstrap/"
+cp "$repo_root/dot_local/share/oh-my-devenv/xdg.sh" "$check_root/dot_local/share/oh-my-devenv/"
+cp "$repo_root/.chezmoitemplates/system-package-manager" \
+  "$repo_root/.chezmoitemplates/desktop-platform-supported" "$check_root/.chezmoitemplates/"
+printf '[data]\ndesktopBaseline = true\n' >"$check_config"
+printf '# fixture\n' >"$check_root/config/mise/config.toml"
+printf '# fixture\n' >"$check_root/config/ghostty/config.ghostty"
+printf '%s\n' "$MAPLE_MONO_POSTSCRIPT_NAMES" | tr ' ' '\n' >"$check_root/font-faces"
+for font_face in $MAPLE_MONO_POSTSCRIPT_NAMES; do
+  touch "$check_root/home/Library/Fonts/$font_face.ttf"
 done
-expect_failure "$tmp_dir/hook-check.err" \
-  env -i PATH="$check_stub_bin" HOME="$tmp_dir/hook-home" XDG_CONFIG_HOME="$XDG_CONFIG_HOME" \
-  bash "$tmp_dir/hook-ubuntu-run_onchange_after_60-check.sh"
-assert_file_contains "$tmp_dir/hook-check.err" "required tool(s) or asset(s) are missing."
+# Derive shell directories and ecosystem command names from the current manifests.
+check_omz_dir="$(HOME="$check_root/home" XDG_DATA_HOME="$check_root/data" \
+  bash -c 'source "$1"; oh_my_devenv_oh_my_zsh_dir' _ "$script_dir/common.sh")"
+mkdir -p "$check_omz_dir"
+touch "$check_omz_dir/oh-my-zsh.sh"
+while read -r plugin_repo plugin_path _; do
+  mkdir -p "$check_omz_dir/custom/$plugin_path"
+done < <(manifest_entries "$repo_root/bootstrap/manifests/shell/oh-my-zsh-plugins.txt")
+cat >"$check_stub_bin/check-tool" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+name="${0##*/}"
+printf '%s %s\n' "$name" "$*" >>"$CHECK_ROOT/calls"
+case "$name" in
+  chezmoi | selected-chezmoi)
+    if [[ "${1:-}" == --version ]]; then
+      printf 'chezmoi version fixture,\n'
+    else
+      exec "$REAL_CHEZMOI" --override-data "{\"chezmoi\":$CHECK_PLATFORM_DATA}" "$@"
+    fi
+    ;;
+  mise)
+    case "${1:-}" in
+      ls) [[ "${FAIL_CHECK:-}" != mise ]] ;;
+      current) printf 'smoke-runtime fixture\n' ;;
+      --version) printf 'fixture\n' ;;
+      *) exit 1 ;;
+    esac
+    ;;
+  brew)
+    [[ "$1 $2" == 'bundle check' ]]
+    ;;
+  dpkg-query) printf 'install ok installed\n' ;;
+  pacman) [[ "$1" == -Q ]] ;;
+  uv) [[ "$1 $2" == 'tool dir' ]] || exit 1; printf '%s/uv-tools\n' "$CHECK_ROOT" ;;
+  fc-list) cat "$CHECK_ROOT/font-faces" ;;
+  ghostty)
+    [[ "${FAIL_CHECK:-}" != ghostty ]] || exit 1
+    [[ "$1" != --version ]] || printf 'ghostty fixture\n'
+    ;;
+  git) printf 'git version fixture\n' ;;
+esac
+EOF
+chmod +x "$check_stub_bin/check-tool"
+for fixture_command in chezmoi mise brew dpkg-query pacman uv fc-list ghostty git; do
+  ln -s check-tool "$check_stub_bin/$fixture_command"
+done
+for tool_manifest_kind in go uv; do
+  while IFS= read -r tool_spec; do
+    command_name="$("${tool_manifest_kind}_tool_binary_name" "$tool_spec")"
+    [[ -e "$check_stub_bin/$command_name" ]] || ln -s check-tool "$check_stub_bin/$command_name"
+  done < <(manifest_entries "$repo_root/bootstrap/manifests/ecosystem/$tool_manifest_kind-tools.txt")
+done
+# Completion behavior has its own tests above. Here verify the check delegates
+# with the runtime platform and the same manifest, without host package assets.
+cat >"$check_root/bootstrap/scripts/install-shell-completions.sh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+[[ "$1" == check && "$3" == "$CHECK_ROOT/bootstrap/manifests/shell/completions.txt" ]] || exit 1
+printf 'completions %s\n' "$2" >>"$CHECK_ROOT/calls"
+EOF
+run_check_fixture() {
+  local platform_data="$1"
+  shift
+  env -i PATH="$check_stub_bin:/usr/bin:/bin" HOME="$check_root/home" OSTYPE=linux \
+    XDG_CONFIG_HOME="$check_root/config" XDG_DATA_HOME="$check_root/data" \
+    XDG_STATE_HOME="$check_root/state" CHECK_ROOT="$check_root" \
+    REAL_CHEZMOI="$(command -v chezmoi)" \
+    CHEZMOI_EXECUTABLE="${CHECK_CHEZMOI_EXECUTABLE-$check_stub_bin/chezmoi}" \
+    CHECK_PLATFORM_DATA="$platform_data" FAIL_CHECK="${FAIL_CHECK:-}" "$@"
+}
+for check_platform in "${hook_platforms[@]}"; do
+  check_platform_name="${check_platform%%|*}"
+  [[ "$check_platform_name" != unsupported ]] || continue
+  : >"$check_root/calls"
+  check_log="$check_root/$check_platform_name.log"
+  run_check_fixture "${check_platform#*|}" bash "$check_root/bootstrap/scripts/check.sh" \
+    "$check_config" >"$check_log" 2>&1
+  assert_file_contains "$check_log" 'All checks passed.'
+  assert_file_contains "$check_log" 'Core tools in this environment:'
+  assert_file_contains "$check_log" 'smoke-runtime'
+  assert_file_not_contains "$check_log" 'Next steps:'
+  assert_file_contains "$check_root/calls" "--config=$check_config"
+  case "$check_platform_name" in
+    macos) assert_file_contains "$check_root/calls" 'brew bundle check'; completion_platform=darwin ;;
+    arch) assert_file_contains "$check_root/calls" 'pacman -Q'; completion_platform=linux ;;
+    *) assert_file_contains "$check_root/calls" 'dpkg-query -W'; completion_platform=linux ;;
+  esac
+  assert_file_contains "$check_root/calls" "completions $completion_platform"
+  case "$check_platform_name" in
+    macos | ubuntu | arch) assert_file_contains "$check_root/calls" 'ghostty +validate-config' ;;
+    *) assert_file_not_contains "$check_root/calls" 'ghostty +validate-config' ;;
+  esac
+done
+# Missing initialization must fail with a direct instruction, before the
+# baseline checks. Cover normal config discovery and an explicit config path.
+mv "$check_config" "$check_config.saved"
+for check_config_state in missing uninitialized; do
+  if [[ "$check_config_state" == uninitialized ]]; then
+    printf '[data]\n' >"$check_config"
+  fi
+  for check_config_mode in default explicit; do
+    check_config_args=()
+    if [[ "$check_config_mode" == explicit ]]; then
+      check_config_args=("$check_config")
+    fi
+    check_config_error="$check_root/$check_config_state-$check_config_mode.err"
+    expect_failure "$check_config_error" run_check_fixture "$darwin_chezmoi_data" \
+      bash "$check_root/bootstrap/scripts/check.sh" ${check_config_args[@]+"${check_config_args[@]}"}
+    assert_file_contains "$check_config_error" "Run 'chezmoi init' first."
+    assert_file_not_contains "$check_config_error" 'Bootstrap step failed.'
+    assert_file_not_contains "$check_config_error" 'map has no entry'
+    assert_file_not_contains "$check_config_error" 'required tool(s) or asset(s) are missing.'
+  done
+done
+mv "$check_config.saved" "$check_config"
+
+# A shell without user-local binaries on PATH must still find chezmoi after
+# shared PATH setup. An explicitly selected binary must also supply its version.
+mkdir -p "$check_root/home/.local/bin"
+rm "$check_stub_bin/chezmoi"
+ln -s "$check_stub_bin/check-tool" "$check_root/home/.local/bin/chezmoi"
+CHECK_CHEZMOI_EXECUTABLE="" run_check_fixture "$darwin_chezmoi_data" \
+  bash "$check_root/bootstrap/scripts/check.sh" "$check_config" >"$check_root/path.log" 2>&1
+assert_file_contains "$check_root/path.log" 'All checks passed.'
+rm "$check_root/home/.local/bin/chezmoi"
+ln -s "$check_stub_bin/check-tool" "$check_root/selected-chezmoi"
+: >"$check_root/calls"
+CHECK_CHEZMOI_EXECUTABLE="$check_root/selected-chezmoi" run_check_fixture "$darwin_chezmoi_data" \
+  bash "$check_root/bootstrap/scripts/check.sh" "$check_config" >"$check_root/selected.log" 2>&1
+assert_file_contains "$check_root/selected.log" 'All checks passed.'
+assert_file_contains "$check_root/calls" 'selected-chezmoi --version'
+ln -s check-tool "$check_stub_bin/chezmoi"
+
+# A persisted opt-out suppresses desktop checks even on a supported platform.
+printf '[data]\ndesktopBaseline = false\n' >"$check_config"
+: >"$check_root/calls"
+run_check_fixture "$darwin_chezmoi_data" bash "$check_root/bootstrap/scripts/check.sh" \
+  >"$check_root/opt-out.log" 2>&1
+assert_file_contains "$check_root/opt-out.log" 'All checks passed.'
+assert_file_not_contains "$check_root/calls" 'ghostty +validate-config'
+printf '[data]\ndesktopBaseline = true\n' >"$check_config"
+for failed_check in mise ghostty; do
+  if FAIL_CHECK="$failed_check" run_check_fixture "$darwin_chezmoi_data" \
+    bash "$check_root/bootstrap/scripts/check.sh" "$check_config" >"$check_root/failure.log" 2>&1; then
+    fail_test "environment check must fail when $failed_check fails"
+  fi
+  assert_file_contains "$check_root/failure.log" 'required tool(s) or asset(s) are missing.'
+  assert_file_contains "$check_root/failure.log" 'What to try next:'
+  assert_file_not_contains "$check_root/failure.log" 'All checks passed.'
+done
+expect_failure "$check_root/usage.err" bash "$script_dir/check.sh" extra extra
+assert_file_contains "$check_root/usage.err" 'USAGE:'
+# Render the actual hook, then run it against the same isolated fixture.
+chezmoi --source="$repo_root" \
+  --override-data "{\"desktopBaseline\":true,\"chezmoi\":{\"os\":\"darwin\",\"sourceDir\":\"$check_root\",\"configFile\":\"$check_config\"}}" \
+  execute-template --file "$repo_root/.chezmoiscripts/run_onchange_after_60-check.sh.tmpl" \
+  >"$check_root/hook.sh"
+run_check_fixture "$darwin_chezmoi_data" bash "$check_root/hook.sh" >"$check_root/hook.log" 2>&1
+assert_file_contains "$check_root/hook.log" 'All checks passed.'
+assert_file_contains "$check_root/hook.log" 'Next steps:'
+if FAIL_CHECK=mise run_check_fixture "$darwin_chezmoi_data" bash "$check_root/hook.sh" \
+  >"$check_root/hook-failure.log" 2>&1; then
+  fail_test "hook must propagate a failed environment check"
+fi
+assert_file_not_contains "$check_root/hook-failure.log" 'Next steps:'
+
+log_step "🍺" "Testing the Homebrew installer with a stubbed brew..."
+brew_fixture="$tmp_dir/brew-installer"
+mkdir -p "$brew_fixture/bin"
+cat >"$brew_fixture/bin/brew" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' "$*" >>"$BREW_CALLS"
+case "$1" in
+  shellenv) printf 'export BREW_FIXTURE_ENV=loaded\n' ;;
+  bundle)
+    [[ "$BREW_FIXTURE_ENV" == loaded && "$2" == install && -f "${3#--file=}" ]] || exit 1
+    [[ "${FAIL_BREW:-0}" != 1 ]]
+    ;;
+  *) exit 1 ;;
+esac
+EOF
+chmod +x "$brew_fixture/bin/brew"
+for brewfile in "$repo_root/bootstrap/manifests/system/Brewfile" "$repo_root/bootstrap/manifests/desktop/Brewfile"; do
+  env -i PATH="$brew_fixture/bin:/usr/bin:/bin" HOME="$brew_fixture" \
+    XDG_CONFIG_HOME="$brew_fixture/config" BREW_CALLS="$brew_fixture/calls" \
+    bash "$script_dir/install-brew-packages.sh" "$brewfile" >"$brew_fixture/install.log"
+  assert_file_contains "$brew_fixture/calls" "bundle install --file=$brewfile"
+done
+expect_failure "$brew_fixture/failure.err" env -i \
+  PATH="$brew_fixture/bin:/usr/bin:/bin" HOME="$brew_fixture" XDG_CONFIG_HOME="$brew_fixture/config" \
+  BREW_CALLS="$brew_fixture/calls" FAIL_BREW=1 \
+  bash "$script_dir/install-brew-packages.sh" "$repo_root/bootstrap/manifests/system/Brewfile"
+
+log_step "🔤" "Testing the desktop font installer with a local archive..."
+require_command zip
+require_command unzip
+font_fixture="$tmp_dir/font-installer"
+mkdir -p "$font_fixture/bin" "$font_fixture/archive"
+# Synthetic TTF payloads carry their manifest-derived face names. Fontconfig is
+# stubbed; archive extraction, SHA-256 verification, and directory swaps are real.
+for font_face in $MAPLE_MONO_POSTSCRIPT_NAMES; do
+  printf '%s\n' "$font_face" >"$font_fixture/archive/$font_face.ttf"
+done
+(cd "$font_fixture/archive" && zip -q "$font_fixture/fonts.zip" ./*.ttf)
+# macOS can provide shasum instead of the GNU SHA-256 command.
+if command -v sha256sum >/dev/null 2>&1 && \
+  sha256sum "$font_fixture/fonts.zip" | sha256sum --check --status >/dev/null 2>&1; then
+  ln -s "$(command -v sha256sum)" "$font_fixture/bin/sha256sum"
+else
+  require_command shasum
+  printf '#!/bin/sh\nexec shasum -a 256 "$@"\n' >"$font_fixture/bin/sha256sum"
+  chmod +x "$font_fixture/bin/sha256sum"
+fi
+font_archive_sha="$("$font_fixture/bin/sha256sum" "$font_fixture/fonts.zip" | awk '{print $1}')"
+sed "s/^MAPLE_MONO_SHA256=.*/MAPLE_MONO_SHA256=$font_archive_sha/" \
+  "$desktop_font_manifest" >"$font_fixture/manifest.env"
+cat >"$font_fixture/bin/font-tool" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+case "${0##*/}" in
+  curl)
+    while [[ $# -gt 0 ]]; do
+      if [[ "$1" == --output ]]; then
+        cp "$FONT_ARCHIVE" "$2"
+        exit 0
+      fi
+      shift
+    done
+    exit 1
+    ;;
+  fc-scan) cat "${@: -1}" ;;
+  fc-cache) [[ "${FAIL_FONT_CACHE:-0}" != 1 ]] ;;
+  fc-list)
+    for font_file in "$FONT_INSTALL_DIR"/*.ttf; do
+      [[ -f "$font_file" ]] || continue
+      cat "$font_file"
+    done
+    ;;
+esac
+EOF
+chmod +x "$font_fixture/bin/font-tool"
+for fixture_command in curl fc-scan fc-cache fc-list; do
+  ln -s font-tool "$font_fixture/bin/$fixture_command"
+done
+font_data="$font_fixture/data"
+font_install_dir="$(XDG_DATA_HOME="$font_data" maple_mono_font_dir)"
+font_marker="$(XDG_DATA_HOME="$font_data" maple_mono_font_marker)"
+run_font_installer() {
+  env -i PATH="$font_fixture/bin:$PATH" HOME="$font_fixture/home" \
+    XDG_CONFIG_HOME="$font_fixture/config" XDG_DATA_HOME="$font_data" XDG_CACHE_HOME="$font_fixture/cache" \
+    FONT_ARCHIVE="$font_fixture/fonts.zip" FONT_INSTALL_DIR="$font_install_dir" \
+    FAIL_FONT_CACHE="${FAIL_FONT_CACHE:-0}" \
+    bash "$script_dir/install-maple-mono-font.sh" "$1"
+}
+run_font_installer "$font_fixture/manifest.env" >"$font_fixture/install.log" 2>&1
+assert_file_contains "$font_fixture/install.log" 'installed successfully.'
+assert_file_contains "$font_marker" "version=$MAPLE_MONO_VERSION sha256=$font_archive_sha"
+for font_face in $MAPLE_MONO_POSTSCRIPT_NAMES; do
+  cmp -s "$font_fixture/archive/$font_face.ttf" "$font_install_dir/$font_face.ttf" \
+    || fail_test "font installer did not install declared face $font_face"
+done
+cp -R "$font_install_dir" "$font_fixture/previous"
+# A stale managed marker forces an update. Neither a checksum mismatch nor a
+# failed post-swap Fontconfig refresh may damage the previous installation.
+printf 'previous installation\n' >"$font_marker"
+cp "$font_marker" "$font_fixture/previous/$(basename "$font_marker")"
+bad_font_sha="$(printf 'invalid archive checksum\n' | "$font_fixture/bin/sha256sum" | awk '{print $1}')"
+sed "s/^MAPLE_MONO_SHA256=.*/MAPLE_MONO_SHA256=$bad_font_sha/" \
+  "$desktop_font_manifest" >"$font_fixture/mismatch.env"
+expect_failure "$font_fixture/mismatch.err" run_font_installer "$font_fixture/mismatch.env"
+assert_file_contains "$font_fixture/mismatch.err" 'checksum verification failed'
+diff -r "$font_fixture/previous" "$font_install_dir" \
+  || fail_test "checksum mismatch changed the existing font installation"
+[[ ! -e "$font_fixture/cache/oh-my-devenv/downloads/$MAPLE_MONO_ARCHIVE" ]] \
+  || fail_test "checksum mismatch left a corrupt cached archive"
+expect_failure "$font_fixture/cache-failure.err" env -i \
+  PATH="$font_fixture/bin:$PATH" HOME="$font_fixture/home" XDG_CONFIG_HOME="$font_fixture/config" \
+  XDG_DATA_HOME="$font_data" XDG_CACHE_HOME="$font_fixture/cache" \
+  FONT_ARCHIVE="$font_fixture/fonts.zip" FONT_INSTALL_DIR="$font_install_dir" FAIL_FONT_CACHE=1 \
+  bash "$script_dir/install-maple-mono-font.sh" "$font_fixture/manifest.env"
+diff -r "$font_fixture/previous" "$font_install_dir" \
+  || fail_test "failed Fontconfig refresh did not restore the previous installation"
 
 log_step "🤖" "Verifying the main source deploys only dotfiles..."
 # Repository documentation, metadata, and the nested sources are not targets:
