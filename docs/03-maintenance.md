@@ -21,7 +21,7 @@ environment product.
 4. **Reproducible bootstrap.** Changes to executable bootstrap behavior must
    keep the appropriate checks in the canonical [`CONTRIBUTING.md` validation
    policy](../CONTRIBUTING.md#local-validation) passing and keep a clean-machine
-   bootstrap working on macOS, Ubuntu/Debian, Arch Linux, and WSL.
+   bootstrap working on macOS, Ubuntu/Debian, and Arch Linux.
 5. **Validate behavior, not duplicated facts.** Tests enforce parsing,
    rendering, syntax, permissions, boundaries, and behavior. They do not restate
    literal configuration values that already have a canonical source file.

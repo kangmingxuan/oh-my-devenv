@@ -42,11 +42,11 @@ is the source of truth for exact packages and pinned versions.
 
 | Layer | Installed by | Manifest | Includes |
 |-------|--------------|----------|----------|
-| System packages | `apt` (Debian / Ubuntu / WSL) | [`bootstrap/manifests/system/apt-packages.txt`](../bootstrap/manifests/system/apt-packages.txt) | git, curl, wget, zsh, tmux, jq, ripgrep, fzf, direnv, fd-find, bat, tree, zip, unzip, shellcheck, shfmt, build-essential, pkg-config |
+| System packages | `apt` (Debian / Ubuntu) | [`bootstrap/manifests/system/apt-packages.txt`](../bootstrap/manifests/system/apt-packages.txt) | git, curl, wget, zsh, tmux, jq, ripgrep, fzf, direnv, fd-find, bat, tree, zip, unzip, shellcheck, shfmt, build-essential, pkg-config |
 | System packages | Homebrew (macOS) | [`bootstrap/manifests/system/Brewfile`](../bootstrap/manifests/system/Brewfile) | the same CLI set plus yq, gnupg, pinentry-mac, and gh |
 | System packages | `pacman` (Arch families) | [`bootstrap/manifests/system/pacman-packages.txt`](../bootstrap/manifests/system/pacman-packages.txt) | Arch names such as base-devel, pkgconf, and fd |
 | Desktop assets | Homebrew (macOS) | [`bootstrap/manifests/desktop/Brewfile`](../bootstrap/manifests/desktop/Brewfile) | Ghostty, Maple Mono NF CN, and OrbStack |
-| Desktop packages | `pacman` (Arch outside WSL) | [`bootstrap/manifests/desktop/pacman-packages.txt`](../bootstrap/manifests/desktop/pacman-packages.txt) | Ghostty and Fontconfig |
+| Desktop packages | `pacman` (Arch Linux outside WSL) | [`bootstrap/manifests/desktop/pacman-packages.txt`](../bootstrap/manifests/desktop/pacman-packages.txt) | Ghostty and Fontconfig |
 | Desktop terminal | `apt` + managed config (Ubuntu 26.04+) | [`bootstrap/manifests/desktop/apt-packages.txt`](../bootstrap/manifests/desktop/apt-packages.txt) | Ghostty, Fontconfig support, and a Ghostty-specific font-discovery workaround |
 | Desktop font | verified archive (Arch Linux / Ubuntu 26.04+) | [`bootstrap/manifests/desktop/maple-mono-nf-cn.env`](../bootstrap/manifests/desktop/maple-mono-nf-cn.env) | the font family and required faces shared with the check and the Ghostty/Fontconfig templates, plus the pinned Linux release installed under the user data directory |
 | Runtimes and binary tools | [mise](https://mise.jdx.dev/) | [`xdg_config/mise/config.toml.tmpl`](../xdg_config/mise/config.toml.tmpl) | go, node, python, golangci-lint, uv, usage (versions pinned here) |
@@ -57,15 +57,16 @@ is the source of truth for exact packages and pinned versions.
 
 The desktop layer is controlled by the persisted `desktopBaseline` machine
 choice. It is an all-or-nothing, platform-specific bundle supported on macOS
-and non-WSL Arch Linux and Ubuntu 26.04+; other platforms render no Ghostty config and install
-no desktop assets. The macOS bundle includes Ghostty, Maple Mono NF CN, and
-OrbStack. Installing the OrbStack cask does not complete its first-launch setup
-or licensing; those remain user actions. Using OrbStack for freelance,
-business, or professional work requires a paid
-[OrbStack license](https://docs.orbstack.dev/licensing).
+and on Arch Linux and Ubuntu 26.04+ outside WSL. Other environments render no
+Ghostty config and install no desktop assets. A `microsoft` kernel always
+excludes the desktop baseline, even when WSLg sets `DISPLAY`. The macOS bundle
+includes Ghostty, Maple Mono NF CN, and OrbStack. Installing the OrbStack cask
+does not complete its first-launch setup or licensing; those remain user
+actions. Using OrbStack for freelance, business, or professional work requires
+a paid [OrbStack license](https://docs.orbstack.dev/licensing).
 
 Ghostty selects the manifest font through its own `font-family` configuration.
-On supported Ubuntu desktops only (26.04+ outside WSL),
+On supported Ubuntu 26.04+ desktops outside WSL only,
 `$XDG_CONFIG_HOME/fontconfig/conf.d/99-oh-my-devenv-maple-mono-nf-cn.conf` works
 around an observed failure to honor that setting. The rule matches both
 `prgname=ghostty` and `monospace`; it leaves other applications and explicitly
@@ -132,7 +133,7 @@ For a one-off setting not persisted in `bootstrap.env`, export it before
 
 ### Shell completion contract
 
-Linux / WSL provides first-class Bash and Zsh completion. macOS provides
+Linux provides first-class Bash and Zsh completion. macOS provides
 first-class Zsh completion; its system Bash receives only the basic managed
 environment. Package-manager completions are used directly. Completions that a
 CLI officially generates are installed by the 55 hook under:
@@ -248,8 +249,8 @@ The installer uses existing package databases and never runs `pacman -Sy`;
 perform a full system upgrade before bootstrap. Only official repository
 packages are used; there is no AUR helper dependency.
 
-The optional desktop baseline supports Arch outside WSL as well as Ubuntu
-26.04+ and macOS. Linux receives Ghostty, the verified Maple Mono user-font
+The optional desktop baseline supports Arch Linux and Ubuntu 26.04+ outside
+WSL, plus macOS. Linux receives Ghostty, the verified Maple Mono user-font
 archive, and managed Ghostty settings. The Fontconfig workaround is active only
 for Ghostty on Ubuntu; Arch keeps its existing generic font preferences. This
 does not configure Hyprland or change the default terminal.

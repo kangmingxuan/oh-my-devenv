@@ -8,7 +8,7 @@ Changes that belong in this repository:
 
 - System packages selected as part of the maintained environment (editors, `git`, `curl`, formatting and diagnostic tools).
 - The explicitly selected, platform-specific desktop baseline on supported workstations, including OrbStack on macOS.
-- Baseline shell, Git, SSH, and runtime templates that work on macOS, Ubuntu/Debian, Arch Linux, and WSL.
+- Baseline shell, Git, SSH, and runtime templates that work on macOS, Ubuntu/Debian, and Arch Linux.
 - Source-only bootstrap scripts and their smoke-test coverage.
 - Documentation describing the baseline and its maintenance.
 
@@ -86,7 +86,7 @@ mkdir -p /tmp/system-bash && ln -sf /bin/bash /tmp/system-bash/bash
 PATH="/tmp/system-bash:$PATH" bash bootstrap/scripts/run-smoke-tests.sh
 ```
 
-- Shell and application templates (`dot_*.tmpl`, `dot_*/env.*.tmpl`, and `xdg_config/**/*.tmpl`) must render on macOS and Linux/WSL, with and without optional integrations.
+- Shell and application templates (`dot_*.tmpl`, `dot_*/env.*.tmpl`, and `xdg_config/**/*.tmpl`) must render on macOS and Linux, with and without optional integrations.
 - The smoke suite renders templates with `chezmoi execute-template`, syntax-checks the output with the corresponding shell, and exercises selected behavior in temporary fixture directories.
 - Every hook under `.chezmoiscripts/` is rendered for each supported platform automatically. When you add another template, add it to `bootstrap/scripts/run-smoke-tests.sh` so rendering and syntax checks are enforced on every change.
 - Tests verify parsing, rendering, syntax, permissions, management boundaries, and user-visible behavior. Do not duplicate literal configuration values in test code; the configuration file is their source of truth.
@@ -128,7 +128,7 @@ The repository CI runs on GitHub Actions for every push and pull request: `run-s
 
 When reporting a bug, include:
 
-- OS and architecture (for example, `macOS 15 arm64`, `Ubuntu 24.04 amd64`, `WSL Ubuntu 24.04`).
+- OS and architecture (for example, `macOS 15 arm64` or `Ubuntu 24.04 amd64`).
 - chezmoi version (`chezmoi --version`).
 - The exact command you ran and the observed output.
 - Whether the issue reproduces with a clean `$HOME` or only on an existing machine.

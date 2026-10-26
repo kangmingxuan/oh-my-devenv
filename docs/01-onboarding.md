@@ -45,12 +45,14 @@ initialization remains in the documented
 install the **desktop baseline**. Those values only affect this computer and are
 not committed back into the repository.
 
-The desktop choice defaults to yes on macOS and on non-WSL Arch Linux and Ubuntu 26.04+ when
-the init process can see a graphical-session signal (`XDG_CURRENT_DESKTOP`,
-`WAYLAND_DISPLAY`, or `DISPLAY`). It defaults to no elsewhere. The answer is
-persisted as `desktopBaseline` in the local chezmoi data, so later applies do not
-guess again. To change it deliberately, edit the local config, set
-`desktopBaseline = true` or `false` under `[data]`, and apply:
+The desktop choice defaults to yes on macOS and on Arch Linux and Ubuntu 26.04+
+outside WSL when the init process can see a graphical-session signal
+(`XDG_CURRENT_DESKTOP`, `WAYLAND_DISPLAY`, or `DISPLAY`). It defaults to no
+elsewhere. A `microsoft` kernel always excludes the desktop baseline, even when
+WSLg sets `DISPLAY`. The answer is persisted as `desktopBaseline` in the local
+chezmoi data, so later applies do not guess again. To change it deliberately,
+edit the local config, set `desktopBaseline = true` or `false` under `[data]`,
+and apply:
 
 ```bash
 chezmoi edit-config

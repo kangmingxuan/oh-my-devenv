@@ -2,22 +2,22 @@
 
 [English](README.md) | **中文**
 
-> 一条命令，把全新的 **macOS**、**Ubuntu / Debian**、**Arch Linux** 或 **WSL** 机器，变成配置完善的 shell、锁定版本的语言运行时和现代 CLI 工具链 —— 由 [chezmoi](https://www.chezmoi.io/) 统一管理。
+> 一条命令，把全新的 **macOS**、**Ubuntu / Debian** 或 **Arch Linux** 机器，变成配置完善的 shell、锁定版本的语言运行时和现代 CLI 工具链 —— 由 [chezmoi](https://www.chezmoi.io/) 统一管理。
 
 [![Smoke Tests](https://github.com/kangmingxuan/oh-my-devenv/actions/workflows/smoke-tests.yml/badge.svg)](https://github.com/kangmingxuan/oh-my-devenv/actions/workflows/smoke-tests.yml)
 [![Apply Tests](https://github.com/kangmingxuan/oh-my-devenv/actions/workflows/apply-tests.yml/badge.svg)](https://github.com/kangmingxuan/oh-my-devenv/actions/workflows/apply-tests.yml)
 [![Secret Scan](https://github.com/kangmingxuan/oh-my-devenv/actions/workflows/secret-scan.yml/badge.svg)](https://github.com/kangmingxuan/oh-my-devenv/actions/workflows/secret-scan.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-![Platforms](https://img.shields.io/badge/platforms-macOS%20%7C%20Ubuntu%2FDebian%20%7C%20Arch%20Linux%20%7C%20WSL-informational)
+![Platforms](https://img.shields.io/badge/platforms-macOS%20%7C%20Ubuntu%2FDebian%20%7C%20Arch%20Linux-informational)
 
 oh-my-devenv 是一套主观鲜明、可复现的开发环境。它公开的是维护者当前认可的一整套选择：认同这些选择就使用，不认同就不使用。在一台全新机器上让 `chezmoi` 指向它，几分钟后你就拥有受管的 shell、语言运行时和精选 CLI 工具链，全部来自同一份事实来源。密钥与机器私有事实留在本地 overlay 中，使公开基线可以安全检出。
 
 ## 功能亮点
 
-- **一份来源，跨平台通用** —— macOS（Intel + Apple Silicon）、Ubuntu / Debian、Arch Linux 与 WSL 共用同一套模板化基线。
+- **一份来源，跨平台通用** —— macOS（Intel + Apple Silicon）、Ubuntu / Debian 与 Arch Linux 共用同一套模板化基线。
 - **一条命令完成引导** —— `chezmoi init --apply` 通过有序 hook 安装全部内容；重复运行幂等且安全。
 - **分层且可复现** —— chezmoi 统一编排系统软件包、可选桌面资产、shell 资产、[mise](https://mise.jdx.dev/) 运行时与各语言工具，每一层都有自己的清单（manifest）。
-- **受管的 shell** —— 所有平台上的 Zsh 与 Linux / WSL 上的 Bash 都提供完整自动补全；macOS Bash 则刻意只保留有限支持。
+- **受管的 shell** —— 所有平台上的 Zsh 与 Linux 上的 Bash 都提供完整自动补全；macOS Bash 则刻意只保留有限支持。
 - **锁定版本的运行时** —— 通过 mise 管理 Go、Node、Python 与 golangci-lint，外加 `gopls`、`dlv`、`ruff`、`basedpyright`、`pre-commit` 等生态工具。系统软件包、mise 本身以及 oh-my-zsh 与其插件跟随上游发布。
 - **现代 CLI 工具箱** —— ripgrep、fd、bat、fzf、jq、direnv、tmux、shellcheck、shfmt 等。
 - **可选桌面基线** —— 一个全有或全无的平台包：受支持的工作站安装 Ghostty 与 Maple Mono NF CN，macOS 额外安装 OrbStack，Ubuntu 26.04+ 另有仅针对 Ghostty 的 Fontconfig 兼容补丁。
@@ -70,7 +70,7 @@ brew install git curl chezmoi
 command -v git curl chezmoi
 ```
 
-**Ubuntu / Debian / WSL**
+**Ubuntu / Debian**
 
 ```bash
 sudo apt-get update
@@ -112,7 +112,7 @@ chezmoi init --apply git@github.com:kangmingxuan/oh-my-devenv.git
 chezmoi init --apply https://github.com/kangmingxuan/oh-my-devenv.git
 ```
 
-首次 apply 会：备份任何已存在的受管文件，仅询问一次 Git 作者名、邮箱与桌面基线选择，部署 dotfiles，运行有序引导 hook，并以环境校验收尾。macOS 与带图形会话的非 WSL Arch Linux、Ubuntu 26.04+ 默认启用桌面基线；无图形会话或不受支持的 Linux 与 WSL 默认关闭；本仓库的 apply CI fixture 会显式关闭。在 macOS 上，接受该选择会一起安装 Ghostty、Maple Mono NF CN 与 OrbStack。Homebrew 只负责安装 OrbStack 应用，用户仍需首次启动以完成设置；自由职业、商业及专业用途需要购买 [OrbStack 许可证](https://docs.orbstack.dev/licensing)。成功时你会看到 **`All checks passed.`** 以及一份核心工具版本列表。
+首次 apply 会：备份任何已存在的受管文件，仅询问一次 Git 作者名、邮箱与桌面基线选择，部署 dotfiles，运行有序引导 hook，并以环境校验收尾。macOS 与 WSL 之外带图形会话的 Arch Linux、Ubuntu 26.04+ 默认启用桌面基线；其他 Linux 环境默认关闭。`microsoft` 内核始终不使用桌面基线，即使 WSLg 设置了 `DISPLAY`；本仓库的 apply CI fixture 会显式关闭。在 macOS 上，接受该选择会一起安装 Ghostty、Maple Mono NF CN 与 OrbStack。Homebrew 只负责安装 OrbStack 应用，用户仍需首次启动以完成设置；自由职业、商业及专业用途需要购买 [OrbStack 许可证](https://docs.orbstack.dev/licensing)。成功时你会看到 **`All checks passed.`** 以及一份核心工具版本列表。
 
 ### 运行前须知
 
@@ -137,7 +137,7 @@ chezmoi apply
 
 ## 适用范围与预期
 
-本仓库由单人以 **尽力而为（best-effort）** 的方式维护。请把它视为该维护者面向笔记本、虚拟机和一次性实验环境公开的主观基线：它能快速把全新机器带到可用的 shell、运行时与 CLI 工具链状态，但不是平台级产品，也不承诺适合每一种工作流。公开默认值都是有意选择；凭据、私有基础设施和机器专属事实应放在本地 overlay 中。桌面基线是显式、全有或全无的机器选择，目前仅在 macOS、非 WSL 的 Arch Linux 和 Ubuntu 26.04+ 上安装；具体内容因平台而异，macOS 包含 OrbStack。
+本仓库由单人以 **尽力而为（best-effort）** 的方式维护。请把它视为该维护者面向笔记本、虚拟机和一次性实验环境公开的主观基线：它能快速把全新机器带到可用的 shell、运行时与 CLI 工具链状态，但不是平台级产品，也不承诺适合每一种工作流。公开默认值都是有意选择；凭据、私有基础设施和机器专属事实应放在本地 overlay 中。桌面基线是显式、全有或全无的机器选择，目前仅在 macOS，以及 WSL 之外的 Arch Linux 和 Ubuntu 26.04+ 上安装；具体内容因平台而异，macOS 包含 OrbStack。
 
 ## 文档
 

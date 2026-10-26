@@ -9,6 +9,9 @@ versioning and release policy lives in
 
 ### Changed
 
+- Document WSL as a runtime environment rather than a separate platform. Keep
+  the `microsoft`-kernel exclusion from the desktop baseline, including when
+  WSLg sets `DISPLAY`.
 - The desktop hook's warning on an unsupported platform now states that no
   desktop assets were installed and points to `docs/02-reference.md` for the
   supported platforms instead of restating the support rule.

@@ -85,7 +85,7 @@ necessary, update it through the same installation channel:
 ```bash
 mise --version
 brew upgrade mise    # macOS Homebrew install
-mise self-update     # standalone Linux/WSL install
+mise self-update     # standalone Linux install
 ```
 
 Create or update the overlay with an explicit path:
