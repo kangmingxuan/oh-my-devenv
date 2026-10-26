@@ -8,9 +8,8 @@ on:
 # and syntax-checks templates, validates contracts and boundaries, and exercises
 # selected behavior with stubs and temporary roots. It does not run the complete
 # package and runtime bootstrap. This workflow renders initialization
-# configuration, performs a real `chezmoi apply` on a throwaway runner, and
-# asserts the final environment check passes, so installer integration failures
-# are caught.
+# configuration, performs a real `chezmoi apply` across the supported platforms,
+# and asserts both the apply-time hook and the standalone environment check pass.
 jobs:
   apply-linux:
     runs-on: ubuntu-latest
@@ -47,8 +46,112 @@ jobs:
             2>&1 | tee "$HOME/apply.log"
       - name: Assert the environment check passed
         run: |
+          tmp_config_file="$RUNNER_TEMP/chezmoi.toml"
           grep -Fq "All checks passed." "$HOME/apply.log"
+          bash bootstrap/scripts/check.sh "$tmp_config_file"
           test -f "$XDG_CONFIG_HOME/mise/config.toml"
           backup_root="$(bash -c 'source bootstrap/scripts/common.sh; first_run_backup_root')"
           grep -Fxq "# pre-existing zshrc" "$backup_root"/*"$HOME/.zshrc"
           grep -Fxq "unmanaged_sentinel = true" "$HOME/.config/mise/config.toml"
+
+  apply-ubuntu-desktop:
+    runs-on: ubuntu-latest
+    container: ubuntu:26.04
+    steps:
+      - name: Install prerequisites
+        run: |
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            ca-certificates curl git sudo
+      - uses: actions/checkout@v7
+      - name: Install chezmoi
+        run: |
+          mkdir -p "$HOME/.local/bin"
+          sh -c "$(curl -fsLS get.chezmoi.io)" -- -b "$HOME/.local/bin"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - name: Bootstrap the baseline end to end
+        run: |
+          tmp_data_file="$RUNNER_TEMP/chezmoi-data.toml"
+          tmp_config_file="$RUNNER_TEMP/chezmoi.toml"
+
+          cat >"$tmp_data_file" <<'EOF'
+          name = "CI Runner"
+          email = "ci@example.com"
+          desktopBaseline = true
+          EOF
+
+          chezmoi execute-template --init \
+            --source="$PWD" \
+            --override-data-file "$tmp_data_file" \
+            --file "$PWD/.chezmoi.toml.tmpl" >"$tmp_config_file"
+
+          chezmoi apply --source="$PWD" --config "$tmp_config_file" \
+            2>&1 | tee "$HOME/apply.log"
+      - name: Assert the environment check passed
+        run: |
+          tmp_config_file="$RUNNER_TEMP/chezmoi.toml"
+          grep -Fq "All checks passed." "$HOME/apply.log"
+          bash bootstrap/scripts/check.sh "$tmp_config_file"
+
+  apply-arch:
+    runs-on: ubuntu-latest
+    container: archlinux:base
+    steps:
+      - name: Install prerequisites
+        run: pacman -Syu --needed --noconfirm git curl chezmoi sudo
+      - uses: actions/checkout@v7
+      - name: Bootstrap the baseline end to end
+        run: |
+          tmp_data_file="$RUNNER_TEMP/chezmoi-data.toml"
+          tmp_config_file="$RUNNER_TEMP/chezmoi.toml"
+
+          cat >"$tmp_data_file" <<'EOF'
+          name = "CI Runner"
+          email = "ci@example.com"
+          desktopBaseline = true
+          EOF
+
+          chezmoi execute-template --init \
+            --source="$PWD" \
+            --override-data-file "$tmp_data_file" \
+            --file "$PWD/.chezmoi.toml.tmpl" >"$tmp_config_file"
+
+          chezmoi apply --source="$PWD" --config "$tmp_config_file" \
+            2>&1 | tee "$HOME/apply.log"
+      - name: Assert the environment check passed
+        run: |
+          tmp_config_file="$RUNNER_TEMP/chezmoi.toml"
+          grep -Fq "All checks passed." "$HOME/apply.log"
+          bash bootstrap/scripts/check.sh "$tmp_config_file"
+
+  apply-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install chezmoi
+        run: brew install chezmoi
+      - name: Bootstrap the baseline end to end
+        env:
+          HOMEBREW_NO_INSTALL_CLEANUP: "1"
+        run: |
+          tmp_data_file="$RUNNER_TEMP/chezmoi-data.toml"
+          tmp_config_file="$RUNNER_TEMP/chezmoi.toml"
+
+          cat >"$tmp_data_file" <<'EOF'
+          name = "CI Runner"
+          email = "ci@example.com"
+          desktopBaseline = true
+          EOF
+
+          chezmoi execute-template --init \
+            --source="$PWD" \
+            --override-data-file "$tmp_data_file" \
+            --file "$PWD/.chezmoi.toml.tmpl" >"$tmp_config_file"
+
+          chezmoi apply --source="$PWD" --config "$tmp_config_file" \
+            2>&1 | tee "$HOME/apply.log"
+      - name: Assert the environment check passed
+        run: |
+          tmp_config_file="$RUNNER_TEMP/chezmoi.toml"
+          grep -Fq "All checks passed." "$HOME/apply.log"
+          bash bootstrap/scripts/check.sh "$tmp_config_file"

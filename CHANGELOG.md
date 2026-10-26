@@ -7,6 +7,12 @@ versioning and release policy lives in
 
 ## [Unreleased]
 
+### Added
+
+- Add `bash bootstrap/scripts/check.sh` for on-demand environment validation
+  without applying or installing changes. The final bootstrap hook uses the
+  same check.
+
 ### Changed
 
 - Document WSL as a runtime environment rather than a separate platform. Keep

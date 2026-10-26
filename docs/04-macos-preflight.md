@@ -1,17 +1,17 @@
 # macOS Preflight Checklist
 
-The `smoke-tests-macos` GitHub Actions job runs the smoke suite on
-`macos-latest` using the system `/bin/bash` (Bash 3.2). It renders and
-syntax-checks templates, validates contracts and deployment boundaries, and
-exercises selected behavior with stubs and temporary roots. What CI still does **not** do on macOS is a complete install: it never
-runs `brew bundle`, installs mise runtimes, or builds the Go/uv tools. Personal
-Macs are intentionally not mounted as self-hosted runners.
+The `smoke-tests-macos` GitHub Actions job runs source-level checks on
+`macos-latest` with the system `/bin/bash` (Bash 3.2). The `apply-macos` job
+runs a full apply with `desktopBaseline=true` on `macos-latest`. It installs and
+checks the system and desktop Brewfiles, mise runtimes, Go/uv tools, Ghostty,
+Maple Mono NF CN, and the OrbStack cask. It does not launch OrbStack. It also
+runs `bootstrap/scripts/check.sh` directly after the apply.
 
-Under the canonical local validation policy, one contributor runs the steps
-below on a real Mac when a change affects a macOS-specific installation,
-package, or runtime path, or leaves a concrete Mac installation concern that
-lighter checks cannot resolve. The contributor then pastes the signoff template
-into the review description.
+Use this manual checklist only for a concrete concern that the hosted runner
+cannot cover. Examples include specific hardware, a different macOS or Xcode CLT
+version, and existing-machine state or overlays. Require the relevant CI jobs to
+pass at the reviewed SHA before manual preflight. Paste the signoff into the
+review description.
 
 > Authorization: this checklist applies the review source to the real home
 > directory and may change the installed toolchain. Run it only with explicit
@@ -23,21 +23,12 @@ into the review description.
 ## When You Need To Run This
 
 Use the canonical [`CONTRIBUTING.md` validation
-policy](../CONTRIBUTING.md#local-validation) to select checks. Run the full
-preflight for changed macOS-specific installation, package, or runtime behavior
-such as:
+policy](../CONTRIBUTING.md#local-validation) to select checks. Identify the
+concern that `apply-macos` cannot cover before running the full checklist.
 
-- Homebrew package manifests or package-install behavior.
-- The Homebrew mise installation path or macOS-specific runtime activation.
-- Executable `darwin` branches, macOS-specific PATH activation, or `brew
-  shellenv` behavior.
-
-Shared version pins, runtime configuration, installers, ecosystem sync hooks,
-and post-install checks do not automatically require this preflight. Use it when
-such a change modifies one of the macOS-specific paths above or leaves a
-concrete Mac installation concern that lighter checks cannot resolve. A change
-to the `60-check` hook that does not affect installation behavior is not by
-itself a trigger.
+Routine Homebrew manifest, installer, runtime, activation, and post-install
+check changes do not require manual preflight when `apply-macos` covers them.
+The same rule applies to shared version pins and ecosystem sync hooks.
 
 Pure prose, links, comments, and render-only configuration changes use the
 lighter checks in the policy even when they mention or target macOS. If the
@@ -67,59 +58,41 @@ git rev-parse HEAD   # record this SHA -- goes into the signoff
 
 ## 2. Run chezmoi init --apply
 
-This is the same command every macOS contributor runs for a fresh bootstrap. The preflight deliberately uses the interactive form so you exercise the prompt path end-to-end.
+This is the same command every macOS contributor runs for a fresh bootstrap. The
+preflight deliberately uses the interactive form so you exercise the prompt
+path end-to-end.
 
 ```bash
 chezmoi init --prompt --apply --source="$(pwd)"
 ```
 
-Answer the three `chezmoi init` prompts (Git author name, email address, and the desktop-baseline choice) with the values you actually use on this machine. Select the desktop baseline so this checklist exercises the complete macOS bundle: Ghostty, Maple Mono NF CN, and OrbStack. The explicit `--prompt` makes this preflight re-exercise all three choices even on an existing setup; normal first-run and update commands keep reusing the persisted answers.
+Answer the three `chezmoi init` prompts (Git author name, email address, and the
+desktop-baseline choice) with the values you actually use on this machine.
+Select the desktop baseline so this checklist exercises the complete macOS
+bundle: Ghostty, Maple Mono NF CN, and OrbStack. The explicit `--prompt` makes
+this preflight re-exercise all three choices even on an existing setup.
 
-Expected outcome: `.chezmoiscripts/run_onchange_after_60-check.sh` runs last and reports `All checks passed.` If it exits non-zero, capture the failing line and hold the signoff and merge. Continue authorized diagnosis, source repair, and safe retesting; do not treat the failure as authorization for additional live mutations.
-
-## 3. Hand-Validate Brewfile Dependencies
-
-`60-check.sh` already runs `brew bundle check --no-upgrade` natively against
-each Brewfile the baseline selects and fails when a declared dependency is
-missing. This step re-runs the same validation by hand so the signoff records
-the native verbose output rather than relying on the hook's pass/fail summary:
+Run the shared check directly after initialization. Do not rely on hook 60
+rerunning when its hashed inputs are unchanged.
 
 ```bash
-cd "$(chezmoi source-path)"
-brew bundle check --no-upgrade --file=bootstrap/manifests/system/Brewfile --verbose
-brew bundle check --no-upgrade --file=bootstrap/manifests/desktop/Brewfile --verbose
+bash bootstrap/scripts/check.sh
 ```
 
-Expected outcome: both commands report `The Brewfile's dependencies are
-satisfied.` This proves the declared dependencies are present. It does not prove
-that the machine has no extra formulae or casks, and it does not detect or clean
-up software removed from a Brewfile. Record command failures in the signoff; do
-not add cleanup commands to this checklist.
+Expected outcome: `bootstrap/scripts/check.sh` reports `All checks passed.` The
+script checks both selected Brewfiles with verbose `brew bundle check` output.
+It also runs `ghostty +validate-config`. If initialization or the check fails,
+capture the failure and hold the signoff and merge. Continue authorized
+diagnosis, source repair, and safe retesting. Do not treat the failure as
+authorization for additional live mutations. The check does not launch OrbStack.
 
-## 4. Hand-Validate The Desktop Baseline
+## 3. Hand-Validate mise Runtime State
 
-The desktop Brewfile check in step 3 already proves that the declared desktop
-casks are installed. This step validates Ghostty's behavior with the managed
-configuration:
-
-```bash
-ghostty_cli="$(command -v ghostty || true)"
-: "${ghostty_cli:=/Applications/Ghostty.app/Contents/MacOS/ghostty}"
-test -x "$ghostty_cli"
-"$ghostty_cli" +validate-config
-```
-
-Expected outcome: Ghostty accepts the effective managed configuration,
-including any machine-local `$XDG_CONFIG_HOME/ghostty/config.local.ghostty`
-overrides. This check does not launch OrbStack or assert Docker daemon,
-context, socket, or license readiness; first-launch setup remains a user action.
-
-## 5. Hand-Validate mise Runtime State
-
-`60-check.sh` already asks mise natively which configured tools are not
-installed (`mise ls --current --missing`) and fails when any are reported. On a
-Mac, mise itself is installed via Homebrew rather than `https://mise.run`. The
-commands below record the underlying diagnostics for the signoff and validate
+`bootstrap/scripts/check.sh` already asks mise natively which configured tools
+are not installed (`mise ls --current --missing`) and fails when any are
+reported. On a Mac, mise itself is installed via Homebrew rather than
+`https://mise.run`. The commands below record the underlying diagnostics for the
+signoff and validate
 the deployed managed baseline separately from mise's effective configuration,
 which may also include the supported machine-local overlay and project
 configuration:
@@ -146,9 +119,9 @@ runtime coverage is required, use an explicitly authorized isolated environment
 without user overlays. Do not disable or delete overlays on the contributor's
 machine for this check.
 
-## 6. Hand-Validate go / uv Tool State
+## 4. Hand-Validate go / uv Tool State
 
-`60-check.sh` already checks that every command declared in
+`bootstrap/scripts/check.sh` already checks that every command declared in
 [`bootstrap/manifests/ecosystem/go-tools.txt`](../bootstrap/manifests/ecosystem/go-tools.txt)
 and
 [`bootstrap/manifests/ecosystem/uv-tools.txt`](../bootstrap/manifests/ecosystem/uv-tools.txt)
@@ -188,7 +161,7 @@ Expected outcome: step 2 reported `All checks passed.`, and this probe prints
 error. Capture the log and hold the signoff and merge while authorized
 diagnosis, source repair, and safe retesting continue.
 
-## 7. Confirm The Local Smoke Suite
+## 5. Confirm The Local Smoke Suite
 
 Run the smoke suite to catch macOS-only issues the Linux CI will never see (for
 example a Darwin-only template arm that ShellCheck would not render on Linux):
@@ -210,7 +183,7 @@ more evidence. A Linux-only result cannot substitute for this step. If the
 suite fails on a Mac but passes in Linux CI, you have found a macOS-specific
 regression.
 
-## 8. Paste The Signoff Into The Review
+## 6. Paste The Signoff Into The Review
 
 Copy the template below verbatim into the review description (append to the existing validation section) and fill in each field. The wall of `[x]` entries is the point: reviewers can scan it in five seconds to know the change is macOS-safe.
 
@@ -219,12 +192,11 @@ Copy the template below verbatim into the review description (append to the exis
 
 - [ ] MR SHA validated: `<git rev-parse HEAD output>`
 - [ ] Hardware / OS: `<arm64 | x86_64>` — macOS `<version>`
-- [ ] `chezmoi init --apply` completed; `60-check.sh` reported `All checks passed.`
-- [ ] Both `brew bundle check` commands reported `The Brewfile's dependencies are satisfied.` (declared dependencies only)
-- [ ] `ghostty +validate-config` succeeds
+- [ ] `chezmoi init --apply` completed; `bootstrap/scripts/check.sh` reported `All checks passed.`
 - [ ] Managed XDG status is clean; active mise config sources and effective versions recorded
 - [ ] The ecosystem tool probe printed `[ok]` for every declared tool
 - [ ] macOS smoke passed: `<local Mac | smoke-tests-macos CI run>`
+- [ ] macOS full-apply CI passed at the reviewed SHA: `<run URL>`
 - Deviations / notes: `<free-form, or "none">`
 - Preflight run by: `@<your-handle>` on `<YYYY-MM-DD>`
 ```
@@ -238,16 +210,16 @@ shorter line instead:
 - Not required under the local validation policy: `<reason; lighter checks used>`
 ```
 
-## When Full macOS Install Validation Is Wired
+## Coverage Boundary
 
-The `smoke-tests-macos` job already covers source-level contracts and safe
-fixture behavior. Promoting CI to also validate a real macOS *install* is an
-additive change:
+The `apply-macos` job covers a clean hosted macOS installation with the complete
+desktop baseline. It validates packages, runtimes, ecosystem tools, Ghostty
+configuration, fonts, and the shared environment check. It installs the OrbStack
+cask but never launches OrbStack.
 
-1. Add a job (or step) that runs a real `chezmoi init --apply` on a macOS runner, provides install coverage comparable to `apply-linux`, and asserts the final environment check passes.
-2. Add the macOS Brewfile dependency-satisfaction, desktop-baseline, and mise-runtime checks from this checklist (steps 3 through 5) as scripted assertions.
-3. Update `docs/03-maintenance.md` "Review Expectations" to describe the expanded CI surface, and update this document's introduction.
-4. Keep the preflight checklist itself — it remains the right document for MRs that touch macOS surface in ways a single CI shape cannot cover (new hardware, OS upgrade, Xcode CLT jumps).
+The hosted job does not cover every hardware model, macOS or Xcode CLT version,
+or existing-machine state. Use this checklist only when one of those boundaries
+leaves a concrete concern.
 
 ## Related Documents
 

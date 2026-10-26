@@ -32,7 +32,7 @@ The repository is a single-maintainer, best-effort, opinionated baseline publish
 ### Maintain and contribute
 
 - [`03-maintenance.md`](03-maintenance.md): day-to-day maintainer workflow, CI expectations, dependency bumps, removals, and release hygiene.
-- [`04-macos-preflight.md`](04-macos-preflight.md): the manual checklist for changes that touch macOS-only behavior.
+- [`04-macos-preflight.md`](04-macos-preflight.md): the manual checklist for macOS concerns that hosted CI cannot cover.
 - [`CONTRIBUTING.md`](../CONTRIBUTING.md): contributor workflow, scope rules, and secret hygiene.
 - [`CHANGELOG.md`](../CHANGELOG.md): user-visible changes by milestone.
 

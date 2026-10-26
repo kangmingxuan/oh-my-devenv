@@ -112,7 +112,7 @@ chezmoi init --apply git@github.com:kangmingxuan/oh-my-devenv.git
 chezmoi init --apply https://github.com/kangmingxuan/oh-my-devenv.git
 ```
 
-首次 apply 会：备份任何已存在的受管文件，仅询问一次 Git 作者名、邮箱与桌面基线选择，部署 dotfiles，运行有序引导 hook，并以环境校验收尾。macOS 与 WSL 之外带图形会话的 Arch Linux、Ubuntu 26.04+ 默认启用桌面基线；其他 Linux 环境默认关闭。`microsoft` 内核始终不使用桌面基线，即使 WSLg 设置了 `DISPLAY`；本仓库的 apply CI fixture 会显式关闭。在 macOS 上，接受该选择会一起安装 Ghostty、Maple Mono NF CN 与 OrbStack。Homebrew 只负责安装 OrbStack 应用，用户仍需首次启动以完成设置；自由职业、商业及专业用途需要购买 [OrbStack 许可证](https://docs.orbstack.dev/licensing)。成功时你会看到 **`All checks passed.`** 以及一份核心工具版本列表。
+首次 apply 会：备份任何已存在的受管文件，仅询问一次 Git 作者名、邮箱与桌面基线选择，部署 dotfiles，运行有序引导 hook，并以环境校验收尾。macOS 与 WSL 之外带图形会话的 Arch Linux、Ubuntu 26.04+ 默认启用桌面基线；其他 Linux 环境默认关闭。`microsoft` 内核始终不使用桌面基线，即使 WSLg 设置了 `DISPLAY`。在 macOS 上，接受该选择会一起安装 Ghostty、Maple Mono NF CN 与 OrbStack。Homebrew 只负责安装 OrbStack 应用，用户仍需首次启动以完成设置；自由职业、商业及专业用途需要购买 [OrbStack 许可证](https://docs.orbstack.dev/licensing)。成功时你会看到 **`All checks passed.`** 以及一份核心工具版本列表。
 
 ### 运行前须知
 
@@ -131,6 +131,12 @@ chezmoi update
 
 ```bash
 chezmoi apply
+```
+
+随时检查当前环境。该命令不会 apply 或安装改动：
+
+```bash
+bash "$(chezmoi source-path)/bootstrap/scripts/check.sh"
 ```
 
 关于提示、hook 顺序、成功信号与故障排查，见 [docs/01-onboarding.md](docs/01-onboarding.md)。

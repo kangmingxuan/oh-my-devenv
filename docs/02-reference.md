@@ -26,7 +26,7 @@ installers, and shared bootstrap code, so routine re-applies are cheap.
 | 7 | `run_onchange_after_40-install-runtimes` | Runs `mise install` to fetch the pinned runtimes. |
 | 8 | `run_onchange_after_50-sync-ecosystem-tools` | Installs the Go tools (`go install`) and Python tools (`uv tool`). |
 | 9 | `run_onchange_after_55-install-shell-completions` | Generates official CLI completion assets in the standard Bash and Zsh user data directories. |
-| 10 | `run_onchange_after_60-check` | Change-triggered final environment check against the same manifests the installers consumed. It runs when its hashed inputs, including shared bootstrap code, change—not on every apply. On success prints **`All checks passed.`**, a core-tool version list, and a short next-steps block. |
+| 10 | `run_onchange_after_60-check` | Change-triggered wrapper around `bootstrap/scripts/check.sh`. It passes the active chezmoi config to the shared check and prints the apply-time next-steps block. The shared check prints **`All checks passed.`** and a core-tool version list on success. |
 
 The first-run backup copies every pre-existing target of the main and XDG
 sources to the same absolute path beneath
@@ -86,6 +86,12 @@ chezmoi update
 # Re-render managed files from your local source checkout (no fetch)
 chezmoi apply
 
+# Check the current environment without applying or installing changes
+bash "$(chezmoi source-path)/bootstrap/scripts/check.sh"
+
+# Select an explicit chezmoi config for the environment check
+bash "$(chezmoi source-path)/bootstrap/scripts/check.sh" /path/to/chezmoi.toml
+
 # Inspect the independently managed XDG config source
 bash bootstrap/scripts/xdg-config.sh status
 bash bootstrap/scripts/xdg-config.sh diff
@@ -108,6 +114,12 @@ mise list
 # Preview an uninstall of only what this baseline applied (dry-run; add --confirm to act)
 bash bootstrap/scripts/uninstall.sh
 ```
+
+The environment check resolves the repository from the script location. Run it
+from any directory. It reads the platform rules and persisted `desktopBaseline`
+choice through chezmoi. Omit the config argument to use chezmoi's normal config
+selection. The script exits non-zero and prints diagnostic hints when a check
+fails. Hook 60 uses the same script. Only the hook prints the next-steps block.
 
 Confirmed uninstall keeps the source checkout and local overlays. It backs up
 removed files, including dangling symlinks, unless `--no-backup` is passed.

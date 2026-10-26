@@ -17,6 +17,8 @@ pre-commit run --all-files
 
 The smoke suite renders templates, checks behavior and contracts, exercises selected installers with stubs, applies the nested XDG source under temporary roots, and runs ShellCheck. Its existing fixture-only operations are allowed by the canonical [local validation policy](CONTRIBUTING.md#local-validation). Do not run `chezmoi apply`, `chezmoi update`, `chezmoi init --apply`, or bootstrap installers against the live home directory or installed toolchain unless the user explicitly requests that mutation.
 
+`bash bootstrap/scripts/check.sh` is the user-facing environment check. Keep its validation logic in `bootstrap/scripts/check.sh`. Hook 60 only delegates to that script and prints apply-time next steps. Do not use the standalone check as a substitute for source-level smoke tests.
+
 ## Coding Style & Naming Conventions
 
 Write Bash with `set -euo pipefail`, two-space indentation, quoted expansions, and `snake_case` functions and variables. All repository Bash code, including Linux-only scripts and managed Bash dotfiles, must be compatible with Bash 3.2, the macOS `/bin/bash`. Keep shared behavior in `bootstrap/scripts/common.sh`. Preserve chezmoi naming (`dot_zshrc.tmpl`, `private_dot_ssh/`) and numbered hook ordering such as `run_onchange_after_40-install-runtimes.sh.tmpl`. Match existing Markdown and YAML formatting; ShellCheck is the enforced shell linter.
