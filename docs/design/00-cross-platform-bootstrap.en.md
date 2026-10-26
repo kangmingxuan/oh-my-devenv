@@ -7,14 +7,14 @@ Provide a repeatable and maintainable development environment bootstrap plan for
 - macOS
 - Ubuntu / Debian
 - Arch Linux family
-- Windows WSL
 
 Requirements:
 
 - Use `chezmoi` as the single source of truth for dotfiles
 - Automatically install required tools on a new machine
 - Clearly separate responsibilities across system tools, language runtimes, and ecosystem tools
-- Offer one explicit, all-or-nothing platform desktop baseline on supported workstations without affecting server, WSL, or CI installs
+- Offer one explicit, all-or-nothing platform desktop baseline on supported workstations without affecting server or CI installs
+- Exclude the desktop baseline on a `microsoft` kernel, even when WSLg sets `DISPLAY`
 
 ## 2. Design Decision
 
@@ -23,7 +23,7 @@ Use the following layered model:
 1. **chezmoi**: only manages configuration files and script orchestration
 2. **System package manager**:
    - macOS uses `Homebrew`
-   - Ubuntu / Debian / WSL use `apt`
+   - Ubuntu / Debian use `apt`
    - Arch Linux family uses `pacman`
 3. **Desktop asset installer**: when selected, installs the complete platform bundle from a separate manifest: Ghostty and Maple Mono NF CN everywhere supported, plus OrbStack on macOS
 4. **mise**: manages runtime versions and binary-distributed tools such as Go / Node / Python / `golangci-lint` / `uv`
@@ -34,7 +34,7 @@ Use the following layered model:
 6. **Shell asset installer**: manages shell frameworks and plugins that are explicit runtime dependencies of the dotfiles but are not a good fit for the system package manager
    - install `oh-my-zsh` and selected plugins
 
-**Constraint: Do not use Homebrew on Linux / WSL.**
+**Constraint: Do not use Homebrew on Linux.**
 
 ## 3. Responsibility Boundaries
 
@@ -187,7 +187,7 @@ Requirements:
 - Keep bootstrap manifests and scripts in a root-level `bootstrap/` directory, exclude that directory from the target state via `.chezmoiignore`, and call them from `.chezmoiscripts` via absolute paths built from `{{ .chezmoi.sourceDir }}`
 - All scripts must be idempotent
 - Use `bash` with `set -euo pipefail`
-- Avoid unnecessary interactive prompts (such as apt or pacman confirmation); the Linux / WSL apt and pacman paths should preflight `sudo -v` once and run installs in noninteractive mode
+- Avoid unnecessary interactive prompts (such as apt or pacman confirmation); the Linux apt and pacman paths should preflight `sudo -v` once and run installs in noninteractive mode
 - Print clear error messages on failure
 
 ## 7. Platform Strategy
@@ -201,14 +201,14 @@ Requirements:
 - Install the OrbStack cask without claiming that first-launch setup, Docker runtime state, or licensing is complete
 - Manage shell framework and plugins outside Homebrew via a dedicated shell asset script that uses `git clone`
 
-### Ubuntu / Debian / WSL
+### Ubuntu / Debian
 
 - Use only `apt` for system tools
 - Store package list in `apt-packages.txt`
 - Do not introduce Homebrew
 - Install `zsh` via `apt` when the shell layer depends on it
 - Reuse the same shell asset script as macOS to install `oh-my-zsh` and plugins
-- Only non-WSL Ubuntu 26.04+ participates in the selected desktop baseline: install Ghostty through apt and the pinned, verified Maple Mono archive in the user font directory
+- Only Ubuntu 26.04+ outside WSL participates in the selected desktop baseline: install Ghostty through apt and the pinned, verified Maple Mono archive in the user font directory
 - Only on the supported Ubuntu desktop baseline, retain the Fontconfig workaround for Ghostty ignoring its explicit font-family setting; match `prgname=ghostty` and `monospace`. Other applications and platforms keep their font preferences. Elsewhere, or when disabled, the template renders empty and chezmoi does not manage the file; font validation checks registered faces rather than the system monospace alias
 
 ### Arch Linux Family
@@ -219,14 +219,11 @@ Requirements:
 - Install with `pacman -S --needed` against the existing synchronized databases; never refresh with `-Sy` alone, because a full system upgrade is a separate user action
 - Install `zsh` via `pacman` when the shell layer depends on it
 - Reuse the same shell asset script as macOS to install `oh-my-zsh` and plugins
-- Non-WSL Arch participates in the selected desktop baseline: install Ghostty and Fontconfig through pacman and the pinned, verified Maple Mono archive in the user font directory; the Ubuntu Fontconfig workaround does not apply
+- Arch Linux outside WSL participates in the selected desktop baseline: install Ghostty and Fontconfig through pacman and the pinned, verified Maple Mono archive in the user font directory; the Ubuntu Fontconfig workaround does not apply
 
-### WSL
+### WSL desktop-baseline exclusion
 
-- Treated as a Linux subtype
-- Only manage the environment inside WSL
-- Never install the desktop baseline
-- Do not manage native Windows software
+- Never install the desktop baseline on a `microsoft` kernel, even when WSLg sets `DISPLAY`
 
 ## 8. Platform Detection
 
@@ -234,8 +231,8 @@ Use native `chezmoi` template variables for OS-level branching, and do not maint
 
 - Distinguish OS: `{{ if eq .chezmoi.os "darwin" }}` or `{{ if eq .chezmoi.os "linux" }}`
 - Distinguish Linux distribution and release through `.chezmoi.osRelease.id` and `.chezmoi.osRelease.versionID`; route derivatives to a package manager through `.chezmoi.osRelease.idLike`
-- Distinguish WSL by checking `.chezmoi.kernel.osrelease` for `microsoft`; no persisted custom platform flag is needed
-- Treat macOS, the non-WSL Arch Linux family, or non-WSL Ubuntu with `versionID >= 26.04`, as an installation-supported desktop platform
+- Detect the WSL desktop-baseline exclusion by checking `.chezmoi.kernel.osrelease` for `microsoft`; no persisted custom platform flag is needed
+- Treat macOS, the Arch Linux family outside WSL, or Ubuntu outside WSL with `versionID >= 26.04` as an installation-supported desktop platform
 - Use `XDG_CURRENT_DESKTOP`, `WAYLAND_DISPLAY`, or `DISPLAY` only to choose the initial prompt default on a supported Linux desktop. Persist the user's `desktopBaseline` answer and never infer it again during routine applies
 
 ## 9. Manifest File Conventions
@@ -302,7 +299,7 @@ Notes:
 
 ### `install-apt-packages`
 
-- Run only on Ubuntu / Debian / WSL
+- Run only on Ubuntu / Debian
 - Read `apt-packages.txt` from a source-only manifest path under `bootstrap/manifests/`
 - Use a shared helper to preflight `sudo -v` and fail with an explicit error when credentials cannot be acquired
 - Run `apt-get update` and batch installs in noninteractive mode
@@ -388,7 +385,7 @@ For Debian/Ubuntu naming differences, keep compatibility handling minimal:
 
 - Keep shell startup support packages such as `bash-completion` in the system package layer
 - Generate official CLI completions once during bootstrap into the standard XDG Bash and Zsh directories; shell startup only discovers them
-- Provide first-class Bash completion on Linux / WSL and intentionally limited Bash support on macOS
+- Provide first-class Bash completion on Linux and intentionally limited Bash support on macOS
 - Add Homebrew's standard site-functions directory on macOS and keep `zsh-completions` last in `fpath` as a fallback
 - Use the current `fzf --bash` / `fzf --zsh` integration directly
 - `fd-find` maps to `fd`
@@ -400,7 +397,7 @@ Do not introduce a complex compatibility layer.
 
 Implementation must follow these rules:
 
-1. Do not introduce Homebrew on Linux / WSL
+1. Do not introduce Homebrew on Linux
 2. Do not replace `chezmoi`
 3. Do not introduce extra systems such as Nix, Ansible, or Dev Containers
 4. Prefer simple Bash scripts
@@ -429,7 +426,7 @@ The final chosen approach is:
 - A nested chezmoi source manages configuration files directly under the absolute `XDG_CONFIG_HOME`, which defaults to `$HOME/.config`
 - macOS uses Homebrew for system tools
 - Optional vendor applications keep their shell and SSH initialization in user-owned local overlays
-- Ubuntu / Debian / WSL use `apt` for system tools
+- Ubuntu / Debian use `apt` for system tools
 - The Arch Linux family uses `pacman` for system tools
 - `mise` manages language runtimes
 - Language ecosystem tools are installed through native ecosystem methods

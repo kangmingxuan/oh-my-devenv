@@ -7,14 +7,14 @@
 - macOS
 - Ubuntu / Debian
 - Arch Linux 家族
-- Windows WSL
 
 要求：
 
 - 使用 `chezmoi` 统一管理 dotfiles
 - 新机器上可自动安装所需工具
 - 明确区分“系统工具”“语言运行时”“生态工具”的管理职责
-- 在受支持的工作站上提供一套显式选择、全有或全无的平台桌面基线，同时不影响服务器、WSL 或 CI 安装
+- 在受支持的工作站上提供一套显式选择、全有或全无的平台桌面基线，同时不影响服务器或 CI 安装
+- 在 `microsoft` 内核上排除桌面基线，即使 WSLg 设置了 `DISPLAY`
 
 ## 2. 设计结论
 
@@ -23,7 +23,7 @@
 1. **chezmoi**：只负责配置文件和脚本编排
 2. **系统包管理器**：
    - macOS 使用 `Homebrew`
-   - Ubuntu / Debian / WSL 使用 `apt`
+   - Ubuntu / Debian 使用 `apt`
    - Arch Linux 家族使用 `pacman`
 3. **桌面资产安装器**：用户选择后，从独立清单安装完整的平台包：所有受支持平台包含 Ghostty 与 Maple Mono NF CN，macOS 额外包含 OrbStack
 4. **mise**：负责语言运行时与二进制分发工具的版本管理，如 Go / Node / Python / `golangci-lint` / `uv`
@@ -34,7 +34,7 @@
 6. **Shell 资产安装器**：负责 shell 配置显式依赖、但不适合交给系统包管理器的框架与插件
    - 安装 `oh-my-zsh` 与指定插件
 
-**约束：Linux / WSL 不使用 Homebrew。**
+**约束：Linux 不使用 Homebrew。**
 
 ## 3. 职责边界
 
@@ -187,7 +187,7 @@
 - bootstrap 的 manifest 与脚本都放在 source 根目录下的 `bootstrap/`，并通过 `.chezmoiignore` 保持 source-only；运行时由 `.chezmoiscripts` 基于 `{{ .chezmoi.sourceDir }}` 调用
 - 所有脚本必须幂等
 - 使用 `bash` 和 `set -euo pipefail`
-- 避免不必要的交互式提示（如 apt 或 pacman 询问）；Linux / WSL 的 apt 与 pacman 路径应先统一执行 `sudo -v`，并以非交互模式运行安装命令
+- 避免不必要的交互式提示（如 apt 或 pacman 询问）；Linux 的 apt 与 pacman 路径应先统一执行 `sudo -v`，并以非交互模式运行安装命令
 - 失败时输出清晰错误信息
 
 ## 7. 平台策略
@@ -201,14 +201,14 @@
 - 安装 OrbStack cask，但不声称首次启动设置、Docker runtime 状态或许可证已经就绪
 - shell 框架和插件不走 Homebrew，改由独立 shell 资产脚本通过 `git clone` 管理
 
-### Ubuntu / Debian / WSL
+### Ubuntu / Debian
 
 - 系统工具只使用 `apt`
 - 包清单存放于 `apt-packages.txt`
 - 不引入 Homebrew
 - 当 shell 层依赖 zsh 时，通过 `apt` 安装 `zsh`
 - 复用与 macOS 相同的 shell 资产脚本安装 `oh-my-zsh` 与插件
-- 只有非 WSL 的 Ubuntu 26.04+ 参与已选择的桌面基线：Ghostty 通过 apt 安装，固定并校验过的 Maple Mono 归档安装到用户字体目录
+- 只有 WSL 之外的 Ubuntu 26.04+ 参与已选择的桌面基线：Ghostty 通过 apt 安装，固定并校验过的 Maple Mono 归档安装到用户字体目录
 - 仅在受支持的 Ubuntu 桌面基线保留 Ghostty 未遵守显式字体设置的 Fontconfig 补丁，同时匹配 `prgname=ghostty` 和 `monospace`；其他应用和平台保留自己的字体偏好。其他环境或关闭桌面基线时模板渲染为空，chezmoi 不管理该文件；字体检查验证已注册的字体样式，不要求改变系统等宽字体
 
 ### Arch Linux 家族
@@ -219,14 +219,11 @@
 - 使用 `pacman -S --needed` 基于已同步的数据库安装；绝不单独用 `-Sy` 刷新，因为完整系统升级是单独的用户操作
 - 当 shell 层依赖 zsh 时，通过 `pacman` 安装 `zsh`
 - 复用与 macOS 相同的 shell 资产脚本安装 `oh-my-zsh` 与插件
-- 非 WSL 的 Arch 参与已选择的桌面基线：Ghostty 与 Fontconfig 通过 pacman 安装，固定并校验过的 Maple Mono 归档安装到用户字体目录；Ubuntu 的 Fontconfig 补丁不适用
+- WSL 之外的 Arch Linux 参与已选择的桌面基线：Ghostty 与 Fontconfig 通过 pacman 安装，固定并校验过的 Maple Mono 归档安装到用户字体目录；Ubuntu 的 Fontconfig 补丁不适用
 
-### WSL
+### WSL 桌面基线排除规则
 
-- 视为 Linux 子类处理
-- 只管理 WSL 内部环境
-- 不安装桌面基线
-- 不负责 Windows 原生软件安装
+- 在 `microsoft` 内核上绝不安装桌面基线，即使 WSLg 设置了 `DISPLAY`
 
 ## 8. 平台识别
 
@@ -234,8 +231,8 @@
 
 - 区分操作系统：`{{ if eq .chezmoi.os "darwin" }}` 或 `{{ if eq .chezmoi.os "linux" }}`
 - 通过 `.chezmoi.osRelease.id` 与 `.chezmoi.osRelease.versionID` 区分 Linux 发行版及版本；通过 `.chezmoi.osRelease.idLike` 将衍生发行版路由到对应的包管理器
-- 检查 `.chezmoi.kernel.osrelease` 是否包含 `microsoft` 来识别 WSL；无需持久化额外的平台标志
-- 将 macOS、非 WSL 的 Arch Linux 家族，或 `versionID >= 26.04` 且非 WSL 的 Ubuntu，视为支持自动安装的桌面平台
+- 检查 `.chezmoi.kernel.osrelease` 是否包含 `microsoft`，以应用 WSL 桌面基线排除规则；无需持久化额外的平台标志
+- 将 macOS、WSL 之外的 Arch Linux 家族，或 `versionID >= 26.04` 且位于 WSL 之外的 Ubuntu，视为支持自动安装的桌面平台
 - `XDG_CURRENT_DESKTOP`、`WAYLAND_DISPLAY` 与 `DISPLAY` 只用于决定受支持 Linux 桌面上首次提示的默认值；用户的 `desktopBaseline` 答案会持久化，日常 apply 不再重新推断
 
 ## 9. 清单文件规范
@@ -302,7 +299,7 @@ bat
 
 ### `install-apt-packages`
 
-- 仅在 Ubuntu / Debian / WSL 中运行
+- 仅在 Ubuntu / Debian 中运行
 - 从 `bootstrap/manifests/` 中的 source-only manifest 路径读取 `apt-packages.txt`
 - 通过 shared helper 统一预热 `sudo -v`，在权限不足时给出明确错误提示
 - 使用非交互模式执行 `apt-get update` 与批量安装
@@ -388,7 +385,7 @@ dotfiles 需要保证：
 
 - `bash-completion` 这类 shell 启动时直接依赖的支持包，继续由系统包管理器提供
 - CLI 官方提供的补全在 bootstrap 阶段统一生成到标准 XDG Bash / Zsh 目录；shell 启动时只负责发现
-- Linux / WSL 的 Bash 提供完整补全，macOS Bash 刻意只保留有限支持
+- Linux 的 Bash 提供完整补全，macOS Bash 刻意只保留有限支持
 - macOS 显式加入 Homebrew 标准 site-functions 目录，并将 `zsh-completions` 放在 `fpath` 最后作为 fallback
 - 直接使用当前的 `fzf --bash` / `fzf --zsh` 集成
 - `fd-find` 对应 `fd`
@@ -400,7 +397,7 @@ dotfiles 需要保证：
 
 实现时必须遵守：
 
-1. 不要在 Linux / WSL 中引入 Homebrew
+1. 不要在 Linux 中引入 Homebrew
 2. 不要替换 `chezmoi`
 3. 不要引入 Nix、Ansible、Dev Container 等额外体系
 4. 优先使用简单 Bash 脚本
@@ -429,7 +426,7 @@ dotfiles 需要保证：
 - 独立的 chezmoi 子 source 将配置文件直接管理到绝对路径 `XDG_CONFIG_HOME` 下，默认值为 `$HOME/.config`
 - macOS 用 Homebrew 管系统工具
 - 可选 vendor 应用的 shell 与 SSH 初始化保留在用户自有的本地 overlay 中
-- Ubuntu / Debian / WSL 用 `apt` 管系统工具
+- Ubuntu / Debian 用 `apt` 管系统工具
 - Arch Linux 家族用 `pacman` 管系统工具
 - `mise` 管语言运行时
 - 语言生态工具用各自原生方式安装
