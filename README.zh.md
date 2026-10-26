@@ -10,13 +10,13 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 ![Platforms](https://img.shields.io/badge/platforms-macOS%20%7C%20Ubuntu%2FDebian%20%7C%20Arch%20Linux-informational)
 
-oh-my-devenv 是一套主观鲜明、可复现的开发环境。它公开的是维护者当前认可的一整套选择：认同这些选择就使用，不认同就不使用。在一台全新机器上让 `chezmoi` 指向它，几分钟后你就拥有受管的 shell、语言运行时和精选 CLI 工具链，全部来自同一份事实来源。密钥与机器私有事实留在本地 overlay 中，使公开基线可以安全检出。
+oh-my-devenv 是一套主观鲜明、声明式的开发环境。它公开的是维护者当前认可的一整套选择：认同这些选择就使用，不认同就不使用。在一台全新机器上让 `chezmoi` 指向它，几分钟后你就拥有受管的 shell、语言运行时和精选 CLI 工具链，全部来自同一份事实来源。密钥与机器私有事实留在本地 overlay 中，使公开基线可以安全检出。
 
 ## 功能亮点
 
 - **一份来源，跨平台通用** —— macOS（Intel + Apple Silicon）、Ubuntu / Debian 与 Arch Linux 共用同一套模板化基线。
 - **一条命令完成引导** —— `chezmoi init --apply` 通过有序 hook 安装全部内容；重复运行幂等且安全。
-- **分层且可复现** —— chezmoi 统一编排系统软件包、可选桌面资产、shell 资产、[mise](https://mise.jdx.dev/) 运行时与各语言工具，每一层都有自己的清单（manifest）。
+- **分层且声明式** —— chezmoi 统一编排系统软件包、可选桌面资产、shell 资产、[mise](https://mise.jdx.dev/) 运行时与各语言工具，每一层都有自己的清单（manifest）。只有运行时与工具层锁定版本，因此不同时间的两次安装在其他层上可能不同。
 - **受管的 shell** —— 所有平台上的 Zsh 与 Linux 上的 Bash 都提供完整自动补全；macOS Bash 则刻意只保留有限支持。
 - **锁定版本的运行时** —— 通过 mise 管理 Go、Node、Python 与 golangci-lint，外加 `gopls`、`dlv`、`ruff`、`basedpyright`、`pre-commit` 等生态工具。系统软件包、mise 本身以及 oh-my-zsh 与其插件跟随上游发布。
 - **现代 CLI 工具箱** —— ripgrep、fd、bat、fzf、jq、direnv、tmux、shellcheck、shfmt 等。
