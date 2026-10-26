@@ -7,14 +7,21 @@ versioning and release policy lives in
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-26
+
 ### Added
 
 - Add `bash bootstrap/scripts/check.sh` for on-demand environment validation
   without applying or installing changes. The final bootstrap hook uses the
   same check.
+- Full `chezmoi apply` CI with the desktop baseline on Ubuntu 26.04, Arch
+  Linux, and macOS, in addition to the non-desktop Ubuntu apply. Each job also
+  runs the standalone environment check, and every job is required to merge.
 
 ### Changed
 
+- **Breaking:** `uninstall.sh --confirm` no longer deletes the chezmoi source
+  checkout. Remove it manually if you no longer need it.
 - The README describes the baseline as declarative instead of reproducible.
   Only the runtime and tool layers pin versions; system packages, mise, and
   oh-my-zsh track upstream.
@@ -32,8 +39,6 @@ versioning and release policy lives in
 - Rerun every `run_onchange_` bootstrap hook when the shared bootstrap code in
   `bootstrap/scripts/common.sh` or `dot_local/share/oh-my-devenv/xdg.sh`
   changes. The mise hook now also reruns on these changes.
-- **Breaking:** `uninstall.sh --confirm` no longer deletes the chezmoi source
-  checkout. Remove it manually if you no longer need it.
 - `uninstall.sh --confirm` now clears the main chezmoi `scriptState` and
   `entryState` buckets after removal, so the next `chezmoi apply` reruns the
   bootstrap hooks and restores removed assets. The dry run lists both resets.
@@ -127,5 +132,6 @@ versioning and release policy lives in
   again when the mise configuration changes, and the environment check reports
   stale uv tool environments.
 
-[Unreleased]: https://github.com/kangmingxuan/oh-my-devenv/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/kangmingxuan/oh-my-devenv/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/kangmingxuan/oh-my-devenv/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/kangmingxuan/oh-my-devenv/releases/tag/v0.1.0
