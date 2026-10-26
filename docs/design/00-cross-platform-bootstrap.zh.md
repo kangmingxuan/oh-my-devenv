@@ -124,6 +124,7 @@
 │   │   │   └── uv-tools.txt
 │   │   └── local-overlays.tsv
 │   └── scripts/
+│       ├── check.sh
 │       ├── common.sh
 │       ├── install-apt-packages.sh
 │       ├── install-brew-packages.sh
@@ -365,12 +366,16 @@ bat
 - mise 配置变化时重新执行，因为这些工具运行在 mise 管理的 Python 上
 - 重复执行必须安全
 
-### `run_onchange_after_60-check`
+### `check.sh` 与 `run_onchange_after_60-check`
 
+- 将环境检查保留在 `bootstrap/scripts/check.sh`，让用户、60 号 hook 和 CI 调用同一实现
+- 接受可选的 chezmoi 配置路径；调用方省略该参数时，使用 chezmoi 正常的配置选择
+- 通过根目录模板 partial 解析包管理器和桌面支持，并通过 chezmoi 读取持久化的 `desktopBaseline` 选择
 - 复用安装器消费的同一份清单，而不是维护第二份硬编码工具列表
 - 用 `dpkg-query` 校验 apt 清单，用 `pacman -Q` 校验 pacman 清单，用 `brew bundle check` 校验 Brewfile，用 `mise ls --current --missing` 校验 mise 配置
 - 按二进制名称检查生态工具清单，报告不再运行在构建时 Python 上的 uv 工具环境，通过安装器的 `check` 动作检查补全清单，并在 Linux 上通过 Fontconfig、在 macOS 上通过用户字体目录检查字体清单声明的字体族与字面
 - 用 `mise current` 输出 mise 管理的工具链，使摘要跟随配置变化
+- 60 号 hook 对 `check.sh` 计算哈希，将当前 chezmoi 配置传给脚本，并且只在 hook 中保留下一步指引
 
 ## 11. PATH 与兼容性
 

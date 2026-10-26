@@ -52,8 +52,8 @@ Keep the doc set opinionated and non-overlapping:
   day-to-day commands, and environment variables / flags.
 - `docs/local-overlay-examples/`: copyable machine-local templates that
   deliberately do not deploy through `chezmoi`.
-- `docs/04-macos-preflight.md`: manual review steps for review changes that
-  touch macOS-specific behavior.
+- `docs/04-macos-preflight.md`: manual review steps for macOS concerns that
+  hosted CI cannot cover.
 - `docs/design/`: rationale and technical design, not operational steps.
 - `docs/03-maintenance.md`: maintainer workflow, validation expectations,
   dependency hygiene, and release discipline.
@@ -84,16 +84,23 @@ A reviewable change is ready to merge when all of the following hold:
     platform-sensitive checks.
   - `smoke-tests-arch` — the same smoke suite in an `archlinux:base` container,
     exercising Arch platform routing and package-owned completion assets.
-  - `apply-linux` — renders initialization configuration, runs a real `chezmoi
-    apply` on `ubuntu-latest`, and asserts the final environment check prints
-    `All checks passed.`
+  - `apply-linux` — runs a real `chezmoi apply` on `ubuntu-latest` with
+    `desktopBaseline=false`. It uses a custom `XDG_CONFIG_HOME` and checks the
+    first-run backup and preservation of unmanaged XDG configuration.
+  - `apply-ubuntu-desktop` — runs a full desktop apply in an `ubuntu:26.04`
+    container.
+  - `apply-arch` — runs a full desktop apply in an `archlinux:base` container.
+  - `apply-macos` — runs a full desktop apply on `macos-latest`, including
+    Ghostty, Maple Mono NF CN, and the OrbStack cask. It does not launch
+    OrbStack.
+  - Every apply job asserts `All checks passed.` and runs
+    `bash bootstrap/scripts/check.sh <config>` after the apply.
   - `secret-scan` — a full `gitleaks` scan of the repository tree.
 
-  Full macOS *install* validation still relies on the manual
-  [`docs/04-macos-preflight.md`](04-macos-preflight.md) checklist and a pasted
-  signoff when the [validation policy](../CONTRIBUTING.md#local-validation)
-  requires it. The macOS smoke job does not install Homebrew dependencies, mise
-  runtimes, or Go/uv tools.
+  The `apply-macos` job covers routine macOS installation validation. Use the
+  manual [`docs/04-macos-preflight.md`](04-macos-preflight.md) checklist only
+  for concerns that the hosted runner cannot cover, as defined by the
+  [validation policy](../CONTRIBUTING.md#local-validation).
 - At least one maintainer has approved the change.
 - The review description follows the repository's normal template and the change
   is in scope for the baseline.
@@ -138,8 +145,8 @@ categories:
   clone/update. The upstream repository is captured in
   `bootstrap/manifests/shell/oh-my-zsh-plugins.txt`. That manifest uses a strict
   two-field, order-sensitive contract shared by four readers (`dot_zshrc.tmpl`,
-  `install-oh-my-zsh-assets.sh`, the `60-check` hook, and `run-smoke-tests.sh`);
-  adding a field or special case means updating all four.
+  `install-oh-my-zsh-assets.sh`, `bootstrap/scripts/check.sh`, and
+  `run-smoke-tests.sh`); adding a field or special case means updating all four.
 - **Shell completions**: `bootstrap/manifests/shell/completions.txt` is the
   single inventory of generated completion commands and the platforms that
   generate them. `install-shell-completions.sh` reads it for install, check, and
@@ -161,14 +168,19 @@ categories:
 - **Python tools** (`bootstrap/manifests/ecosystem/uv-tools.txt`): prefer pinned
   versions.
 
-The final `60-check` hook validates the same declared inventories the installers
-consumed instead of a second tool list: apt manifests through `dpkg-query`,
-pacman manifests through `pacman -Q`, Brewfiles through `brew bundle check`, the
-mise configuration through `mise ls --missing`, the ecosystem manifests by
-binary name, the completion manifest through the installer's `check` action, and
-the font manifest's family and faces through Fontconfig on Linux or the user
-font directory on macOS. Adding an ordinary manifest entry therefore extends the
-check without editing it.
+`bootstrap/scripts/check.sh` validates the same declared inventories the
+installers consumed instead of a second tool list: apt manifests through
+`dpkg-query`, pacman manifests through `pacman -Q`, Brewfiles through
+`brew bundle check`, the mise configuration through `mise ls --missing`, the
+ecosystem manifests by binary name, the completion manifest through the
+installer's `check` action, and the font manifest's family and faces through
+Fontconfig on Linux or the user font directory on macOS. Adding an ordinary
+manifest entry therefore extends the check without editing it. Hook 60 calls
+this script during apply.
+
+Run `bash bootstrap/scripts/check.sh [config-file]` to check an existing
+installation on demand. The optional argument selects the chezmoi config that
+contains the persisted desktop choice. Omit it to use the normal chezmoi config.
 
 Related low-risk dependency updates may share a merge request when they use the
 same validation path and remain easy to review and roll back. Keep major,
@@ -316,34 +328,36 @@ reflect
 
 ## CI
 
-The repository CI pipeline is intentionally lightweight:
+The repository CI pipeline combines source-level and full-apply checks:
 
 - `smoke-tests-linux`, `smoke-tests-macos`, and `smoke-tests-arch` render and
-  syntax-check the baseline, validate contracts and deployment boundaries, test
-  completion installation against stub commands, apply the nested XDG source
-  under temporary roots, and run ShellCheck. The macOS job runs the suite and
-  the scripts it starts on the system `/bin/bash` (Bash 3.2) and exercises the
-  `darwin` template arms; the Arch container job exercises pacman routing and
-  Arch package-owned completion assets.
-- `apply-linux` renders initialization configuration, runs a real `chezmoi
-  apply` on `ubuntu-latest`, and asserts the final environment check passes. It
-  exercises the Linux package and runtime installers selected by its fixture;
-  `desktopBaseline=false` excludes the desktop bundle because the hosted runner
-  is not a supported workstation.
+  syntax-check the baseline, validate contracts and deployment boundaries, and
+  exercise selected behavior with stubs and temporary roots. The suite covers
+  the shared environment checker, stubbed Homebrew installs, local font
+  archives, checksum failures, and Fontconfig rollback. The macOS job uses the
+  system `/bin/bash` (Bash 3.2). The Arch job exercises pacman routing and
+  package-owned completion assets.
+- `apply-linux` runs a non-desktop apply on `ubuntu-latest`. It checks a custom
+  `XDG_CONFIG_HOME`, first-run backups, and preservation of unmanaged files.
+- `apply-ubuntu-desktop` runs a full desktop apply in `ubuntu:26.04`.
+- `apply-arch` runs a full desktop apply in `archlinux:base`.
+- `apply-macos` runs a full desktop apply on `macos-latest`. It installs and
+  checks Ghostty, Maple Mono NF CN, and the OrbStack cask without launching
+  OrbStack.
+- Every apply job asserts `All checks passed.` and then runs
+  `bash bootstrap/scripts/check.sh <config>` directly.
 - `secret-scan` runs `gitleaks` over the repository tree to catch committed
   secrets.
-- The pipeline is allowed to be simple and occasionally imperfect. It should
-  catch obvious repo regressions, not model every clean-machine install path on
-  every platform.
 
 The smoke suite is scoped to source-level bootstrap behavior and safe fixture
 operations. The [validation policy](../CONTRIBUTING.md#local-validation)
 identifies the documentation fixtures that are part of that contract; other
-documentation prose remains governed by targeted review.
+documentation prose remains governed by targeted review. Hosted full-apply jobs
+do not cover every hardware model, OS version, or existing-machine state.
 
-If a change needs heavier confidence than the smoke jobs provide, validate it
-manually on a real machine or disposable VM and record that in the review
-description.
+Use [`docs/04-macos-preflight.md`](04-macos-preflight.md) when a concrete macOS
+concern falls outside the hosted runner coverage. Record the result in the
+review description.
 
 ## Disposable environment reset
 

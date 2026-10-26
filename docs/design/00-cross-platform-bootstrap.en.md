@@ -124,6 +124,7 @@ Recommended structure:
 │   │   │   └── uv-tools.txt
 │   │   └── local-overlays.tsv
 │   └── scripts/
+│       ├── check.sh
 │       ├── common.sh
 │       ├── install-apt-packages.sh
 │       ├── install-brew-packages.sh
@@ -365,12 +366,16 @@ Notes:
 - Run again when the mise configuration changes, because the tools run on the mise-managed Python
 - Repeated execution must be safe
 
-### `run_onchange_after_60-check`
+### `check.sh` and `run_onchange_after_60-check`
 
+- Keep the environment checks in `bootstrap/scripts/check.sh` so users, hook 60, and CI call the same implementation
+- Accept an optional chezmoi config path; use chezmoi's normal configuration selection when the caller omits it
+- Resolve the package manager and desktop support through the root template partials, and read the persisted `desktopBaseline` choice through chezmoi
 - Consume the same declared inventories as the installers instead of a second hard-coded tool list
 - Validate apt manifests with `dpkg-query`, pacman manifests with `pacman -Q`, Brewfiles with `brew bundle check`, and the mise configuration with `mise ls --current --missing`
-- Check ecosystem manifests by binary name, report uv tool environments that no longer run on the Python they were built on, the completion manifest through the installer's `check` action, and the font manifest's family and faces through Fontconfig on Linux or the user font directory on macOS
+- Check ecosystem manifests by binary name, report uv tool environments that no longer run on the Python they were built on, check the completion manifest through the installer's `check` action, and check the font manifest's family and faces through Fontconfig on Linux or the user font directory on macOS
 - Print the mise-managed toolchain from `mise current` so the summary follows the configuration
+- Hash `check.sh` in hook 60, pass the active chezmoi config to the script, and keep only the next-steps output in the hook
 
 ## 11. PATH and Compatibility
 

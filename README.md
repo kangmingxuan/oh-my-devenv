@@ -115,7 +115,7 @@ chezmoi init --apply git@github.com:kangmingxuan/oh-my-devenv.git
 chezmoi init --apply https://github.com/kangmingxuan/oh-my-devenv.git
 ```
 
-The first apply backs up any pre-existing managed files, prompts once for your Git author name, email, and desktop-baseline choice, deploys the dotfiles, runs the ordered bootstrap hooks, and ends with an environment check. The desktop choice defaults to yes on macOS and graphical non-WSL Arch Linux and Ubuntu 26.04+ hosts, and to no on non-graphical or unsupported Linux hosts and WSL; the repository's apply-CI fixture disables it explicitly. On macOS, accepting the choice installs Ghostty, Maple Mono NF CN, and OrbStack together. Homebrew installs the OrbStack application, but you must launch it once to finish setup; using OrbStack for freelance, business, or professional work requires a paid [OrbStack license](https://docs.orbstack.dev/licensing). On success you will see **`All checks passed.`** and a list of core tool versions.
+The first apply backs up any pre-existing managed files, prompts once for your Git author name, email, and desktop-baseline choice, deploys the dotfiles, runs the ordered bootstrap hooks, and ends with an environment check. The desktop choice defaults to yes on macOS and graphical non-WSL Arch Linux and Ubuntu 26.04+ hosts, and to no on non-graphical or unsupported Linux hosts and WSL. On macOS, accepting the choice installs Ghostty, Maple Mono NF CN, and OrbStack together. Homebrew installs the OrbStack application, but you must launch it once to finish setup; using OrbStack for freelance, business, or professional work requires a paid [OrbStack license](https://docs.orbstack.dev/licensing). On success you will see **`All checks passed.`** and a list of core tool versions.
 
 ### Before you run it
 
@@ -134,6 +134,12 @@ If you are editing the local source checkout directly and only want to re-render
 
 ```bash
 chezmoi apply
+```
+
+Check the current environment at any time without applying or installing changes:
+
+```bash
+bash "$(chezmoi source-path)/bootstrap/scripts/check.sh"
 ```
 
 For prompts, hook order, success signals, and troubleshooting, see [docs/01-onboarding.md](docs/01-onboarding.md).
