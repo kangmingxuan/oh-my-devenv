@@ -10,8 +10,9 @@ copy-paste customization, see [`local-overlay-examples/README.md`](local-overlay
 ## Bootstrap hooks
 
 `chezmoi apply` renders your dotfiles and then runs ordered hooks from
-`.chezmoiscripts/`. The `run_onchange_*` hooks only re-run when their dependent
-manifest changes (chezmoi tracks a content hash), so routine re-applies are cheap.
+`.chezmoiscripts/`. The `run_onchange_*` hooks only re-run when their hashed
+inputs change (chezmoi tracks a content hash), including their manifests,
+installers, and shared bootstrap code, so routine re-applies are cheap.
 
 | Order | Hook | What it does |
 |-------|------|--------------|
@@ -25,7 +26,7 @@ manifest changes (chezmoi tracks a content hash), so routine re-applies are chea
 | 7 | `run_onchange_after_40-install-runtimes` | Runs `mise install` to fetch the pinned runtimes. |
 | 8 | `run_onchange_after_50-sync-ecosystem-tools` | Installs the Go tools (`go install`) and Python tools (`uv tool`). |
 | 9 | `run_onchange_after_55-install-shell-completions` | Generates official CLI completion assets in the standard Bash and Zsh user data directories. |
-| 10 | `run_onchange_after_60-check` | Final environment check against the same manifests the installers consumed. On success prints **`All checks passed.`**, a core-tool version list, and a short next-steps block. |
+| 10 | `run_onchange_after_60-check` | Change-triggered final environment check against the same manifests the installers consumed. It runs when its hashed inputs, including shared bootstrap code, change—not on every apply. On success prints **`All checks passed.`**, a core-tool version list, and a short next-steps block. |
 
 The first-run backup copies every pre-existing target of the main and XDG
 sources to the same absolute path beneath
@@ -107,6 +108,12 @@ mise list
 bash bootstrap/scripts/uninstall.sh
 ```
 
+Confirmed uninstall keeps the source checkout and local overlays. It backs up
+removed files, including dangling symlinks, unless `--no-backup` is passed.
+It clears the main chezmoi `scriptState` and `entryState` buckets after removal
+so a later `chezmoi apply` or `chezmoi init --apply` can rerun the bootstrap hooks.
+The dry run reports these state resets without performing them.
+
 ## Environment variables and flags
 
 Persistent tool environment belongs in `$XDG_CONFIG_HOME/oh-my-devenv/env.sh`
@@ -143,9 +150,10 @@ Every generated file carries an ownership comment marker. A leading `#compdef`
 line is preserved and the marker follows it; otherwise the marker is the first
 line. When a command leaves the manifest or this platform, the
 next `install` prunes its marked files after the current entries install,
-`check` reports them as `[stale]`, and `list` includes them so
-`uninstall.sh` can remove them. Unmarked files and symlinks in those
-directories are never touched.
+`check` reports them as `[stale]`, and `list` includes existing owned files at
+current and obsolete targets so `uninstall.sh` can remove them. Uninstall
+rechecks ownership before deletion. Uninstall and obsolete-file cleanup leave
+unmarked files and symlinks in those directories untouched.
 
 ### Output
 

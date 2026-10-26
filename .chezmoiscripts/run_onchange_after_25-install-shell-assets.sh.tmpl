@@ -1,5 +1,6 @@
 {{- $bootstrapDir := joinPath .chezmoi.sourceDir "bootstrap" -}}
 #!/bin/bash
+{{ includeTemplate "common-bootstrap-hashes" . -}}
 # oh-my-zsh-plugins.txt hash: {{ include "bootstrap/manifests/shell/oh-my-zsh-plugins.txt" | sha256sum }}
 # oh-my-zsh installer hash: {{ include "bootstrap/scripts/install-oh-my-zsh-assets.sh" | sha256sum }}
 

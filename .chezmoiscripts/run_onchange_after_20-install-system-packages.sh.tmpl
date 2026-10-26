@@ -6,7 +6,7 @@ echo "ERROR: unsupported system package manager" >&2
 exit 1
 {{ else -}}
 #!/bin/bash
-
+{{ includeTemplate "common-bootstrap-hashes" . }}
 set -euo pipefail
 
 bootstrap_dir='{{ $bootstrapDir }}'

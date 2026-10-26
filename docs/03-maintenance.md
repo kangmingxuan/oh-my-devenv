@@ -356,8 +356,8 @@ destination files, the nested source's dedicated state file, the completion
 assets enumerated by `install-shell-completions.sh list`, plus a short whitelist
 of bootstrap-owned directories (`~/.oh-my-zsh`,
 `~/.local/state/chezmoi-first-run-backup/`, the marker-owned Maple Mono
-user-font directory, and the chezmoi source tree under `~/.local/share/` when
-that is the canonical data path). Both `chezmoi managed` calls request plain
+user-font directory). The source checkout always stays in place. Both
+`chezmoi managed` calls request plain
 line output explicitly with `--format=`, and a failing producer aborts the run
 rather than shrinking the candidate list. Like the bootstrap hooks, the script
 sources `bootstrap/scripts/common.sh`, so it resolves the XDG directories and
@@ -367,11 +367,18 @@ loads `bootstrap.env` before it computes any path.
 
 - **Dry-run by default.** Running the script with no flags prints
   `[would-remove]` / `[would-skip]` lines and exits `0` without deleting
-  anything. Read the preview end-to-end before you add `--confirm`.
+  anything. It also prints `[would-reset]` for the main chezmoi `scriptState`
+  and `entryState` buckets without clearing them. Read the preview end-to-end
+  before you add `--confirm`.
 - **`--confirm`** performs the deletions after an optional backup tarball under
   `~/.local/state/chezmoi-uninstall-backup/<UTC-timestamp>/` (unless
   `--no-backup` is also passed — intended for scripted CI where the filesystem
-  is ephemeral anyway).
+  is ephemeral anyway). The file archive includes dangling symlinks. After
+  removal succeeds, the script clears the main chezmoi `scriptState` and
+  `entryState` buckets using the same source and default configuration as its
+  managed-file inventory. This permits `run_once_` and `run_onchange_` hooks to
+  run again on a later `chezmoi apply` or `chezmoi init --apply`. Other state
+  buckets remain unchanged.
 - **`--no-backup`** only makes sense together with `--confirm`; it skips the
   pre-delete archive.
 
@@ -382,19 +389,24 @@ The script reads
 and logs `[would-skip] overlay-protected` for every matching user-owned path. If
 a path is both managed and an overlay (it should not be), the overlay rule wins.
 
+Completion candidates must carry the installer's ownership marker at both
+current and obsolete targets. The script rechecks ownership immediately before
+deletion. It preserves unmarked files and symlinks in the completion directories.
+
 ### Chezmoi `--source` checkouts
 
-When your active `chezmoi source-path` points **outside** `~/.local/share/` (for
-example a `chezmoi init --apply --source=$PWD` workspace checkout), the script
-refuses to auto-delete that tree and prints a `[would-skip]` line instead —
-removing the working copy is never the safe default.
+Uninstall preserves the source checkout at every location, including
+`~/.local/share/chezmoi`. Remove it manually if needed. Run `chezmoi apply` from
+the retained checkout when you want to restore the baseline.
 
 ### CI Coverage
 
-The smoke suite runs the dry-run preview against fixture roots (on Bash 3.2 in
-the macOS job). `--confirm` is not exercised in CI; validate it in a disposable
-environment when you change it, and inspect the dry-run output before using
-`--confirm`.
+The smoke suite exercises the dry run, `--confirm`, and `--confirm --no-backup`
+under isolated HOME and XDG roots (on Bash 3.2 in the macOS job). Each confirmed
+run has a guard that rejects the real home directory. Tests inspect backup
+archives, verify both script-state resets, and check that overlays, unowned
+completions, unrelated files, and the source checkout survive. Inspect the dry
+run before using `--confirm` on a real machine.
 
 ## Related Documents
 

@@ -1,4 +1,5 @@
 #!/bin/bash
+{{ includeTemplate "common-bootstrap-hashes" . -}}
 # mise config hash: {{ include "xdg_config/mise/config.toml.tmpl" | sha256sum }}
 
 set -euo pipefail

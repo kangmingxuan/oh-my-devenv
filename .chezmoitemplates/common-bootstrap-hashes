@@ -1,0 +1,2 @@
+# Shared bootstrap code hash: {{ include "bootstrap/scripts/common.sh" | sha256sum }}
+# Shared XDG code hash: {{ include "dot_local/share/oh-my-devenv/xdg.sh" | sha256sum }}
