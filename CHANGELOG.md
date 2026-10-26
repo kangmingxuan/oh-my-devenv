@@ -15,6 +15,9 @@ versioning and release policy lives in
 
 ### Changed
 
+- The README describes the baseline as declarative instead of reproducible.
+  Only the runtime and tool layers pin versions; system packages, mise, and
+  oh-my-zsh track upstream.
 - Document WSL as a runtime environment rather than a separate platform. Keep
   the `microsoft`-kernel exclusion from the desktop baseline, including when
   WSLg sets `DISPLAY`.

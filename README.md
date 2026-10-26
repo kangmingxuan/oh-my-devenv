@@ -10,13 +10,13 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 ![Platforms](https://img.shields.io/badge/platforms-macOS%20%7C%20Ubuntu%2FDebian%20%7C%20Arch%20Linux-informational)
 
-oh-my-devenv is an opinionated, reproducible development environment. It publishes one maintainer's current choices as a coherent baseline: use it when those choices fit, and do not use it when they do not. Point `chezmoi` at it on a fresh machine and minutes later you have managed shells, language runtimes, and a curated CLI toolchain — all from a single source of truth. Secrets and private machine facts stay in local overlays so the public baseline remains safe to clone.
+oh-my-devenv is an opinionated, declarative development environment. It publishes one maintainer's current choices as a coherent baseline: use it when those choices fit, and do not use it when they do not. Point `chezmoi` at it on a fresh machine and minutes later you have managed shells, language runtimes, and a curated CLI toolchain — all from a single source of truth. Secrets and private machine facts stay in local overlays so the public baseline remains safe to clone.
 
 ## What you get
 
 - **Cross-platform from one source** — macOS (Intel + Apple Silicon), Ubuntu / Debian, and Arch Linux share the same templated baseline.
 - **One-command bootstrap** — `chezmoi init --apply` installs everything through ordered hooks; re-running is idempotent and safe.
-- **Layered and reproducible** — chezmoi orchestrates system packages, optional desktop assets, shell assets, [mise](https://mise.jdx.dev/) runtimes, and per-language tools, each from its own manifest.
+- **Layered and declarative** — chezmoi orchestrates system packages, optional desktop assets, shell assets, [mise](https://mise.jdx.dev/) runtimes, and per-language tools, each from its own manifest. Only the runtime and tool layers pin versions, so two installs at different times can differ in the other layers.
 - **Managed shells** — first-class completion for Zsh everywhere and Bash on Linux, with intentionally limited Bash support on macOS.
 - **Pinned runtimes** — Go, Node, Python, and golangci-lint via mise, plus ecosystem tools such as `gopls`, `dlv`, `ruff`, `basedpyright`, and `pre-commit`. System packages, mise itself, and oh-my-zsh with its plugins track their upstream releases.
 - **Modern CLI toolkit** — ripgrep, fd, bat, fzf, jq, direnv, tmux, shellcheck, shfmt, and more.
