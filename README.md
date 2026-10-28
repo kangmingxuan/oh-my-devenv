@@ -4,9 +4,7 @@
 
 > One command takes a clean **macOS**, **Ubuntu / Debian**, or **Arch Linux** machine to a fully configured shell, pinned language runtimes, and a modern CLI toolchain — managed by [chezmoi](https://www.chezmoi.io/).
 
-[![Smoke Tests](https://github.com/kangmingxuan/oh-my-devenv/actions/workflows/smoke-tests.yml/badge.svg)](https://github.com/kangmingxuan/oh-my-devenv/actions/workflows/smoke-tests.yml)
-[![Apply Tests](https://github.com/kangmingxuan/oh-my-devenv/actions/workflows/apply-tests.yml/badge.svg)](https://github.com/kangmingxuan/oh-my-devenv/actions/workflows/apply-tests.yml)
-[![Secret Scan](https://github.com/kangmingxuan/oh-my-devenv/actions/workflows/secret-scan.yml/badge.svg)](https://github.com/kangmingxuan/oh-my-devenv/actions/workflows/secret-scan.yml)
+[![CI](https://github.com/kangmingxuan/oh-my-devenv/actions/workflows/ci.yml/badge.svg)](https://github.com/kangmingxuan/oh-my-devenv/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 ![Platforms](https://img.shields.io/badge/platforms-macOS%20%7C%20Ubuntu%2FDebian%20%7C%20Arch%20Linux-informational)
 

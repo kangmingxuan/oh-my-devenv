@@ -125,7 +125,7 @@ If you add, rename, or remove an entry, confirm that:
 
 ## CI
 
-The repository CI runs on GitHub Actions for every push and pull request. Smoke jobs run `run-smoke-tests.sh` on `ubuntu-latest`, `macos-latest`, and an `archlinux:base` container. Four jobs run a real `chezmoi apply`: `apply-linux` covers the non-desktop Ubuntu path with a custom `XDG_CONFIG_HOME` and backup assertions; `apply-ubuntu-desktop` uses `ubuntu:26.04`; `apply-arch` uses `archlinux:base`; and `apply-macos` uses `macos-latest`. The last three enable the desktop baseline. Every apply job asserts `All checks passed.` and runs `bash bootstrap/scripts/check.sh <config>`. The macOS job installs the OrbStack cask without launching OrbStack. A separate job runs the `gitleaks` secret scan. Do not merge a change while the pipeline is failing.
+The repository CI runs on GitHub Actions. [`docs/03-maintenance.md`](docs/03-maintenance.md#ci) describes the triggers, the required jobs, and the clean-machine round trip. Do not merge a change while the pipeline is failing.
 
 ## Reporting Issues
 

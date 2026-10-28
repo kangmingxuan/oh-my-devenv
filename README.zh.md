@@ -4,9 +4,7 @@
 
 > 一条命令，把全新的 **macOS**、**Ubuntu / Debian** 或 **Arch Linux** 机器，变成配置完善的 shell、锁定版本的语言运行时和现代 CLI 工具链 —— 由 [chezmoi](https://www.chezmoi.io/) 统一管理。
 
-[![Smoke Tests](https://github.com/kangmingxuan/oh-my-devenv/actions/workflows/smoke-tests.yml/badge.svg)](https://github.com/kangmingxuan/oh-my-devenv/actions/workflows/smoke-tests.yml)
-[![Apply Tests](https://github.com/kangmingxuan/oh-my-devenv/actions/workflows/apply-tests.yml/badge.svg)](https://github.com/kangmingxuan/oh-my-devenv/actions/workflows/apply-tests.yml)
-[![Secret Scan](https://github.com/kangmingxuan/oh-my-devenv/actions/workflows/secret-scan.yml/badge.svg)](https://github.com/kangmingxuan/oh-my-devenv/actions/workflows/secret-scan.yml)
+[![CI](https://github.com/kangmingxuan/oh-my-devenv/actions/workflows/ci.yml/badge.svg)](https://github.com/kangmingxuan/oh-my-devenv/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 ![Platforms](https://img.shields.io/badge/platforms-macOS%20%7C%20Ubuntu%2FDebian%20%7C%20Arch%20Linux-informational)
 

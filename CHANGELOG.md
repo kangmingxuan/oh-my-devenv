@@ -7,6 +7,16 @@ versioning and release policy lives in
 
 ## [Unreleased]
 
+### Changed
+
+- Run CI from one workflow, `ci.yml`, with the same required job names. Pull
+  requests run each job once, a new push cancels the previous run, apply jobs
+  wait for the smoke jobs, and a weekly run catches upstream drift.
+- Every apply job now runs a clean-machine round trip through
+  `bootstrap/scripts/ci-apply.sh`: apply, an unchanged reapply that must not
+  rerun the final check hook, `uninstall.sh --confirm` with empty chezmoi state
+  buckets afterward, and a restoring apply.
+
 ## [0.2.0] - 2026-10-26
 
 ### Added
