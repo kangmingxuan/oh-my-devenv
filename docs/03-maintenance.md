@@ -74,28 +74,8 @@ to it instead of copying long instructions in multiple places.
 
 A reviewable change is ready to merge when all of the following hold:
 
-- The CI pipeline is green. Every reviewable change runs these GitHub Actions
-  jobs:
-  - `smoke-tests-linux` — renders and syntax-checks the baseline, validates
-    contracts and deployment boundaries, and exercises selected behavior with
-    stubs and temporary roots on `ubuntu-latest`.
-  - `smoke-tests-macos` — the same smoke suite on `macos-latest` using the
-    system `/bin/bash` (Bash 3.2), exercising the `darwin` template arms and
-    platform-sensitive checks.
-  - `smoke-tests-arch` — the same smoke suite in an `archlinux:base` container,
-    exercising Arch platform routing and package-owned completion assets.
-  - `apply-linux` — runs a real `chezmoi apply` on `ubuntu-latest` with
-    `desktopBaseline=false`. It uses a custom `XDG_CONFIG_HOME` and checks the
-    first-run backup and preservation of unmanaged XDG configuration.
-  - `apply-ubuntu-desktop` — runs a full desktop apply in an `ubuntu:26.04`
-    container.
-  - `apply-arch` — runs a full desktop apply in an `archlinux:base` container.
-  - `apply-macos` — runs a full desktop apply on `macos-latest`, including
-    Ghostty, Maple Mono NF CN, and the OrbStack cask. It does not launch
-    OrbStack.
-  - Every apply job asserts `All checks passed.` and runs
-    `bash bootstrap/scripts/check.sh <config>` after the apply.
-  - `secret-scan` — a full `gitleaks` scan of the repository tree.
+- The CI pipeline is green. Every job in the [CI](#ci) section is a required
+  status check on `main`.
 
   The `apply-macos` job covers routine macOS installation validation. Use the
   manual [`docs/04-macos-preflight.md`](04-macos-preflight.md) checklist only
@@ -328,26 +308,45 @@ reflect
 
 ## CI
 
-The repository CI pipeline combines source-level and full-apply checks:
+`.github/workflows/ci.yml` is the only workflow. It runs on every pull
+request, on every push to `main`, once a week, and on manual dispatch. The
+weekly run catches upstream drift in unpinned layers when nobody pushes. A new
+push to a pull request cancels the previous run.
 
-- `smoke-tests-linux`, `smoke-tests-macos`, and `smoke-tests-arch` render and
-  syntax-check the baseline, validate contracts and deployment boundaries, and
-  exercise selected behavior with stubs and temporary roots. The suite covers
-  the shared environment checker, stubbed Homebrew installs, local font
-  archives, checksum failures, and Fontconfig rollback. The macOS job uses the
-  system `/bin/bash` (Bash 3.2). The Arch job exercises pacman routing and
-  package-owned completion assets.
-- `apply-linux` runs a non-desktop apply on `ubuntu-latest`. It checks a custom
-  `XDG_CONFIG_HOME`, first-run backups, and preservation of unmanaged files.
-- `apply-ubuntu-desktop` runs a full desktop apply in `ubuntu:26.04`.
-- `apply-arch` runs a full desktop apply in `archlinux:base`.
-- `apply-macos` runs a full desktop apply on `macos-latest`. It installs and
-  checks Ghostty, Maple Mono NF CN, and the OrbStack cask without launching
-  OrbStack.
-- Every apply job asserts `All checks passed.` and then runs
-  `bash bootstrap/scripts/check.sh <config>` directly.
+Every job below is a required status check on `main`. Keep the job names
+stable; renaming one requires the same change in the branch protection rule.
+
 - `secret-scan` runs `gitleaks` over the repository tree to catch committed
   secrets.
+- `smoke-tests-linux`, `smoke-tests-macos`, and `smoke-tests-arch` run
+  `run-smoke-tests.sh` on `ubuntu-latest`, on `macos-latest` with the system
+  `/bin/bash` (Bash 3.2), and in an `archlinux:base` container. The suite
+  renders and syntax-checks the baseline, validates contracts and deployment
+  boundaries, and exercises selected behavior with stubs and temporary roots.
+- `apply-linux`, `apply-ubuntu-desktop`, `apply-arch`, and `apply-macos` start
+  only after every smoke job passes. Each runs
+  `bootstrap/scripts/ci-apply.sh` on a clean runner:
+  - `apply-linux` uses `ubuntu-latest` without the desktop baseline and with a
+    custom `XDG_CONFIG_HOME`.
+  - `apply-ubuntu-desktop` uses an `ubuntu:26.04` container,
+    `apply-arch` uses an `archlinux:base` container, and `apply-macos` uses
+    `macos-latest`. These three enable the desktop baseline. The macOS job
+    installs the OrbStack cask without launching OrbStack.
+
+`ci-apply.sh` runs the same round trip on every platform:
+
+1. Seed pre-existing user files and render the chezmoi config at its default
+   location.
+2. Apply, then require `All checks passed.` from the final hook and a passing
+   `bootstrap/scripts/check.sh`. Confirm the first-run backup and the
+   preservation of unmanaged files.
+3. Apply again without changes. The change-triggered final hook must not
+   rerun, and the check must still pass.
+4. Run `uninstall.sh --confirm`. The main chezmoi `scriptState` and
+   `entryState` buckets must be empty, and the check must fail.
+5. Apply again. The final hook must rerun, and the check must pass.
+
+The script refuses to run unless `CI=true`, because it uninstalls from `$HOME`.
 
 The smoke suite is scoped to source-level bootstrap behavior and safe fixture
 operations. The [validation policy](../CONTRIBUTING.md#local-validation)

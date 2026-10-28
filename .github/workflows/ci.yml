@@ -1,0 +1,130 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  # Upstream packages move without a push. The weekly run catches that drift.
+  schedule:
+    - cron: "17 3 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+# Job names are the required status checks on main. Keep them stable.
+jobs:
+  secret-scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - name: Run gitleaks (repository scan)
+        # The gitleaks rev in .pre-commit-config.yaml is the only version pin.
+        # The pre-commit hook only scans staged changes, so CI scans the whole tree.
+        run: |
+          version="$(yq -r '.repos[] | select(.repo == "https://github.com/gitleaks/gitleaks") | .rev' \
+            .pre-commit-config.yaml)" || exit 1
+          if [[ ! "$version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "ERROR: expected one gitleaks rev vX.Y.Z in .pre-commit-config.yaml, got: $version" >&2
+            exit 1
+          fi
+          version="${version#v}"
+          curl -fsSL "https://github.com/gitleaks/gitleaks/releases/download/v${version}/gitleaks_${version}_linux_x64.tar.gz" \
+            | tar -xzf - gitleaks
+          ./gitleaks dir --redact --verbose .
+
+  # Source-level checks: render templates, validate contracts, and exercise
+  # selected behavior with stubs and temporary roots.
+  smoke:
+    name: smoke-tests-${{ matrix.platform }}
+    runs-on: ${{ matrix.runner }}
+    container: ${{ matrix.container }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux
+            runner: ubuntu-latest
+            setup: |
+              sudo apt-get update
+              sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+                curl git zsh bash-completion bat ca-certificates xz-utils shellcheck fontconfig zip unzip
+              mkdir -p "$HOME/.local/bin"
+              sh -c "$(curl -fsLS get.chezmoi.io)" -- -b "$HOME/.local/bin"
+              echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          - platform: macos
+            runner: macos-latest
+            # Every `bash` the suite starts resolves to macOS /bin/bash, the
+            # oldest Bash the baseline supports.
+            setup: |
+              brew install chezmoi shellcheck
+              mkdir -p "$RUNNER_TEMP/system-bash"
+              ln -s /bin/bash "$RUNNER_TEMP/system-bash/bash"
+              echo "$RUNNER_TEMP/system-bash" >> "$GITHUB_PATH"
+          - platform: arch
+            runner: ubuntu-latest
+            container: archlinux:base
+            setup: |
+              pacman -Syu --needed --noconfirm git chezmoi shellcheck zsh bash-completion bat diffutils fontconfig zip unzip
+    steps:
+      - name: Prepare the platform
+        run: ${{ matrix.setup }}
+      - uses: actions/checkout@v7
+      - name: Run smoke tests
+        run: bash bootstrap/scripts/run-smoke-tests.sh
+
+  # A real clean-machine round trip: apply, reapply, uninstall, and restore.
+  apply:
+    name: apply-${{ matrix.platform }}
+    needs: smoke
+    runs-on: ${{ matrix.runner }}
+    container: ${{ matrix.container }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # The non-desktop server path with a custom XDG config root.
+          - platform: linux
+            runner: ubuntu-latest
+            desktop: false
+            setup: |
+              echo "XDG_CONFIG_HOME=$RUNNER_TEMP/xdg-config" >> "$GITHUB_ENV"
+              mkdir -p "$HOME/.local/bin"
+              sh -c "$(curl -fsLS get.chezmoi.io)" -- -b "$HOME/.local/bin"
+              echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          - platform: ubuntu-desktop
+            runner: ubuntu-latest
+            container: ubuntu:26.04
+            desktop: true
+            setup: |
+              apt-get update
+              DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+                ca-certificates curl git sudo
+              mkdir -p "$HOME/.local/bin"
+              sh -c "$(curl -fsLS get.chezmoi.io)" -- -b "$HOME/.local/bin"
+              echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          - platform: arch
+            runner: ubuntu-latest
+            container: archlinux:base
+            desktop: true
+            setup: |
+              pacman -Syu --needed --noconfirm git curl chezmoi sudo
+          - platform: macos
+            runner: macos-latest
+            desktop: true
+            setup: |
+              brew install chezmoi
+              echo "HOMEBREW_NO_INSTALL_CLEANUP=1" >> "$GITHUB_ENV"
+    steps:
+      - name: Prepare the platform
+        run: ${{ matrix.setup }}
+      - uses: actions/checkout@v7
+      - name: Run the clean-machine round trip
+        run: bash bootstrap/scripts/ci-apply.sh "${{ matrix.desktop }}"
