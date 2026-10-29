@@ -22,9 +22,6 @@ docs/**
 .kimi-code
 .kimi-code/**
 
-# Source-only assets. Hooks read bootstrap directly and apply xdg_config as a
-# separate chezmoi source with XDG_CONFIG_HOME as its destination.
+# Source-only assets. Hooks read bootstrap directly.
 bootstrap
 bootstrap/**
-xdg_config
-xdg_config/**

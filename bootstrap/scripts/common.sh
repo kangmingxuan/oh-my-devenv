@@ -180,10 +180,6 @@ first_run_backup_root() {
   printf '%s\n' "${XDG_STATE_HOME:-$HOME/.local/state}/chezmoi-first-run-backup"
 }
 
-xdg_chezmoi_state_file() {
-  printf '%s\n' "${XDG_STATE_HOME:-$HOME/.local/state}/chezmoi/oh-my-devenv-xdg.boltdb"
-}
-
 maple_mono_font_dir() {
   printf '%s\n' "$XDG_DATA_HOME/fonts/maple-mono-nf-cn"
 }

@@ -35,11 +35,12 @@ Every file in this directory ends in `.example` on purpose:
 
 ## Workflow
 
-The managed shells export `XDG_CONFIG_HOME`, defaulting to `$HOME/.config`. If
-you are setting up an overlay before the first apply, initialize it in the
-current shell first: `export XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"`.
-Custom values must be absolute and must be exported before running `chezmoi`;
-local env files must not set or change `XDG_CONFIG_HOME`.
+The config root is fixed at `$HOME/.config`. The managed shells export
+`XDG_CONFIG_HOME` with that value. Before the first apply, initialize it with
+`export XDG_CONFIG_HOME="$HOME/.config"`. Apply and `check.sh` reject other
+values, including empty and relative values. Shells warn once and use the fixed
+root. Local env files must not change it. `XDG_DATA_HOME` still supports custom
+absolute roots exported before the shell or chezmoi starts.
 
 1. Pick the example file that matches the extension point you want to use.
 2. Copy it to the real overlay location shown in the table above, **dropping the
@@ -91,7 +92,7 @@ mise self-update     # standalone Linux install
 Create or update the overlay with an explicit path:
 
 ```bash
-mise_local_config="${XDG_CONFIG_HOME:-$HOME/.config}/mise/config.local.toml"
+mise_local_config="$HOME/.config/mise/config.local.toml"
 install -d "$(dirname "$mise_local_config")"
 mise use --path "$mise_local_config" --pin <tool>@<version>
 ```
@@ -125,7 +126,7 @@ it writes a project-local `mise.local.toml` in the current directory.
 Copy the Git config and guardrail examples into the project-owned XDG namespace:
 
 ```bash
-export XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
+export XDG_CONFIG_HOME="$HOME/.config"
 install -d "$XDG_CONFIG_HOME/oh-my-devenv/git/hooks"
 cp docs/local-overlay-examples/git-config.example \
   "$XDG_CONFIG_HOME/oh-my-devenv/git/config"

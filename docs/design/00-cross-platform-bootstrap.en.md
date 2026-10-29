@@ -95,12 +95,12 @@ Recommended structure:
 .
 ├── .chezmoi.toml.tmpl
 ├── .chezmoiscripts/
+│   ├── run_before_00-banner.sh.tmpl
 │   ├── run_once_before_10-bootstrap.sh.tmpl
 │   ├── run_onchange_after_20-install-system-packages.sh.tmpl
 │   ├── run_onchange_after_22-install-desktop-assets.sh.tmpl
 │   ├── run_onchange_after_25-install-shell-assets.sh.tmpl
 │   ├── run_onchange_after_30-install-mise.sh.tmpl
-│   ├── run_after_35-apply-xdg-config.sh.tmpl
 │   ├── run_onchange_after_40-install-runtimes.sh.tmpl
 │   ├── run_onchange_after_50-sync-ecosystem-tools.sh.tmpl
 │   ├── run_onchange_after_55-install-shell-completions.sh.tmpl
@@ -136,11 +136,10 @@ Recommended structure:
 │       ├── install-uv-tools.sh
 │       ├── local-overlays.sh
 │       ├── run-smoke-tests.sh
-│       ├── uninstall.sh
-│       └── xdg-config.sh
+│       └── uninstall.sh
 ├── dot_local/share/oh-my-devenv/
 │   └── xdg.sh
-└── xdg_config/
+└── dot_config/
     ├── fontconfig/conf.d/
     │   └── 99-oh-my-devenv-maple-mono-nf-cn.conf.tmpl
     ├── ghostty/
@@ -170,12 +169,12 @@ Requirement: keep the bootstrap layer lightweight and avoid putting heavy instal
 
 Recommended execution order:
 
-1. `run_once_before_10-bootstrap.sh.tmpl`
-2. `run_onchange_after_20-install-system-packages.sh.tmpl`
-3. `run_onchange_after_22-install-desktop-assets.sh.tmpl`
-4. `run_onchange_after_25-install-shell-assets.sh.tmpl`
-5. `run_onchange_after_30-install-mise.sh.tmpl`
-6. `run_after_35-apply-xdg-config.sh.tmpl`
+1. `run_before_00-banner.sh.tmpl`
+2. `run_once_before_10-bootstrap.sh.tmpl`
+3. `run_onchange_after_20-install-system-packages.sh.tmpl`
+4. `run_onchange_after_22-install-desktop-assets.sh.tmpl`
+5. `run_onchange_after_25-install-shell-assets.sh.tmpl`
+6. `run_onchange_after_30-install-mise.sh.tmpl`
 7. `run_onchange_after_40-install-runtimes.sh.tmpl`
 8. `run_onchange_after_50-sync-ecosystem-tools.sh.tmpl`
 9. `run_onchange_after_55-install-shell-completions.sh.tmpl`
@@ -209,7 +208,7 @@ Requirements:
 - Install `zsh` via `apt` when the shell layer depends on it
 - Reuse the same shell asset script as macOS to install `oh-my-zsh` and plugins
 - Only Ubuntu 26.04+ outside WSL participates in the selected desktop baseline: install Ghostty through apt and the pinned, verified Maple Mono archive in the user font directory
-- Only on the supported Ubuntu desktop baseline, retain the Fontconfig workaround for Ghostty ignoring its explicit font-family setting; match `prgname=ghostty` and `monospace`. Other applications and platforms keep their font preferences. Elsewhere, or when disabled, the template renders empty and chezmoi does not manage the file; font validation checks registered faces rather than the system monospace alias
+- Only on the supported Ubuntu desktop baseline, retain the Fontconfig workaround for Ghostty ignoring its explicit font-family setting; match `prgname=ghostty` and `monospace`. Other applications and platforms keep their font preferences. Elsewhere, or when disabled, the template renders empty and chezmoi removes any previously deployed file; font validation checks registered faces rather than the system monospace alias
 
 ### Arch Linux Family
 
@@ -292,7 +291,7 @@ Notes:
 
 ### `config.toml.tmpl`
 
-- [`xdg_config/mise/config.toml.tmpl`](../../xdg_config/mise/config.toml.tmpl) pins each runtime and binary-distributed tool in its `[tools]` table
+- [`dot_config/mise/config.toml.tmpl`](../../dot_config/mise/config.toml.tmpl) pins each runtime and binary-distributed tool in its `[tools]` table
 - The runtime, ecosystem-tool, and completion hooks include its hash, so a change re-runs them
 
 ## 10. Helper Script Responsibilities
@@ -321,7 +320,7 @@ Notes:
 ### `install-maple-mono-font`
 
 - Run only from the supported Linux desktop path (the Arch Linux family and Ubuntu)
-- Load the font family, required PostScript faces, pinned release URL, and SHA-256 digest from `bootstrap/manifests/desktop/maple-mono-nf-cn.env` through the shared loader in `common.sh`; the same manifest feeds the environment check and, through `xdg-config.sh` template data, the Ghostty and Fontconfig templates
+- Load the font family, required PostScript faces, pinned release URL, and SHA-256 digest from `bootstrap/manifests/desktop/maple-mono-nf-cn.env` through the shared loader in `common.sh`; the same manifest feeds the environment check and the Ghostty and Fontconfig templates through the `desktop-font-family` partial
 - Reuse a compatible existing font installation instead of creating a duplicate
 - Resume interrupted downloads, verify the digest and required PostScript names, and only replace a directory marked as baseline-owned
 - Install under `${XDG_DATA_HOME:-$HOME/.local/share}/fonts` and refresh Fontconfig
@@ -360,7 +359,7 @@ Notes:
 - Install tools from the manifest using the declared requirement specifiers and `--python` with the global interpreter selected by `mise which python` from `/`, including the user's `config.local.toml` overlay independently of the caller's project directory
 - Skip healthy tools already installed at the pinned version unless `DOTFILES_FORCE_REINSTALL=1`
 - Rebuild an installed tool when its interpreter is missing, differs from the recorded Python version, or differs from the global mise-selected Python version (X.Y.Z); uninstall it first, because `uv tool install --reinstall` keeps the stale environment
-- Run again when `xdg_config/mise/config.toml.tmpl` changes, because the tools run on the mise-managed Python; a Python version change only in the user's `config.local.toml` overlay does not rerun the hook, and `check.sh` then fails
+- Run again when `dot_config/mise/config.toml.tmpl` changes, because the tools run on the mise-managed Python; a Python version change only in the user's `config.local.toml` overlay does not rerun the hook, and `check.sh` then fails
 - Repeated execution must be safe
 
 ### `check.sh` and `run_onchange_after_60-check`
@@ -425,7 +424,13 @@ On a fresh machine, after execution, all of the following should hold:
 The final chosen approach is:
 
 - `chezmoi` manages configuration and orchestration
-- A nested chezmoi source manages configuration files directly under the absolute `XDG_CONFIG_HOME`, which defaults to `$HOME/.config`
+- The main source manages mise, Ghostty, and Fontconfig through `dot_config/` at `$HOME/.config`
+- Leave `XDG_CONFIG_HOME` unset or set it to exactly `$HOME/.config`; apply and `check.sh` reject every other value, including empty and relative values
+- The every-apply banner hook rejects unsupported config roots before reading `bootstrap.env`, running later hooks, or updating targets; an apply that excludes scripts skips this check
+- Managed shells warn once and use `$HOME/.config` when another value is set; `XDG_DATA_HOME` behavior is unchanged
+- The main source manages `~/.config` as 0755 and the three configuration files as 0644; this can change the old root's permissions on the next apply
+- Desktop templates use the existing platform partial and render empty when inactive, so main chezmoi removes previously deployed desktop files while preserving user overlays
+- Main-source inventory provides first-run backups and uninstall targets; users migrate old nested state and custom roots manually as documented in `CHANGELOG.md`
 - macOS uses Homebrew for system tools
 - Optional vendor applications keep their shell and SSH initialization in user-owned local overlays
 - Ubuntu / Debian use `apt` for system tools

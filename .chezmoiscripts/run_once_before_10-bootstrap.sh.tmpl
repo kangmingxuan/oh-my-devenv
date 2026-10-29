@@ -17,14 +17,14 @@ install_error_trap "$0"
 
 log_step "🚀" "Bootstrap: ensuring prerequisites..."
 
-# Copy every pre-existing target of the main and XDG sources to the same
+# Copy pre-existing file and symlink targets of the main source (skipping
+# dangling symlinks) to the same
 # absolute path beneath a timestamped backup directory before the first apply
 # overwrites it. The listing runs the same chezmoi binary as this apply, with
 # its own persistent state so it does not wait on the state the apply holds.
 backup_existing_managed_configs() {
   local listing_state=""
   local main_paths=""
-  local xdg_paths=""
   local existing_path=""
   local backup_dir=""
 
@@ -40,7 +40,6 @@ backup_existing_managed_configs() {
     return 1
   fi
   rm -rf "$listing_state"
-  xdg_paths="$(bash "$scripts_dir/xdg-config.sh" managed {{ .chezmoi.configFile | quote }})"
 
   while IFS= read -r existing_path; do
     if [[ -z "$existing_path" || ! -e "$existing_path" ]]; then
@@ -59,7 +58,7 @@ backup_existing_managed_configs() {
       return 1
     fi
     log_info "Backed up $existing_path -> $backup_dir$existing_path"
-  done <<<"$main_paths"$'\n'"$xdg_paths"
+  done <<<"$main_paths"
 
   if [[ -n "$backup_dir" ]]; then
     log_warning "First-run backup completed. Review $backup_dir after chezmoi finishes if you need to merge any old settings."

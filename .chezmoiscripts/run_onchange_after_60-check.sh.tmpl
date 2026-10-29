@@ -10,7 +10,7 @@
 # Brewfile hash: {{ include "bootstrap/manifests/system/Brewfile" | sha256sum }}
 {{ end -}}
 {{ if and .desktopBaseline $isSupportedDesktop -}}
-# Ghostty config hash: {{ include "xdg_config/ghostty/config.ghostty.tmpl" | sha256sum }}
+# Ghostty config hash: {{ include "dot_config/ghostty/config.ghostty.tmpl" | sha256sum }}
 # Maple Mono manifest hash: {{ include "bootstrap/manifests/desktop/maple-mono-nf-cn.env" | sha256sum }}
 {{ if eq .chezmoi.os "darwin" -}}
 # Desktop Brewfile hash: {{ include "bootstrap/manifests/desktop/Brewfile" | sha256sum }}
@@ -20,7 +20,7 @@
 {{ else -}}
 # Desktop apt manifest hash: {{ include "bootstrap/manifests/desktop/apt-packages.txt" | sha256sum }}
 {{ end -}}
-# Maple Mono Fontconfig hash: {{ include "xdg_config/fontconfig/conf.d/99-oh-my-devenv-maple-mono-nf-cn.conf.tmpl" | sha256sum }}
+# Maple Mono Fontconfig hash: {{ include "dot_config/fontconfig/conf.d/99-oh-my-devenv-maple-mono-nf-cn.conf.tmpl" | sha256sum }}
 {{ end -}}
 {{ end -}}
 # go-tools.txt hash: {{ include "bootstrap/manifests/ecosystem/go-tools.txt" | sha256sum }}
@@ -28,7 +28,7 @@
 # oh-my-zsh-plugins.txt hash: {{ include "bootstrap/manifests/shell/oh-my-zsh-plugins.txt" | sha256sum }}
 # completions.txt hash: {{ include "bootstrap/manifests/shell/completions.txt" | sha256sum }}
 # completion installer hash: {{ include "bootstrap/scripts/install-shell-completions.sh" | sha256sum }}
-# mise config hash: {{ include "xdg_config/mise/config.toml.tmpl" | sha256sum }}
+# mise config hash: {{ include "dot_config/mise/config.toml.tmpl" | sha256sum }}
 
 # environment check hash: {{ include "bootstrap/scripts/check.sh" | sha256sum }}
 

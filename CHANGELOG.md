@@ -7,6 +7,39 @@ versioning and release policy lives in
 
 ## [Unreleased]
 
+### Breaking
+
+- Manage mise, Ghostty, and Fontconfig through the main `dot_config/` source at
+  `~/.config`. Remove the nested source and hook 35. Leave `XDG_CONFIG_HOME`
+  unset or set it to exactly `$HOME/.config`. Apply and `check.sh` reject all
+  other values, including empty and relative values. Managed shells warn once
+  and use `$HOME/.config`. `XDG_DATA_HOME` behavior is unchanged.
+- The main source now manages `~/.config` as 0755. The old nested helper created
+  that root as 0700 when absent and left existing root permissions alone.
+  Config files remain 0644. The next apply can change the root's permissions.
+- The next apply reruns bootstrap hook 10 and every onchange hook that renders for
+  the installation, because their contents changed. Hook 10 can write a new first-run backup of existing
+  managed files.
+
+Before the next apply, migrate manually:
+
+1. Remove the old nested state file at
+   `${XDG_STATE_HOME:-$HOME/.local/state}/chezmoi/oh-my-devenv-xdg.boltdb`.
+   Use the state root that the old installation's `bootstrap.env` selected.
+2. If you used a custom config root, move its managed `mise/config.toml`,
+   `ghostty/config.ghostty`, and
+   `fontconfig/conf.d/99-oh-my-devenv-maple-mono-nf-cn.conf` files to the matching
+   paths under `~/.config`. Move your `oh-my-devenv/`, mise, and Ghostty overlays
+   there too. Preserve and merge any existing files at the destination. If you
+   configured the Git identity-guard hook, rerun only its `git config` commands from
+   `docs/local-overlay-examples/README.md`, because the overlay stores the old
+   absolute hook path.
+3. Move the active `chezmoi/chezmoi.toml` from the custom root to
+   `~/.config/chezmoi/chezmoi.toml` if you used the default config selection.
+4. Remove the custom `XDG_CONFIG_HOME` export from shell or session setup, and
+   run `unset XDG_CONFIG_HOME` in the current shell. Review `chezmoi diff ~/.config`
+   before applying. No automatic migration runs.
+
 ### Added
 
 - Fail the environment check when PATH selects an executable for a Go or uv

@@ -1,4 +1,5 @@
 # Canonical inventory of user-owned local overlays.
+# XDG_CONFIG_HOME is fixed at $HOME/.config.
 # Every row is preserved and reported by uninstall.sh.
 # id	example	location	match
 env	env.sh.example	$XDG_CONFIG_HOME/oh-my-devenv/env.sh	exact

@@ -95,12 +95,12 @@
 .
 ├── .chezmoi.toml.tmpl
 ├── .chezmoiscripts/
+│   ├── run_before_00-banner.sh.tmpl
 │   ├── run_once_before_10-bootstrap.sh.tmpl
 │   ├── run_onchange_after_20-install-system-packages.sh.tmpl
 │   ├── run_onchange_after_22-install-desktop-assets.sh.tmpl
 │   ├── run_onchange_after_25-install-shell-assets.sh.tmpl
 │   ├── run_onchange_after_30-install-mise.sh.tmpl
-│   ├── run_after_35-apply-xdg-config.sh.tmpl
 │   ├── run_onchange_after_40-install-runtimes.sh.tmpl
 │   ├── run_onchange_after_50-sync-ecosystem-tools.sh.tmpl
 │   ├── run_onchange_after_55-install-shell-completions.sh.tmpl
@@ -136,11 +136,10 @@
 │       ├── install-uv-tools.sh
 │       ├── local-overlays.sh
 │       ├── run-smoke-tests.sh
-│       ├── uninstall.sh
-│       └── xdg-config.sh
+│       └── uninstall.sh
 ├── dot_local/share/oh-my-devenv/
 │   └── xdg.sh
-└── xdg_config/
+└── dot_config/
     ├── fontconfig/conf.d/
     │   └── 99-oh-my-devenv-maple-mono-nf-cn.conf.tmpl
     ├── ghostty/
@@ -170,12 +169,12 @@
 
 建议按以下顺序执行：
 
-1. `run_once_before_10-bootstrap.sh.tmpl`
-2. `run_onchange_after_20-install-system-packages.sh.tmpl`
-3. `run_onchange_after_22-install-desktop-assets.sh.tmpl`
-4. `run_onchange_after_25-install-shell-assets.sh.tmpl`
-5. `run_onchange_after_30-install-mise.sh.tmpl`
-6. `run_after_35-apply-xdg-config.sh.tmpl`
+1. `run_before_00-banner.sh.tmpl`
+2. `run_once_before_10-bootstrap.sh.tmpl`
+3. `run_onchange_after_20-install-system-packages.sh.tmpl`
+4. `run_onchange_after_22-install-desktop-assets.sh.tmpl`
+5. `run_onchange_after_25-install-shell-assets.sh.tmpl`
+6. `run_onchange_after_30-install-mise.sh.tmpl`
 7. `run_onchange_after_40-install-runtimes.sh.tmpl`
 8. `run_onchange_after_50-sync-ecosystem-tools.sh.tmpl`
 9. `run_onchange_after_55-install-shell-completions.sh.tmpl`
@@ -209,7 +208,7 @@
 - 当 shell 层依赖 zsh 时，通过 `apt` 安装 `zsh`
 - 复用与 macOS 相同的 shell 资产脚本安装 `oh-my-zsh` 与插件
 - 只有 WSL 之外的 Ubuntu 26.04+ 参与已选择的桌面基线：Ghostty 通过 apt 安装，固定并校验过的 Maple Mono 归档安装到用户字体目录
-- 仅在受支持的 Ubuntu 桌面基线保留 Ghostty 未遵守显式字体设置的 Fontconfig 补丁，同时匹配 `prgname=ghostty` 和 `monospace`；其他应用和平台保留自己的字体偏好。其他环境或关闭桌面基线时模板渲染为空，chezmoi 不管理该文件；字体检查验证已注册的字体样式，不要求改变系统等宽字体
+- 仅在受支持的 Ubuntu 桌面基线保留 Ghostty 未遵守显式字体设置的 Fontconfig 补丁，同时匹配 `prgname=ghostty` 和 `monospace`；其他应用和平台保留自己的字体偏好。其他环境或关闭桌面基线时模板渲染为空，chezmoi 删除此前部署的文件；字体检查验证已注册的字体样式，不要求改变系统等宽字体
 
 ### Arch Linux 家族
 
@@ -292,7 +291,7 @@ bat
 
 ### `config.toml.tmpl`
 
-- [`xdg_config/mise/config.toml.tmpl`](../../xdg_config/mise/config.toml.tmpl) 在 `[tools]` 表中固定每个运行时与二进制分发工具的版本
+- [`dot_config/mise/config.toml.tmpl`](../../dot_config/mise/config.toml.tmpl) 在 `[tools]` 表中固定每个运行时与二进制分发工具的版本
 - 运行时、生态工具与补全 hook 都包含它的 hash，因此修改它会重新运行这些 hook
 
 ## 10. helper script 职责
@@ -321,7 +320,7 @@ bat
 ### `install-maple-mono-font`
 
 - 仅由受支持的 Linux 桌面路径（Arch Linux 家族与 Ubuntu）调用
-- 通过 `common.sh` 中的共享加载函数，从 `bootstrap/manifests/desktop/maple-mono-nf-cn.env` 读取字体族、所需 PostScript 字面、固定版本的发布 URL 与 SHA-256 摘要；同一份清单也供环境检查使用，并经由 `xdg-config.sh` 作为模板数据传给 Ghostty 与 Fontconfig 模板
+- 通过 `common.sh` 中的共享加载函数，从 `bootstrap/manifests/desktop/maple-mono-nf-cn.env` 读取字体族、所需 PostScript 字面、固定版本的发布 URL 与 SHA-256 摘要；同一份清单也供环境检查使用，并由 `desktop-font-family` partial 为 Ghostty 与 Fontconfig 模板提供字体族
 - 复用兼容的已有字体安装，避免制造副本
 - 支持断点续传，校验摘要与所需 PostScript 名称，并且只替换带 baseline 所有权标记的目录
 - 安装到 `${XDG_DATA_HOME:-$HOME/.local/share}/fonts` 并刷新 Fontconfig
@@ -360,7 +359,7 @@ bat
 - 按 manifest 中声明的 requirement 安装工具，并通过 `--python` 指定从 `/` 运行 `mise which python` 选中的全局解释器；全局选择包含用户的 `config.local.toml` overlay，不受调用方项目目录的影响
 - 工具环境健康且已安装版本与固定版本一致时跳过，除非设置 `DOTFILES_FORCE_REINSTALL=1`
 - 已安装工具的解释器缺失、与环境记录的 Python 版本不一致，或与 mise 全局选中的 Python 版本（X.Y.Z）不一致时，重建该工具；先卸载再安装，因为 `uv tool install --reinstall` 会保留过期的环境
-- `xdg_config/mise/config.toml.tmpl` 变化时重新执行，因为这些工具运行在 mise 管理的 Python 上；只在用户的 `config.local.toml` overlay 中修改 Python 版本不会重新运行 hook，此时 `check.sh` 会失败
+- `dot_config/mise/config.toml.tmpl` 变化时重新执行，因为这些工具运行在 mise 管理的 Python 上；只在用户的 `config.local.toml` overlay 中修改 Python 版本不会重新运行 hook，此时 `check.sh` 会失败
 - 重复执行必须安全
 
 ### `check.sh` 与 `run_onchange_after_60-check`
@@ -425,7 +424,13 @@ dotfiles 需要保证：
 最终采用的方案是：
 
 - `chezmoi` 负责配置和编排
-- 独立的 chezmoi 子 source 将配置文件直接管理到绝对路径 `XDG_CONFIG_HOME` 下，默认值为 `$HOME/.config`
+- 主 source 通过 `dot_config/` 将 mise、Ghostty 和 Fontconfig 配置管理到 `$HOME/.config`
+- 不设置 `XDG_CONFIG_HOME`，或将其设为精确的 `$HOME/.config`；apply 和 `check.sh` 拒绝其他所有值，包括空值和相对路径
+- 每次 apply 的 banner hook 会在读取 `bootstrap.env`、运行后续 hook 或更新目标前拒绝不受支持的配置根目录；排除脚本的 apply 会跳过这项检查
+- 受管 Shell 在设置了其他值时警告一次，然后使用 `$HOME/.config`；`XDG_DATA_HOME` 行为不变
+- 主 source 将 `~/.config` 管理为 0755，将三个配置文件管理为 0644；下次 apply 可能改变旧配置根目录的权限
+- 桌面模板使用已有的平台 partial，并在停用时渲染为空；主 chezmoi 因此删除此前部署的桌面配置，同时保留用户 overlay
+- 主 source 清单提供首次备份与卸载目标；用户按 `CHANGELOG.md` 手动迁移旧嵌套状态和自定义根目录
 - macOS 用 Homebrew 管系统工具
 - 可选 vendor 应用的 shell 与 SSH 初始化保留在用户自有的本地 overlay 中
 - Ubuntu / Debian 用 `apt` 管系统工具

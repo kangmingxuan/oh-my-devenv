@@ -1,8 +1,8 @@
-{{- if and .desktopBaseline .desktopPlatformSupported (eq .chezmoi.os "linux") (eq (get .chezmoi.osRelease "id") "ubuntu") -}}
+{{- if and .desktopBaseline (eq (includeTemplate "desktop-platform-supported" .) "true") (eq .chezmoi.os "linux") (eq (get .chezmoi.osRelease "id") "ubuntu") -}}
 <?xml version="1.0"?>
 <!DOCTYPE fontconfig SYSTEM "urn:fontconfig:fonts.dtd">
 <fontconfig>
-  <description>Ubuntu Ghostty font discovery workaround for {{ .desktopFontFamily }}</description>
+  <description>Ubuntu Ghostty font discovery workaround for {{ includeTemplate "desktop-font-family" . }}</description>
 
   <!--
     On Ubuntu, Ghostty has been observed falling back to the distribution's
@@ -17,7 +17,7 @@
       <string>monospace</string>
     </test>
     <edit name="family" mode="prepend" binding="strong">
-      <string>{{ .desktopFontFamily }}</string>
+      <string>{{ includeTemplate "desktop-font-family" . }}</string>
     </edit>
   </match>
 </fontconfig>
