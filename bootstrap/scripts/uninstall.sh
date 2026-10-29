@@ -123,16 +123,11 @@ candidates="$(
   printf 'ERROR: chezmoi managed failed.\n' >&2
   exit 1
 }
-candidates+=$'\n'"$("$BASH" "$script_dir/xdg-config.sh" managed)" || {
-  printf 'ERROR: XDG chezmoi managed failed.\n' >&2
-  exit 1
-}
 completion_candidates="$(list_owned_completions)" || {
   printf 'ERROR: shell completion inventory failed.\n' >&2
   exit 1
 }
 candidates+=$'\n'"$completion_candidates"
-candidates+=$'\n'"$(xdg_chezmoi_state_file)"
 
 if [[ -d "$(oh_my_devenv_oh_my_zsh_dir)" ]]; then
   candidates+=$'\n'"$(oh_my_devenv_oh_my_zsh_dir)"

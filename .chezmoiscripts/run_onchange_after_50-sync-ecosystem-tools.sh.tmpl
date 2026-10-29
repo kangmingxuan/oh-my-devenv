@@ -6,7 +6,7 @@
 # Go installer hash: {{ include "bootstrap/scripts/install-go-tools.sh" | sha256sum }}
 # uv installer hash: {{ include "bootstrap/scripts/install-uv-tools.sh" | sha256sum }}
 # uv tools run on the mise-managed Python, so a Python change must rebuild them.
-# mise config hash: {{ include "xdg_config/mise/config.toml.tmpl" | sha256sum }}
+# mise config hash: {{ include "dot_config/mise/config.toml.tmpl" | sha256sum }}
 
 set -euo pipefail
 

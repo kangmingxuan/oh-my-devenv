@@ -2,7 +2,7 @@
 
 ## Project Structure & Module Organization
 
-The source targets macOS, Ubuntu/Debian, and Arch Linux. Root `dot_*`, `private_dot_*`, and `xdg_config/` paths map into `$HOME`. Go templates use `.tmpl`; shared partials are in `.chezmoitemplates/`. Ordered hooks are in `.chezmoiscripts/`, reusable Bash in `bootstrap/scripts/`, and inventories in `bootstrap/manifests/`. Documentation is in `docs/`; CI is in `.github/workflows/`.
+The source targets macOS, Ubuntu/Debian, and Arch Linux. Root `dot_*`, `private_dot_*`, and `dot_config/` paths map into `$HOME`. Go templates use `.tmpl`; shared partials are in `.chezmoitemplates/`. Ordered hooks are in `.chezmoiscripts/`, reusable Bash in `bootstrap/scripts/`, and inventories in `bootstrap/manifests/`. Documentation is in `docs/`; CI is in `.github/workflows/`.
 
 Follow `CONTRIBUTING.md` for contribution scope, workflow, and secret hygiene. Keep machine-specific values in the extension points documented by `docs/local-overlay-examples/README.md`. List repository-only metadata in `.chezmoiignore` so it is not deployed into `$HOME`.
 
@@ -15,7 +15,7 @@ bash bootstrap/scripts/run-smoke-tests.sh
 pre-commit run --all-files
 ```
 
-The smoke suite renders templates, checks behavior and contracts, exercises selected installers with stubs, applies the nested XDG source under temporary roots, and runs ShellCheck. Its existing fixture-only operations are allowed by the canonical [local validation policy](CONTRIBUTING.md#local-validation). Do not run `chezmoi apply`, `chezmoi update`, `chezmoi init --apply`, or bootstrap installers against the live home directory or installed toolchain unless the user explicitly requests that mutation.
+The smoke suite renders templates, checks behavior and contracts, exercises selected installers with stubs, applies main-source configuration under temporary homes, and runs ShellCheck. Its existing fixture-only operations are allowed by the canonical [local validation policy](CONTRIBUTING.md#local-validation). Do not run `chezmoi apply`, `chezmoi update`, `chezmoi init --apply`, or bootstrap installers against the live home directory or installed toolchain unless the user explicitly requests that mutation.
 
 `bash bootstrap/scripts/check.sh` is the user-facing environment check. Keep its validation logic in `bootstrap/scripts/check.sh`. Hook 60 only delegates to that script and prints apply-time next steps. Do not use the standalone check as a substitute for source-level smoke tests.
 

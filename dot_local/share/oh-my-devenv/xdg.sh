@@ -3,19 +3,11 @@
 # This file is sourced by Bash and Zsh, so keep it portable between both.
 
 oh_my_devenv_resolve_xdg_config_home() {
-  case "${XDG_CONFIG_HOME:-}" in
-    "")
-      printf '%s\n' "$HOME/.config"
-      ;;
-    /*)
-      printf '%s\n' "$XDG_CONFIG_HOME"
-      ;;
-    *)
-      printf 'WARNING: ignoring relative XDG_CONFIG_HOME=%s; using %s/.config\n' \
-        "$XDG_CONFIG_HOME" "$HOME" >&2
-      printf '%s\n' "$HOME/.config"
-      ;;
-  esac
+  if [ "${XDG_CONFIG_HOME+x}" = x ] && [ "$XDG_CONFIG_HOME" != "$HOME/.config" ]; then
+    printf "WARNING: ignoring unsupported XDG_CONFIG_HOME='%s'; using %s/.config\n" \
+      "$XDG_CONFIG_HOME" "$HOME" >&2
+  fi
+  printf '%s\n' "$HOME/.config"
 }
 
 oh_my_devenv_setup_xdg_config_home() {
@@ -79,8 +71,8 @@ oh_my_devenv_source_env_file() {
   if [[ "${XDG_CONFIG_HOME:-}" != "$expected_xdg_config_home" ]]; then
     XDG_CONFIG_HOME="$expected_xdg_config_home"
     export XDG_CONFIG_HOME
-    printf 'ERROR: %s must not change XDG_CONFIG_HOME; export it before starting the shell or chezmoi\n' \
-      "$env_file" >&2
+    printf 'ERROR: %s must not change XDG_CONFIG_HOME; only %s/.config is supported\n' \
+      "$env_file" "$HOME" >&2
     return 1
   fi
 

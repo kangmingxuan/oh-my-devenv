@@ -24,7 +24,6 @@ source "$script_dir/common.sh"
 
 work_dir="$(mktemp -d)"
 default_config_root="$HOME/.config"
-xdg_config_root="${XDG_CONFIG_HOME:-$default_config_root}"
 
 step() {
   printf '\n==> %s\n' "$*"
@@ -48,7 +47,7 @@ printf '%s\n' '# pre-existing zshrc' >"$HOME/.zshrc"
 printf '%s\n' 'unmanaged_sentinel = true' >"$default_config_root/mise/config.toml"
 
 step "Render the chezmoi config at its default location"
-config_file="$xdg_config_root/chezmoi/chezmoi.toml"
+config_file="$default_config_root/chezmoi/chezmoi.toml"
 mkdir -p "$(dirname "$config_file")"
 cat >"$work_dir/data.toml" <<EOF
 name = "CI Runner"
@@ -68,14 +67,8 @@ bash "$script_dir/check.sh"
 step "Check the first-run backup and unmanaged files"
 backup_root="$(first_run_backup_root)"
 grep -Fxq '# pre-existing zshrc' "$backup_root"/*"$HOME/.zshrc"
-if [[ "$xdg_config_root" == "$default_config_root" ]]; then
-  # The managed mise config replaced the seeded file after the backup.
-  grep -Fxq 'unmanaged_sentinel = true' "$backup_root"/*"$default_config_root/mise/config.toml"
-else
-  # A custom XDG root leaves the default location unmanaged.
-  grep -Fxq 'unmanaged_sentinel = true' "$default_config_root/mise/config.toml"
-  test -f "$xdg_config_root/mise/config.toml"
-fi
+# The managed mise config replaced the seeded file after the backup.
+grep -Fxq 'unmanaged_sentinel = true' "$backup_root"/*"$default_config_root/mise/config.toml"
 
 step "Reapply without changes"
 apply_baseline "$work_dir/apply-again.log"

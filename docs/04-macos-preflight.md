@@ -98,20 +98,20 @@ which may also include the supported machine-local overlay and project
 configuration:
 
 ```bash
-bash bootstrap/scripts/xdg-config.sh status  # empty means the managed files match this checkout
+chezmoi status ~/.config  # empty means the managed files match this checkout
 mise config ls   # active managed, local-overlay, and project config sources
 mise current     # effective tool selection in this directory
 mise list        # installed versions, per tool
 mise doctor      # mise's own self-check; warnings are usually cosmetic, errors are not
 ```
 
-Expected outcome: `xdg-config.sh status` prints nothing, confirming that the
+Expected outcome: `chezmoi status ~/.config` prints nothing, confirming that the
 managed baseline deployed from this checkout is current. `mise config ls`
 identifies the sources that contribute to the effective configuration, and
 `mise current` reports the expected effective selection for those sources.
 Machine-local or project configuration may add tools or override baseline
 versions, so exact equality with
-[`xdg_config/mise/config.toml.tmpl`](../xdg_config/mise/config.toml.tmpl) is not
+[`dot_config/mise/config.toml.tmpl`](../dot_config/mise/config.toml.tmpl) is not
 required. Record the active sources, selected versions, and any unexplained
 deviation. This is evidence for the effective overlay-enabled setup; it does
 not prove that every baseline-only version was installed. When baseline-only

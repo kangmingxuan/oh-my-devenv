@@ -70,7 +70,7 @@ works around an observed Ubuntu issue where Ghostty falls back to the distro's
 monospace font despite its explicit `font-family` setting. It applies only to
 Ghostty's `monospace` requests (`prgname=ghostty`); other applications keep their
 font preferences. On other platforms, or with `desktopBaseline` disabled, the
-template renders empty and chezmoi does not manage the file.
+template renders empty and chezmoi removes a previously deployed file.
 
 ---
 
@@ -78,17 +78,22 @@ template renders empty and chezmoi does not manage the file.
 
 Bootstrap is split into ordered hooks under `.chezmoiscripts/`:
 
-0. **`run_before_00-*`** — prints the startup banner (hide it with `NO_LOGO=1`).
+0. **`run_before_00-*`** — rejects unsupported `XDG_CONFIG_HOME` before file updates, then prints the startup banner (hide it with `NO_LOGO=1`).
 1. **`run_once_before_10-*`** — one-time prerequisites and, if needed, **backup** of any pre-existing managed files before they are overwritten.
 2. **`run_onchange_after_20-*`** — shared system packages (`apt` on Debian / Ubuntu, `pacman` on Arch Linux, Homebrew on macOS).
 3. **`run_onchange_after_22-*`** — when selected, installs the platform desktop bundle: Ghostty and Maple Mono NF CN everywhere supported, plus OrbStack on macOS.
 4. **`run_onchange_after_25-*`** — shell assets (oh-my-zsh and plugins from the manifest).
 5. **`run_onchange_after_30-*`** — install mise itself.
-6. **`run_after_35-*`** — apply the dedicated `xdg_config/` chezmoi source directly under `$XDG_CONFIG_HOME`.
-7. **`run_onchange_after_40-*`** — install language runtimes via mise.
-8. **`run_onchange_after_50-*`** — sync ecosystem tools (`go install`, `uv tool`, etc.).
-9. **`run_onchange_after_55-*`** — generate official Bash / Zsh completion assets in standard user data directories.
-10. **`run_onchange_after_60-*`** — run the shared environment check and print a short “welcome” summary.
+6. **`run_onchange_after_40-*`** — install language runtimes via mise.
+7. **`run_onchange_after_50-*`** — sync ecosystem tools (`go install`, `uv tool`, etc.).
+8. **`run_onchange_after_55-*`** — generate official Bash / Zsh completion assets in standard user data directories.
+9. **`run_onchange_after_60-*`** — run the shared environment check and print a short “welcome” summary.
+
+The main source deploys configuration from `dot_config/` to `$HOME/.config`.
+Leave `XDG_CONFIG_HOME` unset or set it to exactly `$HOME/.config`. Apply and
+`check.sh` reject other values, including empty and relative values. Managed
+shells warn once and use `$HOME/.config`. Local overlays under the config root
+use this same root.
 
 The generated chezmoi config excludes scripts from `chezmoi status`, so routine hook runs do not make a clean setup look locally modified.
 

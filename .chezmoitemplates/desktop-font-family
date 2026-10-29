@@ -1,0 +1,6 @@
+{{- $manifest := include "bootstrap/manifests/desktop/maple-mono-nf-cn.env" -}}
+{{- $assignments := regexFindAll `(?m)^MAPLE_MONO_FAMILY="[A-Za-z0-9][A-Za-z0-9 -]*"$` $manifest -1 -}}
+{{- if ne (len $assignments) 1 -}}
+{{-   fail "desktop font manifest must declare one quoted MAPLE_MONO_FAMILY" -}}
+{{- end -}}
+{{- index $assignments 0 | trimPrefix `MAPLE_MONO_FAMILY="` | trimSuffix `"` -}}

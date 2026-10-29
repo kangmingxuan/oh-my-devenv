@@ -20,7 +20,7 @@ oh-my-devenv 是一套主观鲜明、声明式的开发环境。它公开的是�
 - **现代 CLI 工具箱** —— ripgrep、fd、bat、fzf、jq、direnv、tmux、shellcheck、shfmt 等。
 - **可选桌面基线** —— 一个全有或全无的平台包：受支持的工作站安装 Ghostty 与 Maple Mono NF CN，macOS 额外安装 OrbStack，Ubuntu 26.04+ 另有仅针对 Ghostty 的 Fontconfig 兼容补丁。
 - **安全的首次运行** —— 自动备份已存在的受管 dotfiles，并仅在首次询问 Git 身份和桌面基线选择。
-- **用本地 overlay 保存私有事实** —— 把凭据、私有主机和机器专属值放进文档明确的用户配置槽位。项目自有槽位统一收敛到 `$XDG_CONFIG_HOME/oh-my-devenv/`，配置根目录默认是 `~/.config`。
+- **用本地 overlay 保存私有事实** —— 把凭据、私有主机和机器专属值放进文档明确的用户配置槽位。项目自有槽位统一收敛到 `~/.config/oh-my-devenv/`，配置根目录固定为 `~/.config`。
 - **刻意保持主观** —— 仓库只承载一套当前设计，不提供兼容配置档案，也不追求折中式的中性默认值。
 
 ## 工作原理
@@ -31,7 +31,7 @@ flowchart TD
     B --> C["系统软件包<br/>Homebrew / apt / pacman"]
     B --> D["可选桌面基线<br/>macOS 还包含 OrbStack"]
     B --> E["Shell 资产<br/>oh-my-zsh + 插件"]
-    B --> X["受管配置<br/>$XDG_CONFIG_HOME"]
+    B --> X["受管配置<br/>~/.config"]
     B --> F["mise 运行时<br/>Go · Node · Python"]
     B --> G["生态工具<br/>go install · uv tool"]
     C --> H["环境校验"]
@@ -92,11 +92,11 @@ command -v git curl chezmoi
 
 使用下面的仓库 URL。
 
-基线通过 `XDG_CONFIG_HOME` 定位受管理的 mise、Ghostty、Fontconfig 配置，以及 `oh-my-devenv`、mise 和 Ghostty overlay；默认值是 `$HOME/.config`。如需使用其他配置根目录，请在运行 `chezmoi` 前导出绝对路径；本地环境文件不得设置或修改它：
-
-```bash
-export XDG_CONFIG_HOME="$HOME/.config-work"
-```
+主 chezmoi source 将 mise、Ghostty 和 Fontconfig 配置管理到 `$HOME/.config`。
+位于配置根目录下的本地 overlay 也使用同一固定根目录。请不设置 `XDG_CONFIG_HOME`，或将其设为精确的
+`$HOME/.config`。Apply 和 `check.sh` 会拒绝其他值，包括空值和相对路径。
+受管 Shell 会警告一次，然后使用 `$HOME/.config`。更新已有安装前，请先完成
+[破坏性变更迁移步骤](CHANGELOG.md#unreleased)。
 
 **SSH**
 

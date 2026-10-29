@@ -2,6 +2,14 @@
 
 set -euo pipefail
 
+# Check the inherited value before common.sh resolves shell directories or
+# reads bootstrap.env. A failed before script stops apply before file updates.
+if [[ "${XDG_CONFIG_HOME+x}" == x && "${XDG_CONFIG_HOME-}" != "$HOME/.config" ]]; then
+  printf "ERROR: unsupported XDG_CONFIG_HOME='%s'; unset it or set it to %s\n" \
+    "$XDG_CONFIG_HOME" "$HOME/.config" >&2
+  exit 1
+fi
+
 bootstrap_dir='{{ joinPath .chezmoi.sourceDir "bootstrap" }}'
 scripts_dir="$bootstrap_dir/scripts"
 

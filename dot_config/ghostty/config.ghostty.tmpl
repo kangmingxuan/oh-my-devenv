@@ -1,10 +1,10 @@
-{{- if and .desktopBaseline .desktopPlatformSupported -}}
+{{- if and .desktopBaseline (eq (includeTemplate "desktop-platform-supported" .) "true") -}}
 # Shared Ghostty desktop baseline. Machine-specific overrides belong in
 # config.local.ghostty, which is loaded last when present.
 
 # Appearance
 theme = Molokai
-font-family = {{ .desktopFontFamily }}
+font-family = {{ includeTemplate "desktop-font-family" . }}
 font-size = 14
 font-feature = zero
 background-opacity = 1.0

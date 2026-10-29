@@ -49,7 +49,7 @@ fails, or an unresolved concern needs more evidence.
 | Change | Required local validation |
 | --- | --- |
 | Prose, links, or comments only, excluding documentation fixtures consumed by smoke tests | Targeted review of the changed text, links, and formatting. Smoke tests and `pre-commit` may be reported as not applicable. Documentation that discusses macOS does not by itself require a real macOS install. |
-| Bootstrap scripts, chezmoi templates, manifests, deployment or ignore boundaries, or documentation fixtures consumed by smoke tests (the local-overlay examples) | Run `bash bootstrap/scripts/run-smoke-tests.sh`. The suite renders and syntax-checks templates, checks contracts and deployment boundaries, exercises the shared checker and selected installers with stubs, tests local font archives and rollback behavior, applies the nested XDG source under temporary roots, and runs ShellCheck. It does not install system packages or runtimes, run a complete bootstrap, or apply to the real home directory. |
+| Bootstrap scripts, chezmoi templates, manifests, deployment or ignore boundaries, or documentation fixtures consumed by smoke tests (the local-overlay examples) | Run `bash bootstrap/scripts/run-smoke-tests.sh`. The suite renders and syntax-checks templates, checks contracts and deployment boundaries, exercises the shared checker and selected installers with stubs, tests local font archives and rollback behavior, applies main-source configuration under temporary homes, and runs ShellCheck. It does not install system packages or runtimes, run a complete bootstrap, or apply to the real home directory. |
 | Executable or configuration behavior, including workflow, pre-commit, or scan configuration | Run `pre-commit run --all-files`. The ShellCheck hook covers `bootstrap/scripts/*.sh`; the gitleaks hook scans staged changes only, so a pass before staging does not cover the unstaged diff. CI performs the separate repository-wide secret scan. Also run smoke tests when the change falls in the preceding row. |
 | A concrete macOS installation concern that `apply-macos` cannot cover, such as specific hardware, another macOS or Xcode CLT version, or existing-machine state and overlays | Complete the lighter checks and require the relevant CI jobs to pass at the reviewed SHA. Then follow the manual [macOS preflight](docs/04-macos-preflight.md). Routine macOS package, installer, runtime, activation, or post-install-check changes covered by `apply-macos` do not trigger manual preflight. Pure prose, links, comments, and render-only configuration changes do not require the full preflight. |
 
@@ -89,7 +89,7 @@ PATH="/tmp/system-bash:$PATH" bash bootstrap/scripts/run-smoke-tests.sh
 The font archive fixtures require `zip` and `unzip`. Smoke CI installs both on
 Ubuntu and Arch. macOS provides both tools.
 
-- Shell and application templates (`dot_*.tmpl`, `dot_*/env.*.tmpl`, and `xdg_config/**/*.tmpl`) must render on macOS and Linux, with and without optional integrations.
+- Shell and application templates (`dot_*.tmpl`, `dot_*/env.*.tmpl`, and `dot_config/**/*.tmpl`) must render on macOS and Linux, with and without optional integrations.
 - The smoke suite renders templates with `chezmoi execute-template`, syntax-checks the output with the corresponding shell, and exercises selected behavior in temporary fixture directories.
 - Every hook under `.chezmoiscripts/` is rendered for each supported platform automatically. When you add another template, add it to `bootstrap/scripts/run-smoke-tests.sh` so rendering and syntax checks are enforced on every change.
 - Tests verify parsing, rendering, syntax, permissions, management boundaries, and user-visible behavior. Do not duplicate literal configuration values in test code; the configuration file is their source of truth.
@@ -109,7 +109,7 @@ The installer scripts and `bootstrap/scripts/check.sh` consume the following sou
 - `bootstrap/manifests/desktop/maple-mono-nf-cn.env`
 - `bootstrap/manifests/ecosystem/go-tools.txt`
 - `bootstrap/manifests/ecosystem/uv-tools.txt`
-- `xdg_config/mise/config.toml.tmpl` (validated natively by `mise`)
+- `dot_config/mise/config.toml.tmpl` (validated natively by `mise`)
 
 If you add, rename, or remove an entry, confirm that:
 

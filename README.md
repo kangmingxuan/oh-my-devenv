@@ -20,7 +20,7 @@ oh-my-devenv is an opinionated, declarative development environment. It publishe
 - **Modern CLI toolkit** — ripgrep, fd, bat, fzf, jq, direnv, tmux, shellcheck, shfmt, and more.
 - **Opt-in desktop baseline** — one all-or-nothing platform bundle: Ghostty and Maple Mono NF CN on supported workstations, OrbStack on macOS, and a Ghostty-specific Fontconfig workaround on Ubuntu 26.04+.
 - **Safe first run** — backs up any existing managed dotfiles and prompts once for your Git identity and desktop-baseline choice.
-- **Local overlays for private facts** — keep credentials, private hosts, and machine-only values in the documented user-owned config slots. The project-owned slots converge under `$XDG_CONFIG_HOME/oh-my-devenv/`, whose default root is `~/.config`.
+- **Local overlays for private facts** — keep credentials, private hosts, and machine-only values in the documented user-owned config slots. The project-owned slots use `~/.config/oh-my-devenv/` under the fixed config root `~/.config`.
 - **Opinionated by design** — the repository carries one current design, not compatibility profiles or neutral-by-committee defaults.
 
 ## How it works
@@ -31,7 +31,7 @@ flowchart TD
     B --> C["System packages<br/>Homebrew / apt / pacman"]
     B --> D["Optional desktop baseline<br/>macOS also includes OrbStack"]
     B --> E["Shell assets<br/>oh-my-zsh + plugins"]
-    B --> X["Managed config<br/>$XDG_CONFIG_HOME"]
+    B --> X["Managed config<br/>~/.config"]
     B --> F["Runtimes via mise<br/>Go · Node · Python"]
     B --> G["Ecosystem tools<br/>go install · uv tool"]
     C --> H["Environment check"]
@@ -92,14 +92,12 @@ with existing databases; it does not refresh databases or upgrade the whole syst
 
 Use the repository URL below.
 
-The baseline honors `XDG_CONFIG_HOME` for managed mise, Ghostty, and Fontconfig
-files plus the `oh-my-devenv`, mise, and Ghostty overlays. It defaults to
-`$HOME/.config`. To use a different config root, export an absolute path before
-running `chezmoi`; local env files must not set or change it:
-
-```bash
-export XDG_CONFIG_HOME="$HOME/.config-work"
-```
+The main chezmoi source manages mise, Ghostty, and Fontconfig files under
+`$HOME/.config`. Local overlays under the config root use the same fixed root. Leave `XDG_CONFIG_HOME`
+unset or set it to exactly `$HOME/.config`. Apply and `check.sh` reject any
+other value, including an empty or relative value. Managed shells warn once
+and use `$HOME/.config` instead. See the [breaking-change migration steps](CHANGELOG.md#unreleased)
+before updating an existing installation.
 
 **SSH**
 

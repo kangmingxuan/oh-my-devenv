@@ -7,6 +7,12 @@ if [[ $# -gt 1 ]]; then
 fi
 config_file="${1:-}"
 
+if [[ "${XDG_CONFIG_HOME+x}" == x && "${XDG_CONFIG_HOME-}" != "$HOME/.config" ]]; then
+  printf "ERROR: unsupported XDG_CONFIG_HOME='%s'; unset it or set it to %s\n" \
+    "$XDG_CONFIG_HOME" "$HOME/.config" >&2
+  exit 1
+fi
+
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "$script_dir/../.." && pwd)"
 scripts_dir="$script_dir"

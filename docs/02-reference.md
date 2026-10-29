@@ -16,24 +16,25 @@ installers, and shared bootstrap code, so routine re-applies are cheap.
 
 | Order | Hook | What it does |
 |-------|------|--------------|
-| 0 | `run_before_00-banner` | Prints the startup banner. Suppress with `NO_LOGO=1`. |
+| 0 | `run_before_00-banner` | Rejects unsupported `XDG_CONFIG_HOME` before target updates, then prints the startup banner. Suppress the banner with `NO_LOGO=1`. |
 | 1 | `run_once_before_10-bootstrap` | One-time setup: backs up any pre-existing managed files and ensures minimum prerequisites. |
 | 2 | `run_onchange_after_20-install-system-packages` | Installs shared system packages — `apt` on Debian / Ubuntu, `pacman` on Arch Linux and Homebrew on macOS. |
 | 3 | `run_onchange_after_22-install-desktop-assets` | When selected, installs the platform desktop bundle: Ghostty and Maple Mono NF CN everywhere supported, plus OrbStack on macOS. |
 | 4 | `run_onchange_after_25-install-shell-assets` | Installs oh-my-zsh and the plugins from the shell manifest. |
 | 5 | `run_onchange_after_30-install-mise` | Installs [mise](https://mise.jdx.dev/) (Homebrew on macOS, installer script on Linux). |
-| 6 | `run_after_35-apply-xdg-config` | Applies the dedicated `xdg_config/` chezmoi source directly under `$XDG_CONFIG_HOME`. |
-| 7 | `run_onchange_after_40-install-runtimes` | Runs `mise install` to fetch the pinned runtimes. |
-| 8 | `run_onchange_after_50-sync-ecosystem-tools` | Installs the Go tools (`go install`) and Python tools (`uv tool`). |
-| 9 | `run_onchange_after_55-install-shell-completions` | Generates official CLI completion assets in the standard Bash and Zsh user data directories. |
-| 10 | `run_onchange_after_60-check` | Change-triggered wrapper around `bootstrap/scripts/check.sh`. It passes the active chezmoi config to the shared check and prints the apply-time next-steps block. The shared check prints **`All checks passed.`** and a core-tool version list on success. |
+| 6 | `run_onchange_after_40-install-runtimes` | Runs `mise install` to fetch the pinned runtimes. |
+| 7 | `run_onchange_after_50-sync-ecosystem-tools` | Installs the Go tools (`go install`) and Python tools (`uv tool`). |
+| 8 | `run_onchange_after_55-install-shell-completions` | Generates official CLI completion assets in the standard Bash and Zsh user data directories. |
+| 9 | `run_onchange_after_60-check` | Change-triggered wrapper around `bootstrap/scripts/check.sh`. It passes the active chezmoi config to the shared check and prints the apply-time next-steps block. The shared check prints **`All checks passed.`** and a core-tool version list on success. |
 
-The first-run backup copies every pre-existing target of the main and XDG
-sources to the same absolute path beneath
+The main source manages configuration through `dot_config/` at `$HOME/.config`.
+It manages the config directory as 0755 and the three config files as 0644.
+The first-run backup copies pre-existing main-source file and symlink targets,
+skipping dangling symlinks, to the same
+absolute path beneath
 `${XDG_STATE_HOME:-$HOME/.local/state}/chezmoi-first-run-backup/<timestamp>/`.
-The nested XDG source uses an independent chezmoi state file at
-`${XDG_STATE_HOME:-$HOME/.local/state}/chezmoi/oh-my-devenv-xdg.boltdb`, so it
-can run safely from inside the parent apply hook.
+Ghostty and Fontconfig templates render empty when inactive. chezmoi then removes
+previously deployed files. Local overlays remain user-owned.
 
 ## What gets installed
 
@@ -49,7 +50,7 @@ is the source of truth for exact packages and pinned versions.
 | Desktop packages | `pacman` (Arch Linux outside WSL) | [`bootstrap/manifests/desktop/pacman-packages.txt`](../bootstrap/manifests/desktop/pacman-packages.txt) | Ghostty and Fontconfig |
 | Desktop terminal | `apt` + managed config (Ubuntu 26.04+) | [`bootstrap/manifests/desktop/apt-packages.txt`](../bootstrap/manifests/desktop/apt-packages.txt) | Ghostty, Fontconfig support, and a Ghostty-specific font-discovery workaround |
 | Desktop font | verified archive (Arch Linux / Ubuntu 26.04+) | [`bootstrap/manifests/desktop/maple-mono-nf-cn.env`](../bootstrap/manifests/desktop/maple-mono-nf-cn.env) | the font family and required faces shared with the check and the Ghostty/Fontconfig templates, plus the pinned Linux release installed under the user data directory |
-| Runtimes and binary tools | [mise](https://mise.jdx.dev/) | [`xdg_config/mise/config.toml.tmpl`](../xdg_config/mise/config.toml.tmpl) | go, node, python, golangci-lint, uv, usage (versions pinned here) |
+| Runtimes and binary tools | [mise](https://mise.jdx.dev/) | [`dot_config/mise/config.toml.tmpl`](../dot_config/mise/config.toml.tmpl) | go, node, python, golangci-lint, uv, usage (versions pinned here) |
 | Go tools | `go install` | [`bootstrap/manifests/ecosystem/go-tools.txt`](../bootstrap/manifests/ecosystem/go-tools.txt) | gopls, dlv |
 | Python tools | `uv tool` | [`bootstrap/manifests/ecosystem/uv-tools.txt`](../bootstrap/manifests/ecosystem/uv-tools.txt) | ruff, basedpyright, pre-commit |
 | Shell assets | git clone | [`bootstrap/manifests/shell/oh-my-zsh-plugins.txt`](../bootstrap/manifests/shell/oh-my-zsh-plugins.txt) | oh-my-zsh + zsh-autosuggestions, zsh-completions, zsh-syntax-highlighting |
@@ -92,9 +93,9 @@ bash "$(chezmoi source-path)/bootstrap/scripts/check.sh"
 # Select an explicit chezmoi config for the environment check
 bash "$(chezmoi source-path)/bootstrap/scripts/check.sh" /path/to/chezmoi.toml
 
-# Inspect the independently managed XDG config source
-bash bootstrap/scripts/xdg-config.sh status
-bash bootstrap/scripts/xdg-config.sh diff
+# Inspect managed configuration through the main source
+chezmoi status ~/.config
+chezmoi diff ~/.config
 
 # First-time bootstrap on a clean machine
 chezmoi init --apply https://github.com/kangmingxuan/oh-my-devenv.git
@@ -140,7 +141,7 @@ For a one-off setting not persisted in `bootstrap.env`, export it before
 
 | Variable | Default | Effect |
 |----------|---------|--------|
-| `XDG_CONFIG_HOME` | `$HOME/.config` | Absolute destination for managed mise, Ghostty, and Fontconfig files plus the `oh-my-devenv` and Ghostty overlays. Export a custom value before starting the shell or running `chezmoi`; local env files must not change it. Relative values are ignored with a warning. |
+| `XDG_CONFIG_HOME` | `$HOME/.config` | Fixed root for managed configuration and the local overlays under it. Leave it unset or set it to exactly `$HOME/.config`. Apply and `check.sh` reject all other values, including empty and relative values. Managed shells warn once and use `$HOME/.config`. Local env files must not change it. |
 | `XDG_DATA_HOME` | `$HOME/.local/share` | Absolute root for generated Bash and Zsh completion assets, the default mise data directory, and other user data. Export it before starting the shell or running `chezmoi`; local env files must not change it. Relative values are ignored with a warning. |
 
 ### Shell completion contract

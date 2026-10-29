@@ -2,7 +2,7 @@
 {{ includeTemplate "common-bootstrap-hashes" . -}}
 # completion installer hash: {{ include "bootstrap/scripts/install-shell-completions.sh" | sha256sum }}
 # completion manifest hash: {{ include "bootstrap/manifests/shell/completions.txt" | sha256sum }}
-# mise config hash: {{ include "xdg_config/mise/config.toml.tmpl" | sha256sum }}
+# mise config hash: {{ include "dot_config/mise/config.toml.tmpl" | sha256sum }}
 # go-tools.txt hash: {{ include "bootstrap/manifests/ecosystem/go-tools.txt" | sha256sum }}
 # uv-tools.txt hash: {{ include "bootstrap/manifests/ecosystem/uv-tools.txt" | sha256sum }}
 

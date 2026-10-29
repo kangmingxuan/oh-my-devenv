@@ -9,7 +9,12 @@ tmp_dir="$(mktemp -d)"
 trap 'rm -rf "$tmp_dir"' EXIT
 
 # Smoke tests must not inherit machine-local bootstrap settings.
-export XDG_CONFIG_HOME="$tmp_dir/xdg-config-home-empty"
+export HOME="$tmp_dir/home"
+export XDG_CONFIG_HOME="$HOME/.config"
+export XDG_DATA_HOME="$HOME/.local/share"
+export XDG_STATE_HOME="$HOME/.local/state"
+export XDG_CACHE_HOME="$HOME/.cache"
+mkdir -p "$HOME"
 
 # shellcheck disable=SC1091
 source "$script_dir/common.sh"
@@ -101,14 +106,12 @@ expect_failure() {
   fi
 }
 
-# Override data for synthetic desktop renders. The font family always comes
-# from the desktop manifest, matching what xdg-config.sh injects at apply time.
+# Override only user data and the native platform facts. Templates obtain
+# desktop support and the font family from the main source.
 desktop_override_data() {
-  local platform_supported="$1"
-  local chezmoi_data="$2"
+  local chezmoi_data="$1"
 
-  printf '{"desktopBaseline":true,"desktopPlatformSupported":%s,"desktopFontFamily":"%s","chezmoi":%s}' \
-    "$platform_supported" "$MAPLE_MONO_FAMILY" "$chezmoi_data"
+  printf '{"desktopBaseline":true,"chezmoi":%s}' "$chezmoi_data"
 }
 
 # Run the completion installer against stubbed generators and a fixture data
@@ -209,17 +212,7 @@ require_command git
 require_command zsh
 require_command sh
 
-desktop_platform_supported_data=false
-if [[ "$(chezmoi --source="$repo_root" execute-template \
-  '{{ includeTemplate "desktop-platform-supported" . }}')" == "true" ]]; then
-  desktop_platform_supported_data=true
-fi
-
-# Stand-in chezmoi data for template rendering. `name`, `email`, and
-# `desktopBaseline` are the keys `.chezmoi.toml.tmpl` stores after
-# `chezmoi init`; the init-template check reads them back instead of prompting.
-# `desktopPlatformSupported` and `desktopFontFamily` are what xdg-config.sh
-# injects into the nested XDG source.
+# Stand-in persisted user data for rendering without an initialized machine.
 desktop_font_manifest="$repo_root/bootstrap/manifests/desktop/maple-mono-nf-cn.env"
 desktop_font_manifest_load "$desktop_font_manifest"
 tmp_data_file="$tmp_dir/chezmoi-data.toml"
@@ -227,8 +220,6 @@ cat >"$tmp_data_file" <<EOF
 name = "Smoke Tests"
 email = "smoke@example.com"
 desktopBaseline = true
-desktopPlatformSupported = $desktop_platform_supported_data
-desktopFontFamily = "$MAPLE_MONO_FAMILY"
 EOF
 
 # Synthetic chezmoi platform data for boundary renders. --override-data merges
@@ -256,6 +247,52 @@ xdg_source_literal='source "$HOME/.local/share/oh-my-devenv/xdg.sh"'
 
 log_step "🧪" "Running local smoke tests..."
 
+log_step "🛑" "Checking unsupported XDG_CONFIG_HOME rejection..."
+render_template .chezmoiscripts/run_before_00-banner.sh.tmpl "$tmp_dir/xdg-banner.sh"
+for unsupported_xdg in "$tmp_dir/custom-config" "relative/config" "" "$tmp_dir/home/.config/"; do
+  for xdg_entrypoint in "$tmp_dir/xdg-banner.sh" "$script_dir/check.sh"; do
+    expect_failure "$tmp_dir/unsupported-xdg.err" env -i PATH="$PATH" HOME="$tmp_dir/home" \
+      XDG_CONFIG_HOME="$unsupported_xdg" bash "$xdg_entrypoint"
+    assert_file_contains "$tmp_dir/unsupported-xdg.err" "unsupported XDG_CONFIG_HOME='$unsupported_xdg'"
+    assert_file_contains "$tmp_dir/unsupported-xdg.err" "$tmp_dir/home/.config"
+  done
+done
+
+# Exercise chezmoi's actual before-script boundary, including a later hook.
+# All files, state, and script outputs remain under the fixture HOME.
+banner_source="$tmp_dir/banner-source"
+banner_home="$tmp_dir/banner-home"
+banner_config="$tmp_dir/banner-config.toml"
+mkdir -p "$banner_source/.chezmoiscripts" "$banner_home"
+: >"$banner_config"
+cp "$tmp_dir/xdg-banner.sh" "$banner_source/.chezmoiscripts/run_before_00-banner.sh"
+printf 'updated\n' >"$banner_source/dot_existing"
+printf 'created\n' >"$banner_source/dot_new"
+# shellcheck disable=SC2016
+printf '#!/bin/bash\nprintf ran >"$HOME/later-hook"\n' \
+  >"$banner_source/.chezmoiscripts/run_before_10-marker.sh"
+for unsupported_xdg in "$tmp_dir/custom-config" "relative/config" "" "$banner_home/.config/"; do
+  printf 'original\n' >"$banner_home/.existing"
+  expect_failure "$tmp_dir/banner-apply.err" env -i PATH="$PATH" HOME="$banner_home" \
+    XDG_CONFIG_HOME="$unsupported_xdg" chezmoi --config="$banner_config" \
+    --source="$banner_source" --destination="$banner_home" \
+    --persistent-state="$tmp_dir/banner-state.boltdb" apply --force
+  assert_file_contains "$tmp_dir/banner-apply.err" "unsupported XDG_CONFIG_HOME='$unsupported_xdg'"
+  [[ "$(cat "$banner_home/.existing")" == original && ! -e "$banner_home/.new" && ! -e "$banner_home/later-hook" ]] \
+    || fail_test "a rejected XDG_CONFIG_HOME changed targets or ran a later hook"
+done
+for supported_xdg_mode in unset default; do
+  supported_xdg_env=()
+  if [[ "$supported_xdg_mode" == default ]]; then
+    supported_xdg_env=(XDG_CONFIG_HOME="$banner_home/.config")
+  fi
+  env -i PATH="$PATH" HOME="$banner_home" ${supported_xdg_env[@]+"${supported_xdg_env[@]}"} \
+    chezmoi --config="$banner_config" --source="$banner_source" --destination="$banner_home" \
+    --persistent-state="$tmp_dir/banner-state.boltdb" apply --force >/dev/null
+  [[ "$(cat "$banner_home/.existing")" == updated && -f "$banner_home/.new" && -f "$banner_home/later-hook" ]] \
+    || fail_test "supported XDG_CONFIG_HOME did not allow apply"
+done
+
 log_step "📂" "Checking XDG directory resolution..."
 xdg_resolver="$repo_root/dot_local/share/oh-my-devenv/xdg.sh"
 syntax_check bash "$xdg_resolver"
@@ -273,18 +310,21 @@ fi
 
 empty_xdg="$(env -i PATH="/usr/bin:/bin" HOME="$tmp_dir/home" XDG_CONFIG_HOME="" \
   bash -c "$resolve_xdg_command" \
-  _ "$xdg_resolver")"
+  _ "$xdg_resolver" 2>"$tmp_dir/empty-xdg.err")"
 if [[ "$empty_xdg" != "$tmp_dir/home/.config" ]]; then
   fail_test "empty XDG_CONFIG_HOME resolved to '$empty_xdg'"
 fi
+assert_file_contains "$tmp_dir/empty-xdg.err" "ignoring unsupported XDG_CONFIG_HOME=''"
 
 custom_xdg="$(env -i PATH="/usr/bin:/bin" HOME="$tmp_dir/home" \
   XDG_CONFIG_HOME="$tmp_dir/custom-config" \
   bash -c "$resolve_xdg_command" \
-  _ "$xdg_resolver")"
-if [[ "$custom_xdg" != "$tmp_dir/custom-config" ]]; then
+  _ "$xdg_resolver" 2>"$tmp_dir/custom-xdg.err")"
+if [[ "$custom_xdg" != "$tmp_dir/home/.config" ]]; then
   fail_test "absolute XDG_CONFIG_HOME resolved to '$custom_xdg'"
 fi
+
+assert_file_contains "$tmp_dir/custom-xdg.err" "ignoring unsupported XDG_CONFIG_HOME='$tmp_dir/custom-config'"
 
 relative_xdg="$(env -i PATH="/usr/bin:/bin" HOME="$tmp_dir/home" \
   XDG_CONFIG_HOME="relative/config" \
@@ -293,7 +333,15 @@ relative_xdg="$(env -i PATH="/usr/bin:/bin" HOME="$tmp_dir/home" \
 if [[ "$relative_xdg" != "$tmp_dir/home/.config" ]]; then
   fail_test "relative XDG_CONFIG_HOME resolved to '$relative_xdg'"
 fi
-assert_file_contains "$tmp_dir/relative-xdg.err" "ignoring relative XDG_CONFIG_HOME=relative/config"
+assert_file_contains "$tmp_dir/relative-xdg.err" "ignoring unsupported XDG_CONFIG_HOME='relative/config'"
+
+for resolver_shell in bash zsh; do
+  # shellcheck disable=SC2016
+  env -i PATH="/usr/bin:/bin" HOME="$tmp_dir/home" XDG_CONFIG_HOME="$tmp_dir/custom-config" \
+    "$resolver_shell" -c 'source "$1"; oh_my_devenv_setup_xdg_config_home; oh_my_devenv_setup_xdg_config_home' \
+    _ "$xdg_resolver" 2>"$tmp_dir/xdg-once.err"
+  [[ "$(wc -l <"$tmp_dir/xdg-once.err")" -eq 1 ]] || fail_test "$resolver_shell must warn once after normalizing XDG_CONFIG_HOME"
+done
 
 # shellcheck disable=SC2016
 resolve_xdg_data_command='source "$1"; oh_my_devenv_setup_xdg_data_home; printf "%s\n" "$XDG_DATA_HOME"'
@@ -309,12 +357,12 @@ if [[ "$relative_xdg_data" != "$tmp_dir/home/.local/share" ]]; then
 fi
 assert_file_contains "$tmp_dir/relative-xdg-data.err" "ignoring relative XDG_DATA_HOME=relative/data"
 
-mkdir -p "$tmp_dir/env-boundary/oh-my-devenv"
-printf '%s\n' 'export OH_MY_DEVENV_SMOKE_SHELL=loaded' >"$tmp_dir/env-boundary/oh-my-devenv/env.sh"
-printf '%s\n' 'export OH_MY_DEVENV_SMOKE_BOOTSTRAP=loaded' >"$tmp_dir/env-boundary/oh-my-devenv/bootstrap.env"
+mkdir -p "$tmp_dir/home/.config/oh-my-devenv"
+printf '%s\n' 'export OH_MY_DEVENV_SMOKE_SHELL=loaded' >"$tmp_dir/home/.config/oh-my-devenv/env.sh"
+printf '%s\n' 'export OH_MY_DEVENV_SMOKE_BOOTSTRAP=loaded' >"$tmp_dir/home/.config/oh-my-devenv/bootstrap.env"
 # shellcheck disable=SC2016
 source_env_command='source "$1"; oh_my_devenv_setup_xdg_dirs; oh_my_devenv_source_env_file "$XDG_CONFIG_HOME/oh-my-devenv/env.sh"; printf "%s:%s\n" "${OH_MY_DEVENV_SMOKE_SHELL:-unset}" "${OH_MY_DEVENV_SMOKE_BOOTSTRAP:-unset}"'
-loaded_env="$(env -i PATH="/usr/bin:/bin" HOME="$tmp_dir/home" XDG_CONFIG_HOME="$tmp_dir/env-boundary" \
+loaded_env="$(env -i PATH="/usr/bin:/bin" HOME="$tmp_dir/home" XDG_CONFIG_HOME="$tmp_dir/home/.config" \
   bash -c "$source_env_command" \
   _ "$xdg_resolver")"
 if [[ "$loaded_env" != "loaded:unset" ]]; then
@@ -323,7 +371,7 @@ fi
 
 # shellcheck disable=SC2016
 source_bootstrap_command='source "$1"; printf "%s:%s\n" "${OH_MY_DEVENV_SMOKE_SHELL:-unset}" "${OH_MY_DEVENV_SMOKE_BOOTSTRAP:-unset}"'
-loaded_bootstrap="$(env -i PATH="/usr/bin:/bin" HOME="$tmp_dir/home" XDG_CONFIG_HOME="$tmp_dir/env-boundary" \
+loaded_bootstrap="$(env -i PATH="/usr/bin:/bin" HOME="$tmp_dir/home" XDG_CONFIG_HOME="$tmp_dir/home/.config" \
   bash -c "$source_bootstrap_command" \
   _ "$repo_root/bootstrap/scripts/common.sh")"
 if [[ "$loaded_bootstrap" != "unset:loaded" ]]; then
@@ -331,12 +379,13 @@ if [[ "$loaded_bootstrap" != "unset:loaded" ]]; then
 fi
 
 for guarded_env_name in env.sh bootstrap.env; do
-  guarded_env_root="$tmp_dir/$guarded_env_name-must-not-move-xdg"
+  guarded_env_home="$tmp_dir/$guarded_env_name-must-not-move-xdg"
+  guarded_env_root="$guarded_env_home/.config"
   mkdir -p "$guarded_env_root/oh-my-devenv"
   printf '%s\n' 'unset XDG_CONFIG_HOME' >"$guarded_env_root/oh-my-devenv/$guarded_env_name"
   # shellcheck disable=SC2016
   source_moving_env_command='source "$1"; oh_my_devenv_setup_xdg_dirs; if oh_my_devenv_source_env_file "$XDG_CONFIG_HOME/oh-my-devenv/$2"; then exit 1; fi; printf "%s\n" "$XDG_CONFIG_HOME"'
-  restored_xdg="$(XDG_CONFIG_HOME="$guarded_env_root" \
+  restored_xdg="$(HOME="$guarded_env_home" XDG_CONFIG_HOME="$guarded_env_root" \
     bash -c "$source_moving_env_command" \
     _ "$xdg_resolver" "$guarded_env_name" 2>"$tmp_dir/$guarded_env_name-moved-xdg.err")"
   if [[ "$restored_xdg" != "$guarded_env_root" ]]; then
@@ -385,7 +434,7 @@ mkdir -p "$omz_dir"
 # shellcheck disable=SC2016
 printf 'print -r -- "$ZSH|$ZSH_CUSTOM"\nexit 0\n' >"$omz_dir/oh-my-zsh.sh"
 # shellcheck disable=SC2016
-omz_loaded="$(env -i HOME="$omz_home" PATH=/usr/bin:/bin XDG_CONFIG_HOME="$tmp_dir/omz-empty-config" \
+omz_loaded="$(env -i HOME="$omz_home" PATH=/usr/bin:/bin XDG_CONFIG_HOME="$omz_home/.config" \
   ZSH="$omz_elsewhere" ZSH_CUSTOM="$omz_elsewhere/custom" \
   zsh -fc 'source "$HOME/.zshrc"')"
 [[ "$omz_loaded" == "$omz_dir|$omz_dir/custom" ]] \
@@ -404,7 +453,7 @@ EOF
 chmod +x "$omz_stub_bin/git"
 ln -s "$(command -v zsh)" "$omz_stub_bin/zsh"
 printf '%s\n' 'example/plugin plugins/example-plugin' >"$tmp_dir/omz-plugins.txt"
-env -i HOME="$omz_home" PATH="$omz_stub_bin:/usr/bin:/bin" XDG_CONFIG_HOME="$tmp_dir/omz-empty-config" \
+env -i HOME="$omz_home" PATH="$omz_stub_bin:/usr/bin:/bin" XDG_CONFIG_HOME="$omz_home/.config" \
   ZSH="$omz_elsewhere" ZSH_CUSTOM="$omz_elsewhere/custom" OMZ_GIT_LOG="$omz_git_log" \
   bash "$repo_root/bootstrap/scripts/install-oh-my-zsh-assets.sh" "$tmp_dir/omz-plugins.txt" >/dev/null
 printf '%s\n' "$omz_dir/custom/plugins/example-plugin" >"$tmp_dir/omz-git.expected"
@@ -702,7 +751,7 @@ for mise_case in default xdg-data mise-data shims-dir; do
   esac
   for mise_shell in bash zsh; do
     # shellcheck disable=SC2016
-    actual_shims="$(env -i HOME="$mise_home" PATH=/usr/bin:/bin XDG_CONFIG_HOME="$mise_root/empty-config" \
+    actual_shims="$(env -i HOME="$mise_home" PATH=/usr/bin:/bin XDG_CONFIG_HOME="$mise_home/.config" \
       ${mise_env[@]+"${mise_env[@]}"} \
       "$mise_shell" -c '. "$1"; printf "%s\n" "${PATH%%:*}"' _ "$mise_root/env.$mise_shell")"
     [[ "$actual_shims" == "$expected_shims" ]] \
@@ -740,6 +789,18 @@ for hook_platform in "${hook_platforms[@]}"; do
     syntax_check bash "$rendered_hook"
     shellcheck_rendered_bash "$rendered_hook"
   done
+  # Register each main-source application template for every platform arm.
+  for config_template in "$repo_root"/dot_config/*/*.tmpl "$repo_root"/dot_config/fontconfig/conf.d/*.tmpl; do
+    rendered_config="$tmp_dir/config-$hook_platform_name-$(basename "$config_template" .tmpl)"
+    chezmoi --source="$repo_root" \
+      --override-data "{\"desktopBaseline\":true,\"chezmoi\":${hook_platform#*|}}" \
+      execute-template --file "$config_template" >"$rendered_config"
+    if [[ "$config_template" == *.toml.tmpl ]]; then
+      # shellcheck disable=SC2016
+      chezmoi --source="$repo_root" execute-template --with-stdin '{{ .chezmoi.stdin | fromToml | toJson }}' \
+        <"$rendered_config" >/dev/null || fail_test "invalid TOML in $config_template for $hook_platform_name"
+    fi
+  done
 done
 
 # Rendered hooks run below with only these commands on PATH, so a hook that
@@ -750,7 +811,7 @@ for fixture_command in bash dirname; do
   ln -s "$(command -v "$fixture_command")" "$hook_stub_bin/$fixture_command"
 done
 run_rendered_hook() {
-  env -i PATH="$hook_stub_bin" HOME="$tmp_dir/hook-home" XDG_CONFIG_HOME="$XDG_CONFIG_HOME" \
+  env -i PATH="$hook_stub_bin" HOME="$tmp_dir/hook-home" XDG_CONFIG_HOME="$tmp_dir/hook-home/.config" \
     bash "$tmp_dir/hook-$1-$2.sh"
 }
 
@@ -770,7 +831,7 @@ hook_mise_data="$tmp_dir/hook-mise-data"
 mkdir -p "$hook_mise_data/shims"
 printf '#!/bin/sh\necho "mise stub: $*"\n' >"$hook_mise_data/shims/mise"
 chmod +x "$hook_mise_data/shims/mise"
-env -i PATH="$hook_stub_bin" HOME="$tmp_dir/hook-home" XDG_CONFIG_HOME="$XDG_CONFIG_HOME" \
+env -i PATH="$hook_stub_bin" HOME="$tmp_dir/hook-home" XDG_CONFIG_HOME="$tmp_dir/hook-home/.config" \
   MISE_DATA_DIR="$hook_mise_data" \
   bash "$tmp_dir/hook-ubuntu-run_onchange_after_40-install-runtimes.sh" >"$tmp_dir/hook-mise.out" 2>&1 \
   || fail_test "runtime hook did not find mise in the resolved shim directory: $(<"$tmp_dir/hook-mise.out")"
@@ -782,7 +843,7 @@ assert_file_contains "$tmp_dir/hook-mise.out" "mise stub: install --yes"
 error_trap_env=(
   HOME="$tmp_dir/hook-home"
   PATH=/usr/bin:/bin
-  XDG_CONFIG_HOME="$XDG_CONFIG_HOME"
+  XDG_CONFIG_HOME="$tmp_dir/hook-home/.config"
 )
 # shellcheck disable=SC2016
 expect_failure "$tmp_dir/error-trap-function.err" \
@@ -835,12 +896,12 @@ chezmoi --source="$repo_root" \
 chezmoi --source="$repo_root" \
   --override-data '{"desktopBaseline":false}' \
   execute-template \
-  --file "$repo_root/xdg_config/ghostty/config.ghostty.tmpl" \
+  --file "$repo_root/dot_config/ghostty/config.ghostty.tmpl" \
   >"$disabled_ghostty_config"
 chezmoi --source="$repo_root" \
   --override-data '{"desktopBaseline":false}' \
   execute-template \
-  --file "$repo_root/xdg_config/fontconfig/conf.d/99-oh-my-devenv-maple-mono-nf-cn.conf.tmpl" \
+  --file "$repo_root/dot_config/fontconfig/conf.d/99-oh-my-devenv-maple-mono-nf-cn.conf.tmpl" \
   >"$disabled_fontconfig_fragment"
 if [[ -s "$disabled_desktop_hook" || -s "$disabled_ghostty_config" || -s "$disabled_fontconfig_fragment" ]]; then
   fail_test "desktop templates must render zero bytes when desktopBaseline is disabled"
@@ -1234,18 +1295,18 @@ HOMEBREW_PREFIX='' OH_MY_DEVENV_SMOKE_COMPLETION_ROOT="$completion_system_fixtur
 log_step "🔎" "Testing the standalone environment check with stubbed tools..."
 check_root="$tmp_dir/check-fixture"
 check_stub_bin="$check_root/bin"
-check_config="$check_root/config/chezmoi/chezmoi.toml"
+check_config="$check_root/home/.config/chezmoi/chezmoi.toml"
 mkdir -p "$check_stub_bin" "$check_root/bootstrap/scripts" "$check_root/.chezmoitemplates" \
-  "$check_root/dot_local/share/oh-my-devenv" "$check_root/config/mise" "$check_root/config/chezmoi" \
-  "$check_root/config/ghostty" "$check_root/home/Library/Fonts"
+  "$check_root/dot_local/share/oh-my-devenv" "$check_root/home/.config/mise" "$check_root/home/.config/chezmoi" \
+  "$check_root/home/.config/ghostty" "$check_root/home/Library/Fonts"
 cp "$script_dir/check.sh" "$script_dir/common.sh" "$check_root/bootstrap/scripts/"
 cp -R "$repo_root/bootstrap/manifests" "$check_root/bootstrap/"
 cp "$repo_root/dot_local/share/oh-my-devenv/xdg.sh" "$check_root/dot_local/share/oh-my-devenv/"
 cp "$repo_root/.chezmoitemplates/system-package-manager" \
   "$repo_root/.chezmoitemplates/desktop-platform-supported" "$check_root/.chezmoitemplates/"
 printf '[data]\ndesktopBaseline = true\n' >"$check_config"
-printf '# fixture\n' >"$check_root/config/mise/config.toml"
-printf '# fixture\n' >"$check_root/config/ghostty/config.ghostty"
+printf '# fixture\n' >"$check_root/home/.config/mise/config.toml"
+printf '# fixture\n' >"$check_root/home/.config/ghostty/config.ghostty"
 printf '%s\n' "$MAPLE_MONO_POSTSCRIPT_NAMES" | tr ' ' '\n' >"$check_root/font-faces"
 for font_face in $MAPLE_MONO_POSTSCRIPT_NAMES; do
   touch "$check_root/home/Library/Fonts/$font_face.ttf"
@@ -1342,7 +1403,7 @@ run_check_fixture() {
   local platform_data="$1"
   shift
   env -i PATH="$check_stub_bin:$check_root/uv-bin:/usr/bin:/bin" HOME="$check_root/home" OSTYPE=linux \
-    XDG_CONFIG_HOME="$check_root/config" XDG_DATA_HOME="$check_root/data" \
+    XDG_CONFIG_HOME="$check_root/home/.config" XDG_DATA_HOME="$check_root/data" \
     XDG_STATE_HOME="$check_root/state" CHECK_ROOT="$check_root" \
     REAL_CHEZMOI="$(command -v chezmoi)" \
     CHEZMOI_EXECUTABLE="${CHECK_CHEZMOI_EXECUTABLE-$check_stub_bin/chezmoi}" \
@@ -1524,12 +1585,12 @@ EOF
 chmod +x "$brew_fixture/bin/brew"
 for brewfile in "$repo_root/bootstrap/manifests/system/Brewfile" "$repo_root/bootstrap/manifests/desktop/Brewfile"; do
   env -i PATH="$brew_fixture/bin:/usr/bin:/bin" HOME="$brew_fixture" \
-    XDG_CONFIG_HOME="$brew_fixture/config" BREW_CALLS="$brew_fixture/calls" \
+    XDG_CONFIG_HOME="$brew_fixture/.config" BREW_CALLS="$brew_fixture/calls" \
     bash "$script_dir/install-brew-packages.sh" "$brewfile" >"$brew_fixture/install.log"
   assert_file_contains "$brew_fixture/calls" "bundle install --file=$brewfile"
 done
 expect_failure "$brew_fixture/failure.err" env -i \
-  PATH="$brew_fixture/bin:/usr/bin:/bin" HOME="$brew_fixture" XDG_CONFIG_HOME="$brew_fixture/config" \
+  PATH="$brew_fixture/bin:/usr/bin:/bin" HOME="$brew_fixture" XDG_CONFIG_HOME="$brew_fixture/.config" \
   BREW_CALLS="$brew_fixture/calls" FAIL_BREW=1 \
   bash "$script_dir/install-brew-packages.sh" "$repo_root/bootstrap/manifests/system/Brewfile"
 
@@ -1589,7 +1650,7 @@ font_install_dir="$(XDG_DATA_HOME="$font_data" maple_mono_font_dir)"
 font_marker="$(XDG_DATA_HOME="$font_data" maple_mono_font_marker)"
 run_font_installer() {
   env -i PATH="$font_fixture/bin:$PATH" HOME="$font_fixture/home" \
-    XDG_CONFIG_HOME="$font_fixture/config" XDG_DATA_HOME="$font_data" XDG_CACHE_HOME="$font_fixture/cache" \
+    XDG_CONFIG_HOME="$font_fixture/home/.config" XDG_DATA_HOME="$font_data" XDG_CACHE_HOME="$font_fixture/cache" \
     FONT_ARCHIVE="$font_fixture/fonts.zip" FONT_INSTALL_DIR="$font_install_dir" \
     FAIL_FONT_CACHE="${FAIL_FONT_CACHE:-0}" \
     bash "$script_dir/install-maple-mono-font.sh" "$1"
@@ -1616,7 +1677,7 @@ diff -r "$font_fixture/previous" "$font_install_dir" \
 [[ ! -e "$font_fixture/cache/oh-my-devenv/downloads/$MAPLE_MONO_ARCHIVE" ]] \
   || fail_test "checksum mismatch left a corrupt cached archive"
 expect_failure "$font_fixture/cache-failure.err" env -i \
-  PATH="$font_fixture/bin:$PATH" HOME="$font_fixture/home" XDG_CONFIG_HOME="$font_fixture/config" \
+  PATH="$font_fixture/bin:$PATH" HOME="$font_fixture/home" XDG_CONFIG_HOME="$font_fixture/home/.config" \
   XDG_DATA_HOME="$font_data" XDG_CACHE_HOME="$font_fixture/cache" \
   FONT_ARCHIVE="$font_fixture/fonts.zip" FONT_INSTALL_DIR="$font_install_dir" FAIL_FONT_CACHE=1 \
   bash "$script_dir/install-maple-mono-font.sh" "$font_fixture/manifest.env"
@@ -1624,7 +1685,7 @@ diff -r "$font_fixture/previous" "$font_install_dir" \
   || fail_test "failed Fontconfig refresh did not restore the previous installation"
 
 log_step "🤖" "Verifying the main source deploys only dotfiles..."
-# Repository documentation, metadata, and the nested sources are not targets:
+# Repository documentation and metadata are not targets:
 # every path the main source manages is a dot-path directly under HOME.
 managed_listing="$(chezmoi managed --source="$repo_root" --override-data-file "$tmp_data_file" --path-style=absolute)"
 while IFS= read -r managed_path; do
@@ -1706,122 +1767,154 @@ done
 git_config_example="$overlay_examples_dir/git-config.example"
 git config --file "$git_config_example" --list >/dev/null
 
-log_step "📁" "Applying the nested XDG chezmoi source..."
-xdg_test_home="$tmp_dir/xdg-config-home"
-xdg_test_state="$tmp_dir/xdg-state-home"
-xdg_test_config="$tmp_dir/xdg-chezmoi.toml"
-cat >"$xdg_test_config" <<'EOF'
+log_step "📁" "Applying main-source configuration under temporary homes..."
+config_test_home="$tmp_dir/main-config-home"
+desktop_config="$tmp_dir/desktop-chezmoi.toml"
+cat >"$desktop_config" <<'EOF'
 [data]
-desktopBaseline = false
-EOF
-chezmoi --config="$xdg_test_config" --source="$repo_root" execute-template \
-  --file "$repo_root/.chezmoiscripts/run_after_35-apply-xdg-config.sh.tmpl" \
-  >"$tmp_dir/run_after_35-custom-xdg.sh"
-XDG_CONFIG_HOME="$xdg_test_home" XDG_STATE_HOME="$xdg_test_state" \
-  bash "$tmp_dir/run_after_35-custom-xdg.sh"
-xdg_managed_listing="$(XDG_CONFIG_HOME="$xdg_test_home" XDG_STATE_HOME="$xdg_test_state" \
-  bash "$repo_root/bootstrap/scripts/xdg-config.sh" managed "$xdg_test_config")"
-if [[ -z "$xdg_managed_listing" ]]; then
-  fail_test "nested XDG source manages no files"
-fi
-while IFS= read -r xdg_managed_path; do
-  case "$xdg_managed_path" in
-    "$xdg_test_home"/*) ;;
-    *) fail_test "nested XDG source manages a path outside XDG_CONFIG_HOME: $xdg_managed_path" ;;
-  esac
-  xdg_managed_relative="${xdg_managed_path#"$xdg_test_home"/}"
-  # The main source must not manage the same target.
-  if grep -Fxq "$HOME/.config/$xdg_managed_relative" <<<"$managed_listing"; then
-    fail_test "main chezmoi source must not manage nested XDG target: $xdg_managed_relative"
-  fi
-done <<<"$xdg_managed_listing"
-# Local overlays under XDG_CONFIG_HOME stay user-owned.
-while IFS=$'\t' read -r -a overlay_fields; do
-  [[ "${overlay_fields[3]}" == "exact" ]] || continue
-  overlay_target="$(XDG_CONFIG_HOME="$xdg_test_home" local_overlay_expand "${overlay_fields[2]}" exact)"
-  if grep -Fxq "$overlay_target" <<<"$xdg_managed_listing"; then
-    fail_test "nested XDG source must not manage the local overlay ${overlay_fields[0]}"
-  fi
-done < <(local_overlay_inventory "$overlay_manifest")
-
-# With the desktop baseline enabled, the desktop templates receive the font
-# family from the manifest through xdg-config.sh.
-xdg_desktop_home="$tmp_dir/xdg-desktop-config-home"
-xdg_desktop_config="$tmp_dir/xdg-desktop-chezmoi.toml"
-cat >"$xdg_desktop_config" <<'EOF'
-[data]
+name = "Config Smoke"
+email = "config@example.com"
 desktopBaseline = true
 EOF
-XDG_CONFIG_HOME="$xdg_desktop_home" XDG_STATE_HOME="$tmp_dir/xdg-desktop-state-home" \
-  bash "$repo_root/bootstrap/scripts/xdg-config.sh" apply "$xdg_desktop_config"
-if [[ "$desktop_platform_supported_data" == true ]]; then
-  assert_file_contains "$xdg_desktop_home/ghostty/config.ghostty" "font-family = $MAPLE_MONO_FAMILY"
-elif [[ -s "$xdg_desktop_home/ghostty/config.ghostty" ]]; then
-  fail_test "nested XDG apply wrote a Ghostty config on an unsupported desktop platform"
-fi
-# Desktop targets are the nested XDG targets that render content with the
-# baseline enabled and render empty with it disabled. Derive them for each
-# synthetic platform, then check that enabling writes them and disabling makes
-# chezmoi remove them.
-desktop_empty_config="$tmp_dir/desktop-empty-chezmoi.toml"
-: >"$desktop_empty_config"
 desktop_chezmoi() {
   local destination="$1"
   local override_data="$2"
   shift 2
 
-  chezmoi --config="$desktop_empty_config" --persistent-state="$destination.boltdb" \
-    --source="$repo_root/xdg_config" --destination="$destination" \
+  chezmoi --config="$desktop_config" --persistent-state="$destination.boltdb" \
+    --source="$repo_root" --destination="$destination" \
     --override-data="$override_data" "$@"
 }
+mkdir -p "$config_test_home"
+config_enabled="$(desktop_override_data "$supported_linux_chezmoi_data")"
+config_managed_listing="$(desktop_chezmoi "$config_test_home" "$config_enabled" \
+  managed --include=files,symlinks --path-style=absolute --format= "$config_test_home/.config")"
+[[ -n "$config_managed_listing" ]] || fail_test "main source manages no config files"
+while IFS= read -r config_target; do
+  [[ "$config_target" == "$config_test_home/.config/"* ]] \
+    || fail_test "config target escaped the main destination: $config_target"
+done <<<"$config_managed_listing"
+# Seed every overlay slot in the config root and prove that main apply preserves it.
+config_overlay_listing="$(while IFS=$'\t' read -r -a overlay_fields; do
+  # shellcheck disable=SC2016
+  [[ "${overlay_fields[2]}" == '$XDG_CONFIG_HOME/'* ]] || continue
+  overlay_target="$(HOME="$config_test_home" XDG_CONFIG_HOME="$config_test_home/.config" \
+    local_overlay_expand "${overlay_fields[2]}" exact)"
+  [[ "${overlay_fields[3]}" != glob ]] || overlay_target="${overlay_target/\*/smoke}"
+  if grep -Fxq "$overlay_target" <<<"$config_managed_listing"; then
+    fail_test "main source manages local overlay ${overlay_fields[0]}"
+  fi
+  mkdir -p "$(dirname "$overlay_target")"
+  printf '# keep local overlay\n' >"$overlay_target"
+  printf '%s\n' "$overlay_target"
+done < <(local_overlay_inventory "$overlay_manifest"))"
+desktop_chezmoi "$config_test_home" "$config_enabled" apply --exclude=scripts "$config_test_home/.config"
+file_mode() {
+  if [[ "$(uname -s)" == Darwin ]]; then
+    stat -f '%Lp' "$1"
+  else
+    stat -c '%a' "$1"
+  fi
+}
+[[ "$(file_mode "$config_test_home/.config")" == 755 ]] || fail_test "main config root must be 0755"
+while IFS= read -r config_target; do
+  [[ "$(file_mode "$config_target")" == 644 ]] || fail_test "config file permissions changed: $config_target"
+done <<<"$config_managed_listing"
+while IFS= read -r overlay_target; do
+  [[ "$(cat "$overlay_target")" == '# keep local overlay' ]] || fail_test "main apply changed $overlay_target"
+done <<<"$config_overlay_listing"
+config_status="$(desktop_chezmoi "$config_test_home" "$config_enabled" status --exclude=scripts "$config_test_home/.config")"
+[[ -z "$config_status" ]] || fail_test "main config source is dirty after apply: $config_status"
+
+# Derive desktop targets by comparing enabled and disabled renders. Check
+# removal both on opt-out and when a formerly supported machine is unsupported.
 desktop_platform_cases=(
   "macos|true|$darwin_chezmoi_data"
   "ubuntu|true|$supported_linux_chezmoi_data"
+  'arch|true|{"os":"linux","osRelease":{"id":"arch","idLike":"","versionID":""},"kernel":{"osrelease":"linux"}}'
+  "wsl|false|$wsl_chezmoi_data"
   "unsupported|false|$unsupported_chezmoi_data"
 )
 for desktop_case in "${desktop_platform_cases[@]}"; do
   IFS='|' read -r desktop_name desktop_supported desktop_platform_data <<<"$desktop_case"
   desktop_home="$tmp_dir/desktop-$desktop_name-home"
   mkdir -p "$desktop_home"
-  desktop_enabled="$(printf '{"desktopBaseline":true,"desktopPlatformSupported":%s,"desktopFontFamily":"%s","chezmoi":%s}' \
-    "$desktop_supported" "$MAPLE_MONO_FAMILY" "$desktop_platform_data")"
+  desktop_enabled="$(desktop_override_data "$desktop_platform_data")"
   desktop_disabled="${desktop_enabled/\"desktopBaseline\":true/\"desktopBaseline\":false}"
   desktop_targets=()
   while IFS= read -r desktop_target; do
     [[ -n "$(desktop_chezmoi "$desktop_home" "$desktop_enabled" cat "$desktop_target")" ]] || continue
     [[ -z "$(desktop_chezmoi "$desktop_home" "$desktop_disabled" cat "$desktop_target")" ]] || continue
     desktop_targets+=("$desktop_target")
-  done < <(desktop_chezmoi "$desktop_home" "$desktop_enabled" managed --include=files --path-style=absolute --format=)
+  done < <(desktop_chezmoi "$desktop_home" "$desktop_enabled" managed --include=files --path-style=absolute --format= "$desktop_home/.config")
   if [[ "$desktop_supported" == true && ${#desktop_targets[@]} -eq 0 ]]; then
     fail_test "desktop baseline renders no targets on supported platform $desktop_name"
   fi
   if [[ "$desktop_supported" != true && ${#desktop_targets[@]} -ne 0 ]]; then
     fail_test "desktop baseline renders targets on unsupported platform $desktop_name: ${desktop_targets[*]}"
   fi
-  desktop_chezmoi "$desktop_home" "$desktop_enabled" apply
+  # First populate every desktop target using the supported Ubuntu render.
+  desktop_chezmoi "$desktop_home" "$config_enabled" apply --exclude=scripts "$desktop_home/.config"
+  desktop_chezmoi "$desktop_home" "$desktop_enabled" apply --exclude=scripts "$desktop_home/.config"
+  while IFS= read -r desktop_target; do
+    if [[ -n "$(desktop_chezmoi "$desktop_home" "$desktop_enabled" cat "$desktop_target")" ]]; then
+      [[ -s "$desktop_target" ]] || fail_test "main apply did not write $desktop_target"
+    else
+      [[ ! -e "$desktop_target" ]] || fail_test "inactive desktop config was not removed: $desktop_target"
+    fi
+  done < <(desktop_chezmoi "$desktop_home" "$desktop_enabled" managed --include=files --path-style=absolute --format= "$desktop_home/.config")
   for desktop_target in ${desktop_targets[@]+"${desktop_targets[@]}"}; do
     [[ -s "$desktop_target" ]] || fail_test "enabling the desktop baseline did not write $desktop_target"
   done
-  desktop_chezmoi "$desktop_home" "$desktop_disabled" apply
-  for desktop_target in ${desktop_targets[@]+"${desktop_targets[@]}"}; do
-    [[ ! -e "$desktop_target" ]] || fail_test "disabling the desktop baseline left $desktop_target in place"
-  done
+  desktop_chezmoi "$desktop_home" "$desktop_disabled" apply --exclude=scripts "$desktop_home/.config"
+  # Ubuntu's desktop targets must now all be absent on every platform.
+  while IFS= read -r desktop_target; do
+    [[ -n "$(desktop_chezmoi "$desktop_home" "$config_enabled" cat "$desktop_target")" ]] || continue
+    [[ -z "$(desktop_chezmoi "$desktop_home" "${config_enabled/\"desktopBaseline\":true/\"desktopBaseline\":false}" cat "$desktop_target")" ]] || continue
+    [[ ! -e "$desktop_target" ]] || fail_test "opt-out or unsupported platform left $desktop_target in place"
+  done < <(desktop_chezmoi "$desktop_home" "$config_enabled" managed --include=files --path-style=absolute --format= "$desktop_home/.config")
   printf '%s\n' ${desktop_targets[@]+"${desktop_targets[@]}"} >"$tmp_dir/desktop-$desktop_name-targets"
 done
-# Only the Ubuntu desktop adds the Fontconfig workaround, so it manages more
-# desktop targets than macOS.
 if [[ "$(wc -l <"$tmp_dir/desktop-ubuntu-targets")" -le "$(wc -l <"$tmp_dir/desktop-macos-targets")" ]]; then
   fail_test "Ubuntu desktop targets must include the Fontconfig workaround beyond the macOS set"
 fi
-xdg_status="$(XDG_CONFIG_HOME="$xdg_test_home" XDG_STATE_HOME="$xdg_test_state" \
-  bash "$repo_root/bootstrap/scripts/xdg-config.sh" status "$xdg_test_config")"
-if [[ -n "$xdg_status" ]]; then
-  fail_test "nested XDG source is not clean after apply: $xdg_status"
-fi
+
+# Hook 10 must back up main-source config files before they are overwritten.
+backup_home="$tmp_dir/first-backup-home"
+backup_config="$tmp_dir/first-backup.toml"
+mkdir -p "$backup_home" "$tmp_dir/backup-bin"
+cat >"$backup_config" <<'EOF'
+[data]
+name = "Backup Smoke"
+email = "backup@example.com"
+desktopBaseline = true
+EOF
+for backup_command in git curl brew; do
+  printf '#!/bin/sh\nexit 0\n' >"$tmp_dir/backup-bin/$backup_command"
+  chmod +x "$tmp_dir/backup-bin/$backup_command"
+done
+backup_listing="$(HOME="$backup_home" XDG_CONFIG_HOME="$backup_home/.config" \
+  chezmoi --config="$backup_config" --source="$repo_root" managed \
+  --include=files --path-style=absolute --format= "$backup_home/.config")"
+while IFS= read -r backup_target; do
+  mkdir -p "$(dirname "$backup_target")"
+  printf '# pre-existing config\n' >"$backup_target"
+done <<<"$backup_listing"
+HOME="$backup_home" XDG_CONFIG_HOME="$backup_home/.config" \
+  chezmoi --config="$backup_config" --source="$repo_root" execute-template \
+  --file "$repo_root/.chezmoiscripts/run_once_before_10-bootstrap.sh.tmpl" >"$tmp_dir/backup-hook.sh"
+env -i HOME="$backup_home" PATH="$tmp_dir/backup-bin:$PATH" \
+  XDG_CONFIG_HOME="$backup_home/.config" XDG_STATE_HOME="$backup_home/.local/state" \
+  bash "$tmp_dir/backup-hook.sh" >"$tmp_dir/backup-hook.log"
+while IFS= read -r backup_target; do
+  backup_copy="$(find "$backup_home/.local/state" -type f -path "*$backup_target")"
+  [[ -n "$backup_copy" ]] || fail_test "hook 10 did not back up $backup_target"
+  cmp -s "$backup_target" "$backup_copy" || fail_test "hook 10 changed the backup of $backup_target"
+done <<<"$backup_listing"
 
 log_step "🧹" "Testing uninstall previews, backups, deletion, and state reset..."
 uninstall_home="$tmp_dir/uninstall-home"
-uninstall_config_home="$tmp_dir/uninstall-config"
+uninstall_config_home="$uninstall_home/.config"
 uninstall_data_home="$tmp_dir/uninstall-data"
 uninstall_state_home="$tmp_dir/uninstall-state"
 mkdir -p "$uninstall_home" "$uninstall_config_home/chezmoi" "$uninstall_state_home"
@@ -1876,24 +1969,29 @@ while IFS= read -r uninstall_target; do
   [[ "$uninstall_target" == "$uninstall_home/"* ]] \
     || fail_test "uninstall fixture manages a path outside temporary HOME: $uninstall_target"
 done <<<"$uninstall_main_listing"
-uninstall_main_file="$(sed -n '1p' <<<"$uninstall_main_listing")"
-uninstall_dangling_link="$(sed -n '2p' <<<"$uninstall_main_listing")"
+uninstall_main_file="$(sed '/\/.config\//d' <<<"$uninstall_main_listing" | sed -n '1p')"
+uninstall_dangling_link="$(sed '/\/.config\//d' <<<"$uninstall_main_listing" | sed -n '2p')"
 [[ -n "$uninstall_main_file" && -n "$uninstall_dangling_link" ]] \
   || fail_test "uninstall test needs two managed fixture paths"
 mkdir -p "$(dirname "$uninstall_main_file")" "$(dirname "$uninstall_dangling_link")"
 printf 'managed fixture\n' >"$uninstall_main_file"
 ln -s "$uninstall_home/missing-link-target" "$uninstall_dangling_link"
-with_uninstall_fixture bash "$script_dir/xdg-config.sh" apply >/dev/null
-uninstall_xdg_listing="$(with_uninstall_fixture bash "$script_dir/xdg-config.sh" managed)"
-uninstall_xdg_listing="$(while IFS= read -r uninstall_target; do
-  if [[ -f "$uninstall_target" || -L "$uninstall_target" ]]; then
+with_uninstall_fixture chezmoi --source="$repo_root" apply --exclude=scripts "$uninstall_config_home" >/dev/null
+# Inactive templates still own removal of their previous targets. Seed those
+# files as well so uninstall covers every moved template on every host.
+while IFS= read -r uninstall_target; do
+  [[ "$uninstall_target" == "$uninstall_config_home/"* ]] || continue
+  if [[ ! -f "$uninstall_target" ]]; then
+    mkdir -p "$(dirname "$uninstall_target")"
+    printf '# previously deployed config\n' >"$uninstall_target"
+  fi
+done <<<"$uninstall_main_listing"
+uninstall_config_listing="$(while IFS= read -r uninstall_target; do
+  if [[ "$uninstall_target" == "$uninstall_config_home/"* && -f "$uninstall_target" ]]; then
     printf '%s\n' "$uninstall_target"
   fi
-done <<<"$uninstall_xdg_listing")"
-[[ -n "$uninstall_xdg_listing" ]] || fail_test "nested XDG apply created no managed fixture"
-# shellcheck disable=SC2016
-uninstall_state_file="$(with_uninstall_fixture bash -c \
-  'source "$1"; xdg_chezmoi_state_file' _ "$script_dir/common.sh")"
+done <<<"$uninstall_main_listing")"
+[[ -n "$uninstall_config_listing" ]] || fail_test "main apply created no managed config fixture"
 # shellcheck disable=SC2016
 uninstall_owned_directory="$(with_uninstall_fixture bash -c \
   'source "$1"; oh_my_devenv_oh_my_zsh_dir' _ "$script_dir/common.sh")"
@@ -1931,9 +2029,8 @@ for uninstall_bucket in scriptState entryState; do
 done
 uninstall_removed_files="$uninstall_main_file
 $uninstall_dangling_link
-$uninstall_xdg_listing
-$uninstall_owned_completions
-$uninstall_state_file"
+$uninstall_config_listing
+$uninstall_owned_completions"
 while IFS= read -r uninstall_target; do
   [[ -n "$uninstall_target" ]] || continue
   assert_file_contains <(printf '%s\n' "$uninstall_preview") "[would-remove] file: $uninstall_target"
@@ -1953,6 +2050,7 @@ done
 uninstall_bootstrap_env="$uninstall_config_home/oh-my-devenv/bootstrap.env"
 uninstall_overlay_state_home="$tmp_dir/uninstall-overlay-state"
 printf 'export XDG_STATE_HOME=%q\n' "$uninstall_overlay_state_home" >"$uninstall_bootstrap_env"
+mkdir -p "$uninstall_overlay_state_home/chezmoi-first-run-backup"
 uninstall_overlay_preview="$(with_uninstall_fixture bash "$script_dir/uninstall.sh")"
 assert_file_contains <(printf '%s\n' "$uninstall_overlay_preview") "$uninstall_overlay_state_home/"
 : >"$uninstall_bootstrap_env"
@@ -2093,11 +2191,39 @@ for shared_hash_input in bootstrap/scripts/common.sh dot_local/share/oh-my-deven
   shared_hash_before="$shared_hash_after"
 done
 
+# The template parser must read the manifest rather than a duplicate default.
+font_template_source="$tmp_dir/font-template-source"
+mkdir -p "$font_template_source/.chezmoitemplates" "$font_template_source/bootstrap/manifests/desktop" \
+  "$font_template_source/dot_config/ghostty" "$font_template_source/dot_config/fontconfig/conf.d"
+cp "$repo_root/.chezmoitemplates/desktop-font-family" \
+  "$repo_root/.chezmoitemplates/desktop-platform-supported" \
+  "$repo_root/.chezmoitemplates/system-package-manager" "$font_template_source/.chezmoitemplates/"
+cp "$repo_root/dot_config/ghostty/config.ghostty.tmpl" "$font_template_source/dot_config/ghostty/"
+cp "$repo_root/dot_config/fontconfig/conf.d/"*.tmpl "$font_template_source/dot_config/fontconfig/conf.d/"
+font_template_manifest="$font_template_source/bootstrap/manifests/desktop/maple-mono-nf-cn.env"
+sed 's/^MAPLE_MONO_FAMILY=.*/MAPLE_MONO_FAMILY="Smoke Font Family"/' "$desktop_font_manifest" >"$font_template_manifest"
+for font_template in "$font_template_source"/dot_config/ghostty/*.tmpl "$font_template_source"/dot_config/fontconfig/conf.d/*.tmpl; do
+  chezmoi --source="$font_template_source" --override-data "$(desktop_override_data "$supported_linux_chezmoi_data")" \
+    execute-template --file "$font_template" >"$tmp_dir/font-template-rendered"
+  assert_file_contains "$tmp_dir/font-template-rendered" 'Smoke Font Family'
+  assert_file_not_contains "$tmp_dir/font-template-rendered" "$MAPLE_MONO_FAMILY"
+done
+for invalid_template_family in missing duplicate malformed; do
+  case "$invalid_template_family" in
+    missing) : >"$font_template_manifest" ;;
+    duplicate) printf 'MAPLE_MONO_FAMILY="Smoke One"\nMAPLE_MONO_FAMILY="Smoke Two"\n' >"$font_template_manifest" ;;
+    malformed) printf 'MAPLE_MONO_FAMILY="<invalid>"\n' >"$font_template_manifest" ;;
+  esac
+  expect_failure "$tmp_dir/font-template.err" chezmoi --source="$font_template_source" \
+    execute-template '{{ includeTemplate "desktop-font-family" . }}'
+  assert_file_contains "$tmp_dir/font-template.err" 'desktop font manifest must declare one quoted MAPLE_MONO_FAMILY'
+done
+
 # The Ghostty font workaround renders only for the supported Ubuntu desktop.
-synthetic_fontconfig_template="$repo_root/xdg_config/fontconfig/conf.d/99-oh-my-devenv-maple-mono-nf-cn.conf.tmpl"
+synthetic_fontconfig_template="$repo_root/dot_config/fontconfig/conf.d/99-oh-my-devenv-maple-mono-nf-cn.conf.tmpl"
 synthetic_supported_fontconfig="$tmp_dir/fontconfig-supported-linux.conf"
 chezmoi --source="$repo_root" \
-  --override-data "$(desktop_override_data true "$supported_linux_chezmoi_data")" \
+  --override-data "$(desktop_override_data "$supported_linux_chezmoi_data")" \
   execute-template --file "$synthetic_fontconfig_template" \
   >"$synthetic_supported_fontconfig"
 assert_file_contains "$synthetic_supported_fontconfig" '<edit name="family" mode="prepend" binding="strong">'
@@ -2107,7 +2233,7 @@ for platform_data in \
   '{"os":"linux","osRelease":{"id":"arch","idLike":"","versionID":""},"kernel":{"osrelease":"linux"}}'; do
   synthetic_inactive_fontconfig="$tmp_dir/fontconfig-inactive.conf"
   chezmoi --source="$repo_root" \
-    --override-data "$(desktop_override_data true "$platform_data")" \
+    --override-data "$(desktop_override_data "$platform_data")" \
     execute-template --file "$synthetic_fontconfig_template" >"$synthetic_inactive_fontconfig"
   if [[ -s "$synthetic_inactive_fontconfig" ]]; then
     fail_test "Ghostty font workaround must render empty outside Ubuntu: $platform_data"
@@ -2137,12 +2263,12 @@ fi
 synthetic_macos_ghostty="$tmp_dir/ghostty-macos.conf"
 synthetic_linux_ghostty="$tmp_dir/ghostty-linux.conf"
 chezmoi --source="$repo_root" \
-  --override-data "$(desktop_override_data true "$darwin_chezmoi_data")" \
-  execute-template --file "$repo_root/xdg_config/ghostty/config.ghostty.tmpl" \
+  --override-data "$(desktop_override_data "$darwin_chezmoi_data")" \
+  execute-template --file "$repo_root/dot_config/ghostty/config.ghostty.tmpl" \
   >"$synthetic_macos_ghostty"
 chezmoi --source="$repo_root" \
-  --override-data "$(desktop_override_data true "$supported_linux_chezmoi_data")" \
-  execute-template --file "$repo_root/xdg_config/ghostty/config.ghostty.tmpl" \
+  --override-data "$(desktop_override_data "$supported_linux_chezmoi_data")" \
+  execute-template --file "$repo_root/dot_config/ghostty/config.ghostty.tmpl" \
   >"$synthetic_linux_ghostty"
 # Both platforms share the manifest font and the local overlay hook; macOS-only
 # options must never leak into the Linux render. The remaining preferences are
@@ -2186,7 +2312,7 @@ for invalid_go_pin in 'example.com/tool@latest' 'example.com/tool' 'example.com/
   assert_file_contains "$go_pin_errors" "must pin an exact module version"
 done
 
-render_template xdg_config/mise/config.toml.tmpl "$tmp_dir/mise-config.toml"
+render_template dot_config/mise/config.toml.tmpl "$tmp_dir/mise-config.toml"
 # shellcheck disable=SC2016
 chezmoi --source="$repo_root" execute-template --with-stdin '{{ .chezmoi.stdin | fromToml | toJson }}' \
   <"$tmp_dir/mise-config.toml" >/dev/null \

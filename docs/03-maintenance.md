@@ -144,7 +144,7 @@ categories:
   an adapter only when no existing one fits. Keep `zsh-completions` last in
   `fpath` as fallback precedence.
 - **Runtimes** (mise): pinned to complete versions in
-  `xdg_config/mise/config.toml.tmpl`. Bump intentionally.
+  `dot_config/mise/config.toml.tmpl`. Bump intentionally.
 - **Binary-distributed tools** (for example `golangci-lint` and `uv`): pinned
   via mise alongside the runtimes. Ownership follows the manifest that declares
   a tool; nothing else polices the split.
@@ -273,8 +273,10 @@ environment such as `GOPRIVATE`, `GONOSUMDB`, and `GONOPROXY`. Bash and Zsh read
 it; bootstrap does not. `$XDG_CONFIG_HOME/oh-my-devenv/bootstrap.env` holds
 bootstrap-only controls such as `GOPROXY` or `DOTFILES_FORCE_REINSTALL`. Neither
 file may change
-`XDG_CONFIG_HOME` or `XDG_DATA_HOME`; export custom absolute roots before the
-shell or chezmoi starts.
+`XDG_CONFIG_HOME` or `XDG_DATA_HOME`. Configuration uses only `$HOME/.config`.
+Leave `XDG_CONFIG_HOME` unset or set it to exactly that path. Apply and `check.sh`
+reject other values; shells warn once and use the fixed root. Export a custom
+absolute `XDG_DATA_HOME` before the shell or chezmoi starts.
 
 To validate the consumer boundary:
 
@@ -354,8 +356,8 @@ stable; renaming one requires the same change in the branch protection rule.
 - `apply-linux`, `apply-ubuntu-desktop`, `apply-arch`, and `apply-macos` start
   only after every smoke job passes. Each runs
   `bootstrap/scripts/ci-apply.sh` on a clean runner:
-  - `apply-linux` uses `ubuntu-latest` without the desktop baseline and with a
-    custom `XDG_CONFIG_HOME`.
+  - `apply-linux` uses `ubuntu-latest` without the desktop baseline.
+    All apply jobs use the fixed `$HOME/.config` root.
   - `apply-ubuntu-desktop` uses an `ubuntu:26.04` container,
     `apply-arch` uses an `archlinux:base` container, and `apply-macos` uses
     `macos-latest`. These three enable the desktop baseline. The macOS job
@@ -393,12 +395,12 @@ this baseline's `chezmoi apply` put on disk — for example a throwaway Linux
 container, a CI scratch image, or a VM you are about to re-image. The script is
 intentionally narrow: it does **not** remove apt/Homebrew packages, mise shims,
 or language runtimes the bootstrap installed; it only reverses chezmoi-managed
-destination files, the nested source's dedicated state file, the completion
+destination files, including files under `~/.config`, the completion
 assets enumerated by `install-shell-completions.sh list`, plus a short whitelist
 of bootstrap-owned directories (`~/.oh-my-zsh`,
 `~/.local/state/chezmoi-first-run-backup/`, the marker-owned Maple Mono
-user-font directory). The source checkout always stays in place. Both
-`chezmoi managed` calls request plain
+user-font directory). The source checkout always stays in place. The
+`chezmoi managed` call requests plain
 line output explicitly with `--format=`, and a failing producer aborts the run
 rather than shrinking the candidate list. Like the bootstrap hooks, the script
 sources `bootstrap/scripts/common.sh`, so it resolves the XDG directories and
