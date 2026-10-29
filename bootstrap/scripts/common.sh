@@ -252,11 +252,18 @@ manifest_entries() {
 
 go_tool_binary_name() {
   local tool="$1"
+  local name=""
+  local major_suffix_pattern='^v([2-9]|[1-9][0-9]+)$'
 
   tool="${tool%%[[:space:]]*}"
   tool="${tool%@*}"
+  name="${tool##*/}"
+  if [[ "$tool" == */* && "$name" =~ $major_suffix_pattern ]]; then
+    tool="${tool%/*}"
+    name="${tool##*/}"
+  fi
 
-  printf '%s\n' "${tool##*/}"
+  printf '%s\n' "$name"
 }
 
 uv_tool_binary_name() {
@@ -267,11 +274,29 @@ uv_tool_binary_name() {
   printf '%s\n' "$tool"
 }
 
-# Succeed when the uv tool environment <tool-dir>/<name> runs on the Python it
-# was built on. Otherwise print the problem and fail. A runtime manager upgrade
-# can remove that Python or swap it behind a version alias.
+# Set MISE_PYTHON and MISE_PYTHON_VERSION from global mise configuration.
+# Resolve from / so project configuration cannot change ecosystem runtimes.
+resolve_mise_python() {
+  MISE_PYTHON=""
+  MISE_PYTHON_VERSION=""
+
+  if ! MISE_PYTHON="$(cd / && mise which python 2>/dev/null)" || [[ -z "$MISE_PYTHON" ]]; then
+    printf "ERROR: could not resolve the mise-selected Python with 'mise which python' from /\n" >&2
+    return 1
+  fi
+  # install-uv-tools.sh and check.sh consume this public output.
+  # shellcheck disable=SC2034
+  if ! MISE_PYTHON_VERSION="$("$MISE_PYTHON" -c 'import sys; print("%d.%d.%d" % sys.version_info[:3])')"; then
+    printf 'ERROR: could not read the mise-selected Python version: %s\n' "$MISE_PYTHON" >&2
+    return 1
+  fi
+}
+
+# Succeed when <tool-dir>/<name> runs on both its recorded Python version and
+# the expected mise-selected version. Otherwise print the problem and fail.
 uv_tool_env_healthy() {
   local env_dir="$1/$2"
+  local expected_version="$3"
   local built_on=""
   local running=""
 
@@ -283,6 +308,10 @@ uv_tool_env_healthy() {
   built_on="$(sed -n 's/^version_info[[:space:]]*=[[:space:]]*//p' "$env_dir/pyvenv.cfg" 2>/dev/null | cut -d. -f1-3 || true)"
   if [[ "$built_on" != "$running" ]]; then
     printf 'built on Python %s but runs Python %s\n' "${built_on:-unknown}" "$running"
+    return 1
+  fi
+  if [[ "$running" != "$expected_version" ]]; then
+    printf 'runs Python %s but mise selects Python %s\n' "$running" "$expected_version"
     return 1
   fi
 }

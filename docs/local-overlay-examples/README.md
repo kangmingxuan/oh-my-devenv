@@ -105,6 +105,17 @@ mise config ls
 mise current
 ```
 
+No bootstrap hook tracks this overlay, so an overlay edit alone does not make
+`chezmoi apply` install, rebuild, or check anything. `mise use --path` installs the
+tool itself. After `mise config set`, install the new selection with
+`(cd / && mise install <tool>)`. When the overlay changes the Python version,
+also rebuild the uv tools as described in
+[Dependencies](../03-maintenance.md#dependencies). Then confirm the result:
+
+```bash
+bash "$(chezmoi source-path)/bootstrap/scripts/check.sh"
+```
+
 Do not use `mise use --global` for machine-only tools because it writes the
 chezmoi-managed `config.toml`. `mise use --env local` is also a different scope:
 it writes a project-local `mise.local.toml` in the current directory.

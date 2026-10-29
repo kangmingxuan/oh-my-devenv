@@ -1195,8 +1195,21 @@ case "$name" in
     ;;
   mise)
     case "${1:-}" in
-      ls) [[ "${FAIL_CHECK:-}" != mise ]] ;;
-      current) printf 'smoke-runtime fixture\n' ;;
+      ls)
+        [[ "${FAIL_CHECK:-}" != mise ]] || exit 1
+        [[ "$PWD" == / ]] || printf 'project-runtime missing\n'
+        ;;
+      current)
+        if [[ "$PWD" == / ]]; then
+          printf 'smoke-runtime fixture\n'
+        else
+          printf 'project-runtime fixture\n'
+        fi
+        ;;
+      which)
+        [[ "$2" == python && "$PWD" == / && "${FAIL_CHECK:-}" != python ]] || exit 1
+        printf '%s/python\n' "$CHECK_ROOT"
+        ;;
       --version) printf 'fixture\n' ;;
       *) exit 1 ;;
     esac
@@ -1206,7 +1219,14 @@ case "$name" in
     ;;
   dpkg-query) printf 'install ok installed\n' ;;
   pacman) [[ "$1" == -Q ]] ;;
-  uv) [[ "$1 $2" == 'tool dir' ]] || exit 1; printf '%s/uv-tools\n' "$CHECK_ROOT" ;;
+  uv)
+    [[ "$1 $2" == 'tool dir' ]] || exit 1
+    if [[ "${3:-}" == --bin ]]; then
+      printf '%s/uv-bin\n' "$CHECK_ROOT"
+    else
+      printf '%s/uv-tools\n' "$CHECK_ROOT"
+    fi
+    ;;
   fc-list) cat "$CHECK_ROOT/font-faces" ;;
   ghostty)
     [[ "${FAIL_CHECK:-}" != ghostty ]] || exit 1
@@ -1219,10 +1239,17 @@ chmod +x "$check_stub_bin/check-tool"
 for fixture_command in chezmoi mise brew dpkg-query pacman uv fc-list ghostty git; do
   ln -s check-tool "$check_stub_bin/$fixture_command"
 done
+printf '#!/bin/sh\necho 3.13.16\n' >"$check_root/python"
+chmod +x "$check_root/python"
 for tool_manifest_kind in go uv; do
+  case "$tool_manifest_kind" in
+    go) check_owned_bin="$check_root/home/go/bin" ;;
+    uv) check_owned_bin="$check_root/uv-bin" ;;
+  esac
+  mkdir -p "$check_owned_bin"
   while IFS= read -r tool_spec; do
     command_name="$("${tool_manifest_kind}_tool_binary_name" "$tool_spec")"
-    [[ -e "$check_stub_bin/$command_name" ]] || ln -s check-tool "$check_stub_bin/$command_name"
+    cp "$check_stub_bin/check-tool" "$check_owned_bin/$command_name"
   done < <(manifest_entries "$repo_root/bootstrap/manifests/ecosystem/$tool_manifest_kind-tools.txt")
 done
 # Completion behavior has its own tests above. Here verify the check delegates
@@ -1236,13 +1263,25 @@ EOF
 run_check_fixture() {
   local platform_data="$1"
   shift
-  env -i PATH="$check_stub_bin:/usr/bin:/bin" HOME="$check_root/home" OSTYPE=linux \
+  env -i PATH="$check_stub_bin:$check_root/uv-bin:/usr/bin:/bin" HOME="$check_root/home" OSTYPE=linux \
     XDG_CONFIG_HOME="$check_root/config" XDG_DATA_HOME="$check_root/data" \
     XDG_STATE_HOME="$check_root/state" CHECK_ROOT="$check_root" \
     REAL_CHEZMOI="$(command -v chezmoi)" \
     CHEZMOI_EXECUTABLE="${CHECK_CHEZMOI_EXECUTABLE-$check_stub_bin/chezmoi}" \
     CHECK_PLATFORM_DATA="$platform_data" FAIL_CHECK="${FAIL_CHECK:-}" "$@"
 }
+# Project-local mise configuration must not affect baseline checks or summaries.
+# The stub reports a missing tool and a different summary outside /, and refuses
+# Python resolution there.
+mkdir -p "$check_root/project"
+(
+  cd "$check_root/project"
+  run_check_fixture "$darwin_chezmoi_data" bash "$check_root/bootstrap/scripts/check.sh" \
+    "$check_config" >"$check_root/global-toolchain.log" 2>&1
+) || fail_test "standalone check must inspect the global toolchain from /: $(cat "$check_root/global-toolchain.log")"
+assert_file_contains "$check_root/global-toolchain.log" 'All checks passed.'
+assert_file_contains "$check_root/global-toolchain.log" 'smoke-runtime'
+assert_file_not_contains "$check_root/global-toolchain.log" 'project-runtime'
 for check_platform in "${hook_platforms[@]}"; do
   check_platform_name="${check_platform%%|*}"
   [[ "$check_platform_name" != unsupported ]] || continue
@@ -1266,6 +1305,55 @@ for check_platform in "${hook_platforms[@]}"; do
     *) assert_file_not_contains "$check_root/calls" 'ghostty +validate-config' ;;
   esac
 done
+# The constructed PATH must select installer-owned binaries. Symlinks to the
+# same file pass, but distinct same-name executables must fail for both layers.
+mkdir -p "$check_root/home/.local/bin"
+for tool_manifest_kind in go uv; do
+  tool_spec="$(manifest_entries "$repo_root/bootstrap/manifests/ecosystem/$tool_manifest_kind-tools.txt" | head -1)"
+  command_name="$("${tool_manifest_kind}_tool_binary_name" "$tool_spec")"
+  case "$tool_manifest_kind" in
+    go) check_owned_bin="$check_root/home/go/bin" ;;
+    uv) check_owned_bin="$check_root/uv-bin" ;;
+  esac
+  shadow_path="$check_root/home/.local/bin/$command_name"
+  cp "$check_owned_bin/$command_name" "$shadow_path"
+  if run_check_fixture "$darwin_chezmoi_data" bash "$check_root/bootstrap/scripts/check.sh" \
+    "$check_config" >"$check_root/shadow.log" 2>&1; then
+    fail_test "environment check must reject a shadowed $tool_manifest_kind tool"
+  fi
+  assert_file_contains "$check_root/shadow.log" "$command_name is shadowed: PATH selects $shadow_path; expected $check_owned_bin/$command_name"
+  assert_file_contains "$check_root/shadow.log" '1 required tool(s) or asset(s) are missing.'
+  rm "$shadow_path"
+  ln -s "$check_owned_bin/$command_name" "$shadow_path"
+  run_check_fixture "$darwin_chezmoi_data" bash "$check_root/bootstrap/scripts/check.sh" \
+    "$check_config" >"$check_root/alias.log" 2>&1
+  assert_file_contains "$check_root/alias.log" 'All checks passed.'
+  rm "$shadow_path"
+  mv "$check_owned_bin/$command_name" "$check_owned_bin/$command_name.saved"
+  if run_check_fixture "$darwin_chezmoi_data" bash "$check_root/bootstrap/scripts/check.sh" \
+    "$check_config" >"$check_root/missing-tool.log" 2>&1; then
+    fail_test "environment check must reject a missing $tool_manifest_kind tool"
+  fi
+  assert_file_contains "$check_root/missing-tool.log" '1 required tool(s) or asset(s) are missing.'
+  assert_file_not_contains "$check_root/missing-tool.log" 'is shadowed:'
+  mv "$check_owned_bin/$command_name.saved" "$check_owned_bin/$command_name"
+done
+# A consistent uv environment must still match the Python selected by mise.
+uv_check_name="$(uv_tool_binary_name "$(manifest_entries "$repo_root/bootstrap/manifests/ecosystem/uv-tools.txt" | head -1)")"
+mkdir -p "$check_root/uv-tools/$uv_check_name/bin"
+printf '#!/bin/sh\necho 3.12.9\n' >"$check_root/uv-tools/$uv_check_name/bin/python"
+chmod +x "$check_root/uv-tools/$uv_check_name/bin/python"
+printf 'version_info = 3.12.9.final.0\n' >"$check_root/uv-tools/$uv_check_name/pyvenv.cfg"
+if run_check_fixture "$darwin_chezmoi_data" bash "$check_root/bootstrap/scripts/check.sh" \
+  "$check_config" >"$check_root/uv-python.log" 2>&1; then
+  fail_test "environment check must reject a uv tool on another Python"
+fi
+assert_file_contains "$check_root/uv-python.log" 'runs Python 3.12.9 but mise selects Python 3.13.16'
+ln -sf "$check_root/python" "$check_root/uv-tools/$uv_check_name/bin/python"
+printf 'version_info = 3.13.16.final.0\n' >"$check_root/uv-tools/$uv_check_name/pyvenv.cfg"
+run_check_fixture "$darwin_chezmoi_data" bash "$check_root/bootstrap/scripts/check.sh" \
+  "$check_config" >"$check_root/uv-python-matched.log" 2>&1
+assert_file_contains "$check_root/uv-python-matched.log" 'All checks passed.'
 # Missing initialization must fail with a direct instruction, before the
 # baseline checks. Cover normal config discovery and an explicit config path.
 mv "$check_config" "$check_config.saved"
@@ -1314,7 +1402,7 @@ run_check_fixture "$darwin_chezmoi_data" bash "$check_root/bootstrap/scripts/che
 assert_file_contains "$check_root/opt-out.log" 'All checks passed.'
 assert_file_not_contains "$check_root/calls" 'ghostty +validate-config'
 printf '[data]\ndesktopBaseline = true\n' >"$check_config"
-for failed_check in mise ghostty; do
+for failed_check in mise ghostty python; do
   if FAIL_CHECK="$failed_check" run_check_fixture "$darwin_chezmoi_data" \
     bash "$check_root/bootstrap/scripts/check.sh" "$check_config" >"$check_root/failure.log" 2>&1; then
     fail_test "environment check must fail when $failed_check fails"
@@ -2004,6 +2092,16 @@ for valid_go_pin in \
     fail_test "go_tool_binary_name derived the wrong binary for $valid_go_pin"
   fi
 done
+while IFS='|' read -r go_name_spec expected_name; do
+  [[ "$(go_tool_binary_name "$go_name_spec")" == "$expected_name" ]] \
+    || fail_test "go_tool_binary_name must return $expected_name for $go_name_spec"
+done <<'EOF'
+example.com/foo/v2@v2.1.0|foo
+example.com/foo/v12@v12.1.0|foo
+example.com/foo/cmd/tool@v1.2.3|tool
+example.com/foo/v1@v1.2.3|v1
+example.com/foo/v2tool@v1.2.3|v2tool
+EOF
 go_pin_errors="$tmp_dir/go-pin.err"
 for invalid_go_pin in 'example.com/tool@latest' 'example.com/tool' 'example.com/tool@v1.2' 'example.com/tool@1.2.3'; do
   expect_failure "$go_pin_errors" go_tool_version "$invalid_go_pin"
@@ -2146,23 +2244,30 @@ expect_failure "$tmp_dir/pacman.err" run_pacman_installer
 assert_file_contains "$tmp_dir/pacman.err" "invalid pacman package"
 
 log_step "🐍" "Exercising the uv tool installer against stale tool environments..."
-# Every fixture interpreter reports Python 3.13.16. The environments record the
+# Synthetic interpreters report fixed versions. The environments record the
 # Python they were built on, as uv writes it into pyvenv.cfg.
 uv_stub_bin="$tmp_dir/uv-stub-bin"
 uv_tool_dir="$tmp_dir/uv-tools"
 uv_manifest="$tmp_dir/uv-tools.txt"
 uv_log="$tmp_dir/uv-args"
-mkdir -p "$uv_stub_bin" "$tmp_dir/uv-python"
+mkdir -p "$uv_stub_bin" "$tmp_dir/uv-python" "$tmp_dir/uv-project"
 cat >"$uv_stub_bin/uv" <<'STUB'
 #!/usr/bin/env bash
 case "$1 $2" in
   "tool dir") printf '%s\n' "$UV_TEST_TOOL_DIR" ;;
-  "tool list") [[ -z "${UV_TEST_LIST_EXIT:-}" ]] || exit "$UV_TEST_LIST_EXIT"; printf 'healthy v1.0\n- healthy\ndrifted v1.0\n- drifted\norphaned v1.0\n- orphaned\nbumped v0.9\n- bumped\n' ;;
+  "tool list") [[ -z "${UV_TEST_LIST_EXIT:-}" ]] || exit "$UV_TEST_LIST_EXIT"; printf 'healthy v1.0\n- healthy\ndrifted v1.0\n- drifted\norphaned v1.0\n- orphaned\nold-python v1.0\n- old-python\nbumped v0.9\n- bumped\n' ;;
   *) printf '%s\n' "$*" >>"$UV_TEST_LOG" ;;
 esac
 STUB
+cat >"$uv_stub_bin/mise" <<'STUB'
+#!/usr/bin/env bash
+set -euo pipefail
+[[ "$*" == 'which python' && "$PWD" == / && "${UV_TEST_MISE_FAIL:-0}" != 1 ]] || exit 1
+printf '%s\n' "$UV_TEST_PYTHON"
+STUB
 printf '#!/bin/sh\necho 3.13.16\n' >"$tmp_dir/uv-python/python"
-chmod +x "$uv_stub_bin/uv" "$tmp_dir/uv-python/python"
+printf '#!/bin/sh\necho 3.12.9\n' >"$tmp_dir/uv-python/old-python"
+chmod +x "$uv_stub_bin/uv" "$uv_stub_bin/mise" "$tmp_dir/uv-python/python" "$tmp_dir/uv-python/old-python"
 make_uv_tool_env() {
   mkdir -p "$uv_tool_dir/$1/bin"
   printf 'home = %s\nversion_info = %s\n' "$tmp_dir/uv-python" "$2" >"$uv_tool_dir/$1/pyvenv.cfg"
@@ -2171,36 +2276,56 @@ make_uv_tool_env() {
 make_uv_tool_env healthy 3.13.16.final.0 "$tmp_dir/uv-python/python"
 make_uv_tool_env drifted 3.13.14 "$tmp_dir/uv-python/python"
 make_uv_tool_env orphaned 3.13.14 "$tmp_dir/uv-python-removed/python"
+make_uv_tool_env old-python 3.12.9.final.0 "$tmp_dir/uv-python/old-python"
 make_uv_tool_env bumped 3.13.16.final.0 "$tmp_dir/uv-python/python"
-printf 'healthy==1.0\ndrifted==1.0\norphaned==1.0\nbumped==1.0\nabsent==1.0\n' >"$uv_manifest"
+printf 'healthy==1.0\ndrifted==1.0\norphaned==1.0\nold-python==1.0\nbumped==1.0\nabsent==1.0\n' >"$uv_manifest"
 
-uv_tool_env_healthy "$uv_tool_dir" healthy >/dev/null \
+uv_tool_env_healthy "$uv_tool_dir" healthy 3.13.16 >/dev/null \
   || fail_test "a uv tool environment on its recorded Python must be healthy"
-[[ "$(uv_tool_env_healthy "$uv_tool_dir" drifted)" == "built on Python 3.13.14 but runs Python 3.13.16" ]] \
+[[ "$(uv_tool_env_healthy "$uv_tool_dir" drifted 3.13.16)" == "built on Python 3.13.14 but runs Python 3.13.16" ]] \
   || fail_test "a uv tool environment on a different Python must report the drift"
-[[ "$(uv_tool_env_healthy "$uv_tool_dir" orphaned)" == "interpreter is missing" ]] \
+[[ "$(uv_tool_env_healthy "$uv_tool_dir" orphaned 3.13.16)" == "interpreter is missing" ]] \
   || fail_test "a uv tool environment without its interpreter must report it"
+if uv_problem="$(uv_tool_env_healthy "$uv_tool_dir" old-python 3.13.16)"; then
+  fail_test "an internally consistent uv environment on another Python must be unhealthy"
+fi
+[[ "$uv_problem" == 'runs Python 3.12.9 but mise selects Python 3.13.16' ]] \
+  || fail_test "uv health check must report the mise-selected Python mismatch: $uv_problem"
 
 run_uv_installer() {
   : >"$uv_log"
-  PATH="$uv_stub_bin:$PATH" UV_TEST_TOOL_DIR="$uv_tool_dir" UV_TEST_LOG="$uv_log" \
-    bash "$repo_root/bootstrap/scripts/install-uv-tools.sh" "$uv_manifest" >/dev/null
+  (
+    cd "$tmp_dir/uv-project"
+    PATH="$uv_stub_bin:$PATH" UV_TEST_TOOL_DIR="$uv_tool_dir" UV_TEST_LOG="$uv_log" \
+      UV_TEST_PYTHON="$tmp_dir/uv-python/python" \
+      bash "$repo_root/bootstrap/scripts/install-uv-tools.sh" "$uv_manifest" >/dev/null
+  )
 }
-run_uv_installer
-printf '%s\n' 'tool uninstall drifted' 'tool install drifted==1.0' \
-  'tool uninstall orphaned' 'tool install orphaned==1.0' 'tool install bumped==1.0' \
-  'tool install absent==1.0' >"$tmp_dir/uv-expected"
+run_uv_installer || fail_test "uv installer must resolve global Python from /"
+printf '%s\n' 'tool uninstall drifted' "tool install --python $tmp_dir/uv-python/python drifted==1.0" \
+  'tool uninstall orphaned' "tool install --python $tmp_dir/uv-python/python orphaned==1.0" \
+  'tool uninstall old-python' "tool install --python $tmp_dir/uv-python/python old-python==1.0" \
+  "tool install --python $tmp_dir/uv-python/python bumped==1.0" \
+  "tool install --python $tmp_dir/uv-python/python absent==1.0" >"$tmp_dir/uv-expected"
 cmp -s "$tmp_dir/uv-expected" "$uv_log" \
   || fail_test "uv installer must rebuild only stale tool environments: $(<"$uv_log")"
 DOTFILES_FORCE_REINSTALL=1 run_uv_installer
-printf '%s\n' 'tool uninstall healthy' 'tool install healthy==1.0' 'tool uninstall drifted' \
-  'tool install drifted==1.0' 'tool uninstall orphaned' 'tool install orphaned==1.0' \
-  'tool uninstall bumped' 'tool install bumped==1.0' 'tool install absent==1.0' >"$tmp_dir/uv-expected"
+printf '%s\n' 'tool uninstall healthy' "tool install --python $tmp_dir/uv-python/python healthy==1.0" \
+  'tool uninstall drifted' "tool install --python $tmp_dir/uv-python/python drifted==1.0" \
+  'tool uninstall orphaned' "tool install --python $tmp_dir/uv-python/python orphaned==1.0" \
+  'tool uninstall old-python' "tool install --python $tmp_dir/uv-python/python old-python==1.0" \
+  'tool uninstall bumped' "tool install --python $tmp_dir/uv-python/python bumped==1.0" \
+  "tool install --python $tmp_dir/uv-python/python absent==1.0" >"$tmp_dir/uv-expected"
 cmp -s "$tmp_dir/uv-expected" "$uv_log" \
   || fail_test "uv installer must rebuild every installed tool on force reinstall: $(<"$uv_log")"
 if UV_TEST_LIST_EXIT=42 run_uv_installer 2>/dev/null; then
   fail_test "uv installer must fail when uv cannot list installed tools"
 fi
+expect_failure "$tmp_dir/uv-mise.err" env UV_TEST_MISE_FAIL=1 \
+  PATH="$uv_stub_bin:$PATH" UV_TEST_TOOL_DIR="$uv_tool_dir" UV_TEST_LOG="$uv_log" \
+  UV_TEST_PYTHON="$tmp_dir/uv-python/python" \
+  bash "$repo_root/bootstrap/scripts/install-uv-tools.sh" "$uv_manifest"
+assert_file_contains "$tmp_dir/uv-mise.err" 'could not resolve the mise-selected Python'
 
 log_step "🐚" "Checking Bash 3.2 compatibility..."
 # All Bash code must run on macOS /bin/bash 3.2. Bash sources are discovered:
