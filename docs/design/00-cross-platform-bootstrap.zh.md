@@ -337,11 +337,11 @@ bat
 
 ### `install-shell-completions`
 
-- 读取 `bootstrap/manifests/shell/completions.txt`，每行声明一个命令以及以逗号分隔、需要生成补全的平台（`linux`、`darwin`）；当平台的包管理器已经提供补全时不列出该平台
-- 按平台应用统一的 shell 策略：Linux 生成 Bash 与 Zsh 资产，macOS 仅生成 Zsh 资产
-- 各命令的生成适配器保留在脚本中，因为各 CLI 通过不同的子命令或参数暴露补全生成；`bat` 在 Arch 上复制包自带的原生补全，在 Debian 上包装包自带的 `batcat` 补全，而不运行生成器
+- 读取 `bootstrap/manifests/shell/completions.txt`，每行声明一个命令。在当前机器上按命令和 shell 检测原生文件。macOS 检查 Homebrew site-functions，Linux Zsh 检查系统 site-functions 和 vendor-completions，Linux Bash 检查系统 bash-completion 文件。仅生成缺失的资产
+- 按平台应用统一的 shell 策略：Linux 可生成 Bash 与 Zsh 资产，macOS 只可生成 Zsh 资产，且都只在没有原生文件时生成
+- 各命令的生成适配器保留在脚本中，因为各 CLI 通过不同的子命令或参数暴露补全生成。唯一的适配例外是将 Debian 包自带的 `batcat` 补全包装为 `bat`。存在原生 `bat` 文件时（例如 Arch 的包），不生成 `bat` 资产
 - 以原子方式写入每个资产，生成失败时保留先前有效的文件
-- 为每个生成文件写入稳定的归属标记（Zsh 文件放在 `#compdef` 之后）；所有当前条目安装成功后，清理两个补全目录中不再被当前条目指向的已标记文件，绝不删除未标记文件，也不跟随符号链接
+- 为每个生成文件写入稳定的归属标记（Zsh 文件放在 `#compdef` 之后）；所有当前条目安装成功后，清理由原生资产替代或不再被清单指向的已标记文件，绝不删除未标记文件，也不跟随符号链接
 - `install`、`check`、`list` 共用同一份清单；`check` 将过时的归属文件报告为 stale，`list` 在当前目标之后附加它们，`uninstall.sh` 通过 `list` 枚举资产
 
 ### `install-go-tools`
@@ -386,7 +386,7 @@ dotfiles 需要保证：
 对于 Debian/Ubuntu 中的命名差异，可做最小兼容处理：
 
 - `bash-completion` 这类 shell 启动时直接依赖的支持包，继续由系统包管理器提供
-- CLI 官方提供的补全在 bootstrap 阶段统一生成到标准 XDG Bash / Zsh 目录；shell 启动时只负责发现
+- 原生补全仍归包管理器所有。仅在 bootstrap 阶段将缺失的资产生成到标准 XDG Bash / Zsh 目录；shell 启动时只负责发现
 - Linux 的 Bash 提供完整补全，macOS Bash 刻意只保留有限支持
 - macOS 显式加入 Homebrew 标准 site-functions 目录，并将 `zsh-completions` 放在 `fpath` 最后作为 fallback
 - 直接使用当前的 `fzf --bash` / `fzf --zsh` 集成

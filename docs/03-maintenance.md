@@ -127,16 +127,22 @@ categories:
   two-field, order-sensitive contract shared by four readers (`dot_zshrc.tmpl`,
   `install-oh-my-zsh-assets.sh`, `bootstrap/scripts/check.sh`, and
   `run-smoke-tests.sh`); adding a field or special case means updating all four.
-- **Shell completions**: `bootstrap/manifests/shell/completions.txt` is the
-  single inventory of generated completion commands and the platforms that
-  generate them. `install-shell-completions.sh` reads it for install, check, and
-  list; uninstall enumerates assets through `list`; the 55 and 60 hooks hash it.
-  Generated files carry an ownership marker, so removing a command or platform
-  from the manifest makes the next install prune the marked files it no longer
-  declares; unmarked files and symlinks are never removed. Package-manager
-  assets stay package-owned. Generator adapters stay in the installer because
-  the CLIs differ; a new command needs an adapter only when no existing one
-  fits. Keep `zsh-completions` last in `fpath` as fallback precedence.
+- **Shell completions**: `bootstrap/manifests/shell/completions.txt` lists one
+  command per line. The installer detects native assets per command and shell
+  on the running machine and generates only missing assets. Package-manager
+  assets stay package-owned. Debian `batcat` wrappers expose completion as
+  `bat`; where native `bat` files exist, as in the Arch package, no `bat` asset
+  is generated.
+  `install-shell-completions.sh` reads the manifest for install, check, and list;
+  uninstall enumerates assets through `list`; the 55 and 60 hooks hash it.
+  Removing a command or finding a native replacement makes the next install
+  prune obsolete marked files. Check reports them as stale; list includes them
+  until pruning. Pruning never removes unmarked files or symlinks; install
+  overwrites its own generated target paths. A user-owned file of the same name
+  earlier in `fpath` still takes precedence over a native asset. Generator
+  adapters stay in the installer because the CLIs differ; a new command needs
+  an adapter only when no existing one fits. Keep `zsh-completions` last in
+  `fpath` as fallback precedence.
 - **Runtimes** (mise): pinned to complete versions in
   `xdg_config/mise/config.toml.tmpl`. Bump intentionally.
 - **Binary-distributed tools** (for example `golangci-lint` and `uv`): pinned

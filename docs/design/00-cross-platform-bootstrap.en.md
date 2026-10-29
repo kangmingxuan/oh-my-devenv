@@ -337,11 +337,11 @@ Notes:
 
 ### `install-shell-completions`
 
-- Read `bootstrap/manifests/shell/completions.txt`, whose rows declare a command and the comma-separated platforms (`linux`, `darwin`) that generate its completion; leave a platform out when its package manager already ships the asset
-- Apply one shell policy per platform: Linux receives Bash and Zsh assets, macOS receives Zsh assets only
-- Keep the command-specific generator adapters in the script, because the CLIs expose completion generation through different subcommands and flags; `bat` copies the native package-owned completion on Arch or wraps the Debian package-owned `batcat` completion instead of running a generator
+- Read `bootstrap/manifests/shell/completions.txt`, with one command per line. Detect native files per command and shell on the running machine. Use Homebrew site-functions on macOS, system site-functions and vendor-completions for Linux Zsh, and system bash-completion files for Linux Bash. Generate only missing assets
+- Apply one shell policy per platform: Linux may receive Bash and Zsh assets, macOS Zsh assets only, in each case only where no native file exists
+- Keep the command-specific generator adapters in the script, because the CLIs expose completion generation through different subcommands and flags; the one adapter exception wraps Debian package-owned `batcat` completion as `bat`. Where native `bat` files exist, as in the Arch package, no `bat` asset is generated
 - Write each asset atomically so a failing generator leaves the previous valid file in place
-- Stamp each generated file with a stable ownership marker (after `#compdef` in Zsh files); after every current entry installs, prune marked files in the two completion directories that no current entry targets, and never delete unmarked files or follow symlinks
+- Stamp each generated file with a stable ownership marker (after `#compdef` in Zsh files); after every current entry installs, prune marked files superseded by native assets or no longer targeted by the manifest, and never delete unmarked files or follow symlinks
 - Serve `install`, `check`, and `list` from the same inventory; `check` reports obsolete owned files as stale, `list` appends them to the current targets, and `uninstall.sh` enumerates the assets through `list`
 
 ### `install-go-tools`
@@ -386,7 +386,7 @@ Dotfiles must ensure:
 For Debian/Ubuntu naming differences, keep compatibility handling minimal:
 
 - Keep shell startup support packages such as `bash-completion` in the system package layer
-- Generate official CLI completions once during bootstrap into the standard XDG Bash and Zsh directories; shell startup only discovers them
+- Leave native completions package-owned. Generate only missing assets during bootstrap into the standard XDG Bash and Zsh directories; shell startup only discovers them
 - Provide first-class Bash completion on Linux and intentionally limited Bash support on macOS
 - Add Homebrew's standard site-functions directory on macOS and keep `zsh-completions` last in `fpath` as a fallback
 - Use the current `fzf --bash` / `fzf --zsh` integration directly

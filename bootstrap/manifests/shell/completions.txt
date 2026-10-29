@@ -1,33 +1,20 @@
-# Shell completion inventory.
-#
-# Each non-comment line is exactly two whitespace-separated fields:
-#
-#   <command>  <platforms>
-#
-# <platforms> is a comma-separated subset of `linux` and `darwin` naming where
-# this baseline generates the command's completion assets. Leave a platform out
-# when its package manager already ships the completion (for example Homebrew
-# on macOS).
-#
-# The shell policy is fixed by platform, not per command: Linux receives Bash
-# and Zsh assets, macOS receives Zsh assets only. The generator adapter for each
-# command lives in bootstrap/scripts/install-shell-completions.sh because the
-# CLIs expose completion generation through different subcommands or flags;
-# `bat` copies native package completions on Arch or wraps Debian package-owned
-# `batcat` completions instead of running a generator.
+# Shell completion inventory: one command per non-comment line.
+# Use a shipped completion for each command and shell when available.
+# Generate only missing assets. Debian batcat-to-bat wrappers are the adapter
+# exception. Generator adapters live in bootstrap/scripts/install-shell-completions.sh.
+# Linux receives Bash and Zsh assets; macOS receives Zsh assets only.
 #
 # Readers: install-shell-completions.sh (install/check/list), uninstall.sh
-# (through `list`), the 55 and 60 hooks, and run-smoke-tests.sh.
-#
-# Generated files carry an ownership marker. Removing a command or a platform
-# here makes the next `install` prune the files it previously generated; `check`
-# reports them as stale and `list` includes them until then.
+# (through `list`), the 55 and 60 hooks (hashes), and run-smoke-tests.sh.
+# Generated files carry an ownership marker. Removing a command or detecting
+# a native replacement makes install prune its marked files. Check reports
+# them as stale; list includes existing owned files until they are pruned.
 
-uv             linux,darwin
-uvx            linux,darwin
-golangci-lint  linux,darwin
-dlv            linux,darwin
-ruff           linux,darwin
-chezmoi        linux,darwin
-mise           linux
-bat            linux
+uv
+uvx
+golangci-lint
+dlv
+ruff
+chezmoi
+mise
+bat

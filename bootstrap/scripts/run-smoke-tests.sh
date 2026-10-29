@@ -118,6 +118,8 @@ run_completion_installer() {
   shift
 
   PATH="$completion_stub_bin:/usr/bin:/bin" XDG_DATA_HOME="$data_home" \
+    HOMEBREW_PREFIX="$completion_brew_prefix" \
+    OH_MY_DEVENV_SMOKE_COMPLETION_ROOT="$completion_system_fixture" \
     bash "$completion_installer" "$@"
 }
 
@@ -850,7 +852,23 @@ completion_manifest="$repo_root/bootstrap/manifests/shell/completions.txt"
 completion_stub_bin="$tmp_dir/completion-stub-bin"
 completion_linux_data="$tmp_dir/completion-linux-data"
 completion_macos_data="$tmp_dir/completion-macos-data"
-mkdir -p "$completion_stub_bin"
+completion_system_fixture="$tmp_dir/completion-system"
+completion_brew_prefix="$tmp_dir/completion-brew"
+mkdir -p "$completion_stub_bin" "$completion_system_fixture/usr/share/bash-completion/completions" \
+  "$completion_system_fixture/usr/share/zsh/vendor-completions" \
+  "$completion_system_fixture/usr/share/zsh/site-functions" "$completion_brew_prefix/share/zsh/site-functions"
+printf '_bat() { COMPREPLY=(stub); }\ncomplete -F _bat batcat\n' \
+  >"$completion_system_fixture/usr/share/bash-completion/completions/batcat"
+printf '#compdef batcat\n' >"$completion_system_fixture/usr/share/zsh/vendor-completions/_batcat"
+# macOS bat ships a completion. The Linux fixture exercises the batcat adapter.
+printf '#compdef bat\n' >"$completion_brew_prefix/share/zsh/site-functions/_bat"
+# Resolve a missing HOMEBREW_PREFIX through common.sh's brew_command route.
+cat >"$completion_stub_bin/brew" <<'EOF'
+#!/bin/sh
+[ "$1" = --prefix ] || exit 1
+printf '%s\n' "$OH_MY_DEVENV_SMOKE_COMPLETION_ROOT/brew"
+EOF
+chmod +x "$completion_stub_bin/brew"
 cat >"$completion_stub_bin/completion-generator" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -888,19 +906,18 @@ for completion_platform in linux darwin; do
   fi
 done
 
-# The Linux inventory uses package-owned bat/batcat completions, so the
-# production Linux install runs only on Linux.
-if [[ "$(uname -s)" != Darwin ]]; then
-  run_completion_installer "$completion_linux_data" install linux "$completion_manifest"
-  run_completion_installer "$completion_linux_data" check linux "$completion_manifest"
-  linux_completion_listing="$(run_completion_installer "$completion_linux_data" list linux "$completion_manifest")"
-  while IFS= read -r completion_target; do
-    [[ -s "$completion_target" ]] || fail_test "missing Linux completion asset: $completion_target"
-  done <<<"$linux_completion_listing"
-  if grep -Fxq bat <<<"$production_completion_commands"; then
-    assert_file_contains "$completion_linux_data/bash-completion/completions/bat.bash" "complete -F _bat bat"
-    assert_file_contains "$completion_linux_data/zsh/site-functions/_bat" "#compdef bat"
-  fi
+# Exercise both platforms with package paths isolated from the host.
+run_completion_installer "$completion_linux_data" install linux "$completion_manifest"
+run_completion_installer "$completion_linux_data" check linux "$completion_manifest"
+linux_completion_listing="$(run_completion_installer "$completion_linux_data" list linux "$completion_manifest")"
+while IFS= read -r completion_target; do
+  [[ -s "$completion_target" ]] || fail_test "missing Linux completion asset: $completion_target"
+done <<<"$linux_completion_listing"
+if grep -Fxq bat <<<"$production_completion_commands"; then
+  assert_file_contains "$completion_linux_data/bash-completion/completions/bat.bash" "complete -F _bat bat"
+  assert_file_contains "$completion_linux_data/zsh/site-functions/_bat" "#compdef bat"
+  assert_file_contains "$completion_linux_data/zsh/site-functions/_bat" 'autoload -Uz _batcat'
+  bash -c 'source "$1"; complete -p bat' _ "$completion_linux_data/bash-completion/completions/bat.bash" >/dev/null
 fi
 
 run_completion_installer "$completion_macos_data" install darwin "$completion_manifest"
@@ -914,15 +931,15 @@ if run_completion_installer "$tmp_dir/completion-empty-data" check darwin "$comp
   fail_test "completion check must fail while the listed assets are missing"
 fi
 
-# A synthetic manifest exercises platform membership, adapters, and failure
+# A synthetic manifest exercises native detection, adapters, and failure
 # handling independently of the commands the baseline currently selects.
 synthetic_completion_manifest="$tmp_dir/completions.synthetic.txt"
 synthetic_completion_data="$tmp_dir/completion-synthetic-data"
 cat >"$synthetic_completion_manifest" <<'EOF'
-# command   platforms
-uv          linux,darwin
-ruff        linux
-chezmoi     darwin
+# command
+uv
+ruff
+chezmoi
 EOF
 # Stub the synthetic commands from that manifest's own rows so this fixture
 # stays independent of what the production manifest currently selects.
@@ -934,6 +951,7 @@ done <<<"$(manifest_entries "$synthetic_completion_manifest" | awk '{ print $1 }
 run_completion_installer "$synthetic_completion_data" install darwin "$synthetic_completion_manifest"
 synthetic_darwin_listing="$(run_completion_installer "$synthetic_completion_data" list darwin "$synthetic_completion_manifest")"
 expected_darwin_listing="$synthetic_completion_data/zsh/site-functions/_uv
+$synthetic_completion_data/zsh/site-functions/_ruff
 $synthetic_completion_data/zsh/site-functions/_chezmoi"
 if [[ "$synthetic_darwin_listing" != "$expected_darwin_listing" ]]; then
   fail_test "synthetic darwin completion inventory was: $synthetic_darwin_listing"
@@ -943,7 +961,9 @@ synthetic_linux_listing="$(run_completion_installer "$synthetic_completion_data"
 expected_linux_listing="$synthetic_completion_data/zsh/site-functions/_uv
 $synthetic_completion_data/bash-completion/completions/uv.bash
 $synthetic_completion_data/zsh/site-functions/_ruff
-$synthetic_completion_data/bash-completion/completions/ruff.bash"
+$synthetic_completion_data/bash-completion/completions/ruff.bash
+$synthetic_completion_data/zsh/site-functions/_chezmoi
+$synthetic_completion_data/bash-completion/completions/chezmoi.bash"
 if [[ "$synthetic_linux_listing" != "$expected_linux_listing" ]]; then
   fail_test "synthetic linux completion inventory was: $synthetic_linux_listing"
 fi
@@ -952,9 +972,6 @@ run_completion_installer "$synthetic_completion_data" check linux "$synthetic_co
 while IFS= read -r completion_target; do
   [[ -s "$completion_target" ]] || fail_test "missing synthetic completion asset: $completion_target"
 done <<<"$synthetic_linux_listing"
-if [[ -e "$synthetic_completion_data/zsh/site-functions/_chezmoi" ]]; then
-  fail_test "linux completion install generated an asset the manifest reserves for darwin"
-fi
 if [[ "$(uname -s)" == Darwin ]]; then
   synthetic_completion_mode="$(stat -f '%Lp' "$synthetic_completion_data/zsh/site-functions/_uv")"
 else
@@ -971,7 +988,8 @@ zsh -fc 'fpath=("$1" ${fpath:#/usr/share/zsh/vendor-completions}); autoload -Uz 
 # A failing generator must not replace the previous valid asset or leave
 # temporary files behind.
 printf '%s\n' preserved >"$synthetic_completion_data/zsh/site-functions/_uv"
-if PATH="$completion_stub_bin:/usr/bin:/bin" XDG_DATA_HOME="$synthetic_completion_data" FAIL_COMPLETION_FOR=uv \
+if HOMEBREW_PREFIX="$completion_brew_prefix" OH_MY_DEVENV_SMOKE_COMPLETION_ROOT="$completion_system_fixture" \
+  PATH="$completion_stub_bin:/usr/bin:/bin" XDG_DATA_HOME="$synthetic_completion_data" FAIL_COMPLETION_FOR=uv \
   bash "$completion_installer" install darwin "$synthetic_completion_manifest" >/dev/null 2>&1; then
   fail_test "completion installation must fail when a generator fails"
 fi
@@ -1003,7 +1021,8 @@ printf 'unexpected tail invocation in marker-failure fixture: %s\n' "$*" >&2
 exit 2
 EOF
 chmod +x "$completion_failing_tail_bin/tail"
-if PATH="$completion_failing_tail_bin:$completion_stub_bin:/usr/bin:/bin" XDG_DATA_HOME="$synthetic_completion_data" \
+if HOMEBREW_PREFIX="$completion_brew_prefix" OH_MY_DEVENV_SMOKE_COMPLETION_ROOT="$completion_system_fixture" \
+  PATH="$completion_failing_tail_bin:$completion_stub_bin:/usr/bin:/bin" XDG_DATA_HOME="$synthetic_completion_data" \
   bash "$completion_installer" install darwin "$synthetic_completion_manifest" >"$completion_marker_failure_log" 2>&1; then
   fail_test "completion installation must fail when the marker step fails"
 fi
@@ -1033,14 +1052,13 @@ while IFS='|' read -r invalid_rows expected_error; do
     list linux "$invalid_completion_manifest"
   assert_file_contains "$completion_errors" "$expected_error"
 done <<'EOF'
-uv|must be "<command> <platforms>"
-uv linux extra|must be "<command> <platforms>"
-uv plan9|unsupported completion platform
-uv linux\nuv darwin|duplicate completion command
-/bin/uv linux|invalid completion command name
+uv linux|must be "<command>"
+uv linux extra|must be "<command>"
+uv\nuv|duplicate completion command
+/bin/uv|invalid completion command name
 EOF
 # A manifest command without a generator adapter lists fine but cannot install.
-printf '%s\n' 'no-adapter linux' >"$invalid_completion_manifest"
+printf '%s\n' 'no-adapter' >"$invalid_completion_manifest"
 ln -s completion-generator "$completion_stub_bin/no-adapter"
 run_completion_installer "$synthetic_completion_data" list linux "$invalid_completion_manifest" >/dev/null
 expect_failure "$completion_errors" run_completion_installer "$synthetic_completion_data" \
@@ -1048,16 +1066,16 @@ expect_failure "$completion_errors" run_completion_installer "$synthetic_complet
 assert_file_contains "$completion_errors" "unsupported completion generator: no-adapter"
 
 # Reconciliation: files this installer wrote for commands that later left the
-# manifest or this platform are pruned only after every current entry installs,
+# manifest or gained native replacements are pruned after every current entry installs,
 # while unmarked files and symlinks in the same directories are left alone.
 reconcile_completion_manifest="$tmp_dir/completions.reconcile.txt"
 reconcile_completion_data="$tmp_dir/completion-reconcile-data"
 reconcile_zsh_dir="$reconcile_completion_data/zsh/site-functions"
 reconcile_bash_dir="$reconcile_completion_data/bash-completion/completions"
 cat >"$reconcile_completion_manifest" <<'EOF'
-uv          linux,darwin
-ruff        linux,darwin
-chezmoi     linux,darwin
+uv
+ruff
+chezmoi
 EOF
 while IFS= read -r completion_command; do
   if [[ ! -e "$completion_stub_bin/$completion_command" ]]; then
@@ -1075,10 +1093,12 @@ printf 'complete -W stub custom\n' >"$reconcile_bash_dir/custom.bash"
 cp "$reconcile_zsh_dir/_ruff" "$tmp_dir/completion-linked-owned"
 ln -s "$tmp_dir/completion-linked-owned" "$reconcile_zsh_dir/_linked"
 
-# ruff leaves the linux platform and chezmoi leaves the manifest entirely.
+# Native ruff assets appear, and chezmoi leaves the manifest entirely.
+printf '# native ruff\n' >"$completion_system_fixture/usr/share/zsh/site-functions/_ruff"
+printf '# native ruff\n' >"$completion_system_fixture/usr/share/bash-completion/completions/ruff"
 cat >"$reconcile_completion_manifest" <<'EOF'
-uv          linux,darwin
-ruff        darwin
+uv
+ruff
 EOF
 reconcile_current_targets="$reconcile_zsh_dir/_uv
 $reconcile_bash_dir/uv.bash"
@@ -1098,7 +1118,8 @@ if [[ "$reconcile_listing" != "$expected_reconcile_listing" ]]; then
   fail_test "completion list must include obsolete owned files before reinstall; got: $reconcile_listing"
 fi
 # A failing current entry must leave the obsolete files for the next attempt.
-if PATH="$completion_stub_bin:/usr/bin:/bin" XDG_DATA_HOME="$reconcile_completion_data" FAIL_COMPLETION_FOR=uv \
+if HOMEBREW_PREFIX="$completion_brew_prefix" OH_MY_DEVENV_SMOKE_COMPLETION_ROOT="$completion_system_fixture" \
+  PATH="$completion_stub_bin:/usr/bin:/bin" XDG_DATA_HOME="$reconcile_completion_data" FAIL_COMPLETION_FOR=uv \
   bash "$completion_installer" install linux "$reconcile_completion_manifest" >/dev/null 2>&1; then
   fail_test "completion installation must fail when a generator fails"
 fi
@@ -1125,6 +1146,63 @@ reconcile_listing="$(run_completion_installer "$reconcile_completion_data" \
 if [[ "$reconcile_listing" != "$(sort <<<"$reconcile_current_targets")" ]]; then
   fail_test "completion list must converge on current targets after reconcile; got: $reconcile_listing"
 fi
+
+rm "$completion_system_fixture/usr/share/zsh/site-functions/_ruff" \
+  "$completion_system_fixture/usr/share/bash-completion/completions/ruff"
+
+# Native detection is per command and per shell. Start with owned files, then
+# introduce native replacements so check/list/install prove stale reconciliation.
+native_completion_data="$tmp_dir/completion-native-data"
+run_completion_installer "$native_completion_data" install linux "$synthetic_completion_manifest"
+printf '# native uv\n' >"$completion_system_fixture/usr/share/zsh/site-functions/_uv"
+printf '# native ruff\n' >"$completion_system_fixture/usr/share/zsh/vendor-completions/_ruff"
+printf '# native chezmoi\n' >"$completion_system_fixture/usr/share/bash-completion/completions/chezmoi"
+native_obsolete_targets="$native_completion_data/zsh/site-functions/_uv
+$native_completion_data/zsh/site-functions/_ruff
+$native_completion_data/bash-completion/completions/chezmoi.bash"
+expect_failure "$completion_errors" run_completion_installer "$native_completion_data" check linux "$synthetic_completion_manifest"
+native_listing="$(run_completion_installer "$native_completion_data" list linux "$synthetic_completion_manifest")"
+while IFS= read -r completion_target; do
+  assert_file_contains "$completion_errors" "[stale] shell completion: $completion_target"
+  grep -Fxq "$completion_target" <<<"$native_listing" || fail_test "list omitted stale native replacement: $completion_target"
+done <<<"$native_obsolete_targets"
+# Native assets are skipped; the other shell still needs generated assets.
+run_completion_installer "$native_completion_data" install linux "$synthetic_completion_manifest" >/dev/null
+while IFS= read -r completion_target; do
+  [[ ! -e "$completion_target" ]] || fail_test "native replacement was generated or not pruned: $completion_target"
+done <<<"$native_obsolete_targets"
+for completion_target in "$native_completion_data/bash-completion/completions/uv.bash" \
+  "$native_completion_data/bash-completion/completions/ruff.bash" "$native_completion_data/zsh/site-functions/_chezmoi"; do
+  [[ -s "$completion_target" ]] || fail_test "missing generation for shell without native asset: $completion_target"
+done
+run_completion_installer "$native_completion_data" check linux "$synthetic_completion_manifest" >/dev/null
+rm "$completion_system_fixture/usr/share/zsh/site-functions/_uv" \
+  "$completion_system_fixture/usr/share/zsh/vendor-completions/_ruff" \
+  "$completion_system_fixture/usr/share/bash-completion/completions/chezmoi"
+
+# Arch bat uses its native assets without copying or wrapping them.
+printf 'bat\n' >"$tmp_dir/completions.bat.txt"
+run_completion_installer "$native_completion_data" install linux "$tmp_dir/completions.bat.txt" >/dev/null
+printf '# native bat\n' >"$completion_system_fixture/usr/share/zsh/site-functions/_bat"
+printf '# native bat\n' >"$completion_system_fixture/usr/share/bash-completion/completions/bat"
+run_completion_installer "$native_completion_data" install linux "$tmp_dir/completions.bat.txt" >/dev/null
+[[ ! -e "$native_completion_data/zsh/site-functions/_bat" && ! -e "$native_completion_data/bash-completion/completions/bat.bash" ]] \
+  || fail_test "native bat completions must not be copied or wrapped"
+rm "$completion_system_fixture/usr/share/zsh/site-functions/_bat" \
+  "$completion_system_fixture/usr/share/bash-completion/completions/bat"
+
+# macOS resolves a custom Homebrew prefix through brew_command when the prefix
+# is absent from the environment. A native replacement prunes only marked files.
+mkdir -p "$completion_system_fixture/brew/share/zsh/site-functions"
+printf 'uv\n' >"$tmp_dir/completions.native-macos.txt"
+run_completion_installer "$native_completion_data" install darwin "$tmp_dir/completions.native-macos.txt" >/dev/null
+printf '# native uv\n' >"$completion_system_fixture/brew/share/zsh/site-functions/_uv"
+HOMEBREW_PREFIX='' OH_MY_DEVENV_SMOKE_COMPLETION_ROOT="$completion_system_fixture" \
+  PATH="$completion_stub_bin:/usr/bin:/bin" XDG_DATA_HOME="$native_completion_data" FAIL_COMPLETION_FOR=uv \
+  bash "$completion_installer" install darwin "$tmp_dir/completions.native-macos.txt" >/dev/null
+[[ ! -e "$native_completion_data/zsh/site-functions/_uv" ]] || fail_test "Homebrew native completion must replace the marked file"
+[[ ! -d "$native_completion_data/bash-completion/completions" || -z "$(find "$native_completion_data/bash-completion/completions" -type f -print)" ]] \
+  || fail_test "macOS must not generate Bash assets"
 
 # Registered desktop faces pass and missing faces fail. Font identities come
 # from the manifest.
