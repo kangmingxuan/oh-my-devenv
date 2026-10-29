@@ -7,6 +7,11 @@ versioning and release policy lives in
 
 ## [Unreleased]
 
+### Added
+
+- Fail the environment check when PATH selects an executable for a Go or uv
+  manifest entry other than the one owned by its installer.
+
 ### Changed
 
 - Run CI from one workflow, `ci.yml`, with the same required job names. Pull
@@ -16,6 +21,17 @@ versioning and release policy lives in
   `bootstrap/scripts/ci-apply.sh`: apply, an unchanged reapply that must not
   rerun the final check hook, `uninstall.sh --confirm` with empty chezmoi state
   buckets afterward, and a restoring apply.
+
+### Fixed
+
+- Rebuild uv tool environments when their Python version differs from the
+  global mise-selected Python, and use that interpreter for every uv tool install.
+  The standalone environment check now reports this mismatch.
+- Derive Go tool binary names correctly for module paths with a major-version
+  suffix such as `/v2`.
+- Check and summarize the mise toolchain from the global mise configuration, so
+  running the environment check from a project directory no longer reports the
+  project's missing tools or prints its versions.
 
 ## [0.2.0] - 2026-10-26
 

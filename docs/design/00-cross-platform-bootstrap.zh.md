@@ -27,7 +27,7 @@
    - Arch Linux 家族使用 `pacman`
 3. **桌面资产安装器**：用户选择后，从独立清单安装完整的平台包：所有受支持平台包含 Ghostty 与 Maple Mono NF CN，macOS 额外包含 OrbStack
 4. **mise**：负责语言运行时与二进制分发工具的版本管理，如 Go / Node / Python / `golangci-lint` / `uv`
-5. **生态工具安装器**：负责语言生态内工具
+5. **生态工具安装器**：管理使用 mise 运行时构建或运行的工具。baseline 的运行时配置变化后，该层负责重建这些工具。
    - Go：`go install`（如 `gopls`、`dlv`）
    - Python：`uv tool`
    - Node：仅在确有必要时使用全局安装
@@ -351,16 +351,16 @@ bat
 - 通过 `bootstrap/scripts/common.sh` 中的 `setup_go_env` 固定 Go 工具安装路径
 - 在未显式覆盖时，将 `GOBIN` 默认设置为 `$HOME/go/bin`
 - 要求每一项都固定为精确的 `module@vX.Y.Z` 版本，否则在安装任何工具之前直接失败
-- 每次运行都安装全部工具：hook 只在输入变化时运行，Go 升级后必须重新构建工具，未变化的工具由 Go 构建缓存保证速度
+- 每次运行都用 PATH 上的 `go`（hook 会把 mise shims 放在继承的 PATH 之前）安装全部工具：hook 只在输入变化时运行，Go 升级后必须重新构建工具，未变化的工具由 Go 构建缓存保证速度
 - 工具归属由声明它的清单决定：mise 配置负责 `golangci-lint` 等二进制分发工具，`go-tools.txt` 负责 `go install` 工具
 
 ### `install-uv-tools`
 
 - 从 `bootstrap/manifests/` 中的 source-only manifest 路径读取 `uv-tools.txt` 清单文件
-- 按 manifest 中声明的 requirement 安装工具
-- 已安装版本与固定版本一致时跳过，除非设置 `DOTFILES_FORCE_REINSTALL=1`
-- 已安装工具的环境解释器缺失，或解释器版本与环境记录的版本不一致时，重建该工具；先卸载再安装，因为 `uv tool install --reinstall` 会保留过期的环境
-- mise 配置变化时重新执行，因为这些工具运行在 mise 管理的 Python 上
+- 按 manifest 中声明的 requirement 安装工具，并通过 `--python` 指定从 `/` 运行 `mise which python` 选中的全局解释器；全局选择包含用户的 `config.local.toml` overlay，不受调用方项目目录的影响
+- 工具环境健康且已安装版本与固定版本一致时跳过，除非设置 `DOTFILES_FORCE_REINSTALL=1`
+- 已安装工具的解释器缺失、与环境记录的 Python 版本不一致，或与 mise 全局选中的 Python 版本（X.Y.Z）不一致时，重建该工具；先卸载再安装，因为 `uv tool install --reinstall` 会保留过期的环境
+- `xdg_config/mise/config.toml.tmpl` 变化时重新执行，因为这些工具运行在 mise 管理的 Python 上；只在用户的 `config.local.toml` overlay 中修改 Python 版本不会重新运行 hook，此时 `check.sh` 会失败
 - 重复执行必须安全
 
 ### `check.sh` 与 `run_onchange_after_60-check`
@@ -369,9 +369,11 @@ bat
 - 接受可选的 chezmoi 配置路径；调用方省略该参数时，使用 chezmoi 正常的配置选择
 - 通过根目录模板 partial 解析包管理器和桌面支持，并通过 chezmoi 读取持久化的 `desktopBaseline` 选择
 - 复用安装器消费的同一份清单，而不是维护第二份硬编码工具列表
-- 用 `dpkg-query` 校验 apt 清单，用 `pacman -Q` 校验 pacman 清单，用 `brew bundle check` 校验 Brewfile，用 `mise ls --current --missing` 校验 mise 配置
-- 按二进制名称检查生态工具清单，报告不再运行在构建时 Python 上的 uv 工具环境，通过安装器的 `check` 动作检查补全清单，并在 Linux 上通过 Fontconfig、在 macOS 上通过用户字体目录检查字体清单声明的字体族与字面
-- 用 `mise current` 输出 mise 管理的工具链，使摘要跟随配置变化
+- 用 `dpkg-query` 校验 apt 清单，用 `pacman -Q` 校验 pacman 清单，用 `brew bundle check` 校验 Brewfile，在 `/` 下运行 `mise ls --current --missing`，校验包含 `config.local.toml` 在内的 mise 全局配置
+- 按二进制名称检查生态工具清单；PATH 选中的可执行文件不是清单条目对应的安装器管理的二进制时，将检查判为失败
+- 对清单中已安装的条目，报告解释器缺失、与环境记录的版本不一致，或与 mise 全局选中的 Python 版本不一致的 uv 工具环境
+- 通过安装器的 `check` 动作检查补全清单，并在 Linux 上通过 Fontconfig、在 macOS 上通过用户字体目录检查字体清单声明的字体族与字面
+- 在 `/` 下运行 `mise current` 输出 mise 管理的工具链，使摘要跟随全局配置，而不是调用方所在项目的配置
 - 60 号 hook 对 `check.sh` 计算哈希，将当前 chezmoi 配置传给脚本，并且只在 hook 中保留下一步指引
 
 ## 11. PATH 与兼容性

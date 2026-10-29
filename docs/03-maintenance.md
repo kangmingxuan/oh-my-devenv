@@ -161,6 +161,28 @@ this script during apply.
 Run `bash bootstrap/scripts/check.sh [config-file]` to check an existing
 installation on demand. The optional argument selects the chezmoi config that
 contains the persisted desktop choice. Omit it to use the normal chezmoi config.
+The check fails when PATH selects an executable for a Go or uv manifest entry
+other than the one its installer owns. It evaluates the hook PATH built by `check.sh`: user-local bin
+(`$HOME/.local/bin`), mise shims, Homebrew's executable directory on macOS, then
+`$GOBIN`, all ahead of the inherited PATH.
+It also reports installed uv environments for manifest entries with a missing
+interpreter or a Python version that differs from the recorded or global
+mise-selected version.
+The uv installer and health check resolve `mise which python` from `/` to use
+the global selection, including the user's `config.local.toml` overlay,
+independently of project configuration in the caller's directory.
+The uv installer rebuilds unhealthy environments and uses `--python` with that
+interpreter. The ecosystem hook reruns when the repository's mise configuration
+changes. It does not rerun when you change the Python version only in
+`config.local.toml`. In that case, install the new Python, then rebuild the uv
+tools:
+
+```bash
+(cd / && mise install python)
+source_dir="$(chezmoi source-path)"
+bash "$source_dir/bootstrap/scripts/install-uv-tools.sh" \
+  "$source_dir/bootstrap/manifests/ecosystem/uv-tools.txt"
+```
 
 Related low-risk dependency updates may share a merge request when they use the
 same validation path and remain easy to review and roll back. Keep major,

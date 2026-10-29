@@ -152,7 +152,7 @@ check_mise_toolchain() {
 
   # Only stdout is parsed; mise warnings stay visible on stderr without being
   # mistaken for missing tools.
-  if ! missing="$(mise ls --current --missing --no-header)"; then
+  if ! missing="$(cd / && mise ls --current --missing --no-header)"; then
     log_warning "mise could not inspect the configured toolchain"
     errors=$((errors + 1))
     return 0
@@ -252,9 +252,12 @@ check_desktop_font_macos() {
 check_manifest_cmds() {
   local manifest="$1"
   local command_name_parser="$2"
+  local owned_bin_dir="$3"
   local entries=""
   local tool_spec=""
   local command_name=""
+  local selected_path=""
+  local expected_path=""
 
   if ! entries="$(manifest_entries "$manifest")"; then
     errors=$((errors + 1))
@@ -274,10 +277,19 @@ check_manifest_cmds() {
     fi
 
     check_cmd "$command_name"
+    # -ef follows symlinks and compares file identity on macOS and Linux.
+    # Missing commands are reported only by check_cmd above.
+    if [[ -n "$owned_bin_dir" ]] && selected_path="$(command -v "$command_name")"; then
+      expected_path="$owned_bin_dir/$command_name"
+      if [[ ! "$selected_path" -ef "$expected_path" ]]; then
+        log_warning "$command_name is shadowed: PATH selects $selected_path; expected $expected_path"
+        errors=$((errors + 1))
+      fi
+    fi
   done <<<"$entries"
 }
 
-# An installed uv tool must still run on the Python its environment was built on.
+# An installed uv tool must match its recorded and mise-selected Python versions.
 check_uv_tool_envs() {
   local manifest="$1"
   local entries=""
@@ -285,6 +297,11 @@ check_uv_tool_envs() {
   local tool_spec=""
   local name=""
   local problem=""
+
+  if ! resolve_mise_python; then
+    errors=$((errors + 1))
+    return 0
+  fi
 
   if ! entries="$(manifest_entries "$manifest")" || ! tool_dir="$(uv tool dir 2>/dev/null)"; then
     errors=$((errors + 1))
@@ -296,7 +313,7 @@ check_uv_tool_envs() {
     name="$(uv_tool_binary_name "$tool_spec")"
     # check_manifest_cmds reports a tool that is not installed.
     [[ -d "$tool_dir/$name" ]] || continue
-    if ! problem="$(uv_tool_env_healthy "$tool_dir" "$name")"; then
+    if ! problem="$(uv_tool_env_healthy "$tool_dir" "$name" "$MISE_PYTHON_VERSION")"; then
       log_warning "uv tool $name: $problem. Run \`bash $scripts_dir/install-uv-tools.sh $manifest\` to rebuild it."
       errors=$((errors + 1))
     fi
@@ -348,8 +365,13 @@ esac
 check_mise_toolchain
 
 # Ecosystem tools
-check_manifest_cmds "$manifests_dir/ecosystem/go-tools.txt" go_tool_binary_name
-check_manifest_cmds "$manifests_dir/ecosystem/uv-tools.txt" uv_tool_binary_name
+check_manifest_cmds "$manifests_dir/ecosystem/go-tools.txt" go_tool_binary_name "$GOBIN"
+uv_bin_dir=""
+if ! uv_bin_dir="$(uv tool dir --bin)"; then
+  log_warning "could not resolve the uv tool binary directory"
+  errors=$((errors + 1))
+fi
+check_manifest_cmds "$manifests_dir/ecosystem/uv-tools.txt" uv_tool_binary_name "$uv_bin_dir"
 check_uv_tool_envs "$manifests_dir/ecosystem/uv-tools.txt"
 
 # Shell assets
@@ -420,7 +442,7 @@ print_mise_toolchain() {
   local tool=""
   local version=""
 
-  listing="$(mise current 2>/dev/null)" || return 0
+  listing="$(cd / && mise current 2>/dev/null)" || return 0
   while read -r tool version _; do
     if [[ -n "$tool" ]]; then
       printf '    %-16s %s\n' "$tool" "$version"

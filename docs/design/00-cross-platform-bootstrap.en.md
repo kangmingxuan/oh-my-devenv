@@ -27,7 +27,7 @@ Use the following layered model:
    - Arch Linux family uses `pacman`
 3. **Desktop asset installer**: when selected, installs the complete platform bundle from a separate manifest: Ghostty and Maple Mono NF CN everywhere supported, plus OrbStack on macOS
 4. **mise**: manages runtime versions and binary-distributed tools such as Go / Node / Python / `golangci-lint` / `uv`
-5. **Ecosystem tool installers**: manage language-specific tools
+5. **Ecosystem tool installers**: manage tools built against or run on mise-managed runtimes. This layer owns rebuilding those tools when the baseline runtime configuration changes.
    - Go: `go install` (for tools such as `gopls` and `dlv`)
    - Python: `uv tool`
    - Node: global install only when truly necessary
@@ -351,16 +351,16 @@ Notes:
 - Call `setup_go_env` from `bootstrap/scripts/common.sh` to keep Go tools on a stable install path
 - Default `GOBIN` to `$HOME/go/bin` when no override is provided
 - Require every entry to pin an exact `module@vX.Y.Z` version and fail before installing anything otherwise
-- Install every tool on each run; the hook runs only when its inputs change, a Go upgrade must rebuild the tools, and the Go build cache keeps an unchanged tool fast
+- Install every tool on each run with the `go` on PATH (the hook puts mise shims ahead of the inherited PATH); the hook runs only when its inputs change, a Go upgrade must rebuild the tools, and the Go build cache keeps an unchanged tool fast
 - Tool ownership follows the manifest that declares the tool: the mise configuration owns binary-distributed tools such as `golangci-lint`, and `go-tools.txt` owns `go install` tools
 
 ### `install-uv-tools`
 
 - Read `uv-tools.txt` from a source-only manifest path under `bootstrap/manifests/`
-- Install tools from the manifest using the declared requirement specifiers
-- Skip tools already installed at the pinned version unless `DOTFILES_FORCE_REINSTALL=1`
-- Rebuild an installed tool whose environment interpreter is missing or reports a different version than the environment records; uninstall it first, because `uv tool install --reinstall` keeps the stale environment
-- Run again when the mise configuration changes, because the tools run on the mise-managed Python
+- Install tools from the manifest using the declared requirement specifiers and `--python` with the global interpreter selected by `mise which python` from `/`, including the user's `config.local.toml` overlay independently of the caller's project directory
+- Skip healthy tools already installed at the pinned version unless `DOTFILES_FORCE_REINSTALL=1`
+- Rebuild an installed tool when its interpreter is missing, differs from the recorded Python version, or differs from the global mise-selected Python version (X.Y.Z); uninstall it first, because `uv tool install --reinstall` keeps the stale environment
+- Run again when `xdg_config/mise/config.toml.tmpl` changes, because the tools run on the mise-managed Python; a Python version change only in the user's `config.local.toml` overlay does not rerun the hook, and `check.sh` then fails
 - Repeated execution must be safe
 
 ### `check.sh` and `run_onchange_after_60-check`
@@ -369,9 +369,11 @@ Notes:
 - Accept an optional chezmoi config path; use chezmoi's normal configuration selection when the caller omits it
 - Resolve the package manager and desktop support through the root template partials, and read the persisted `desktopBaseline` choice through chezmoi
 - Consume the same declared inventories as the installers instead of a second hard-coded tool list
-- Validate apt manifests with `dpkg-query`, pacman manifests with `pacman -Q`, Brewfiles with `brew bundle check`, and the mise configuration with `mise ls --current --missing`
-- Check ecosystem manifests by binary name, report uv tool environments that no longer run on the Python they were built on, check the completion manifest through the installer's `check` action, and check the font manifest's family and faces through Fontconfig on Linux or the user font directory on macOS
-- Print the mise-managed toolchain from `mise current` so the summary follows the configuration
+- Validate apt manifests with `dpkg-query`, pacman manifests with `pacman -Q`, Brewfiles with `brew bundle check`, and the global mise configuration, including `config.local.toml`, with `mise ls --current --missing` run from `/`
+- Check ecosystem manifests by binary name and report a failure when PATH selects an executable other than the installer-owned binary for a manifest entry
+- Report installed uv tool environments for manifest entries whose interpreter is missing or differs from the recorded or global mise-selected Python version
+- Check the completion manifest through the installer's `check` action, and check the font manifest's family and faces through Fontconfig on Linux or the user font directory on macOS
+- Print the mise-managed toolchain from `mise current` run from `/`, so the summary follows the global configuration rather than the caller's project
 - Hash `check.sh` in hook 60, pass the active chezmoi config to the script, and keep only the next-steps output in the hook
 
 ## 11. PATH and Compatibility

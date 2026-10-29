@@ -37,6 +37,10 @@ if [[ ${#tools[@]} -eq 0 ]]; then
   exit 0
 fi
 
+if ! resolve_mise_python; then
+  exit 1
+fi
+
 echo "==> Syncing uv tools from $MANIFEST"
 
 # Snapshot the current `uv tool list` once. Output format is stable as
@@ -70,7 +74,7 @@ tool_dir="$(uv tool dir)"
 # environment built on another Python must be removed and created again.
 rebuild_tool() {
   uv tool uninstall "$1"
-  uv tool install "$2"
+  uv tool install --python "$MISE_PYTHON" "$2"
 }
 
 for tool in "${tools[@]}"; do
@@ -88,7 +92,7 @@ for tool in "${tools[@]}"; do
       rebuild_tool "$name" "$tool"
       continue
     fi
-    if ! problem="$(uv_tool_env_healthy "$tool_dir" "$name")"; then
+    if ! problem="$(uv_tool_env_healthy "$tool_dir" "$name" "$MISE_PYTHON_VERSION")"; then
       echo "  -> $tool (rebuilding: $problem)"
       rebuild_tool "$name" "$tool"
       continue
@@ -100,7 +104,7 @@ for tool in "${tools[@]}"; do
   fi
 
   echo "  -> $tool"
-  uv tool install "$tool"
+  uv tool install --python "$MISE_PYTHON" "$tool"
 done
 
 echo "==> uv tools synced."
