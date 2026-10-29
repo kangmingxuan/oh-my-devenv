@@ -14,6 +14,9 @@ versioning and release policy lives in
 
 ### Changed
 
+- Detect native shell completions per command and shell. Generate only missing
+  assets and prune marked files superseded by native assets. The completion
+  manifest now lists one command per line. Keep Debian `batcat` wrappers as `bat`.
 - Run CI from one workflow, `ci.yml`, with the same required job names. Pull
   requests run each job once, a new push cancels the previous run, apply jobs
   wait for the smoke jobs, and a weekly run catches upstream drift.
