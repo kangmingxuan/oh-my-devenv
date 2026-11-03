@@ -161,10 +161,11 @@ completion_entries() {
   done
 }
 
-# The inventory functions below collect a producer's output before they print. On
-# Bash 3.2, printf in a loop that read a process substitution failed with EINTR
-# under load, and the inventory silently lost an entry. A command substitution
-# disables errexit, so each write and assignment returns its failure explicitly.
+# Every function that reads an inventory collects it before the loop. On Bash 3.2,
+# printf in a loop that read a process substitution failed with EINTR under load,
+# and the inventory silently lost an entry. A process substitution also hides the
+# producer's exit status. A function inside a command substitution loses errexit,
+# so it returns each write and assignment failure explicitly.
 completion_targets() {
   local entries=""
   local command_name=""
@@ -398,46 +399,61 @@ install_completion() {
 }
 
 install_all() {
+  local entries=""
+  local obsolete_targets=""
   local command_name=""
   local shell_name=""
   local target=""
 
-  while IFS=$'\t' read -r command_name shell_name target; do
-    install_completion "$command_name" "$shell_name" "$target"
-  done < <(completion_entries)
+  entries="$(completion_entries)"
+  if [[ -n "$entries" ]]; then
+    while IFS=$'\t' read -r command_name shell_name target; do
+      install_completion "$command_name" "$shell_name" "$target"
+    done <<<"$entries"
+  fi
 
   # Every current entry installed, so owned files outside the current
   # inventory are obsolete. Re-verify ownership immediately before removal.
+  obsolete_targets="$(obsolete_completion_targets)"
+  [[ -n "$obsolete_targets" ]] || return 0
   while IFS= read -r target; do
     completion_file_owned "$target" || continue
     rm -f "$target"
     printf 'Removed obsolete shell completion: %s\n' "$target"
-  done < <(obsolete_completion_targets)
+  done <<<"$obsolete_targets"
 }
 
 check_all() {
+  local entries=""
+  local obsolete_targets=""
   local command_name=""
   local shell_name=""
   local target=""
   local errors=0
 
-  while IFS=$'\t' read -r command_name shell_name target; do
-    if [[ -s "$target" ]]; then
-      printf '[ok] shell completion: %s\n' "$target"
-    else
-      printf '[missing] shell completion: %s\n' "$target" >&2
-      errors=$((errors + 1))
-    fi
+  entries="$(completion_entries)"
+  if [[ -n "$entries" ]]; then
+    while IFS=$'\t' read -r command_name shell_name target; do
+      if [[ -s "$target" ]]; then
+        printf '[ok] shell completion: %s\n' "$target"
+      else
+        printf '[missing] shell completion: %s\n' "$target" >&2
+        errors=$((errors + 1))
+      fi
 
-    if [[ "$command_name" == bat ]] && ! check_bat_completion_source "$shell_name"; then
-      errors=$((errors + 1))
-    fi
-  done < <(completion_entries)
+      if [[ "$command_name" == bat ]] && ! check_bat_completion_source "$shell_name"; then
+        errors=$((errors + 1))
+      fi
+    done <<<"$entries"
+  fi
 
-  while IFS= read -r target; do
-    printf '[stale] shell completion: %s\n' "$target" >&2
-    errors=$((errors + 1))
-  done < <(obsolete_completion_targets)
+  obsolete_targets="$(obsolete_completion_targets)"
+  if [[ -n "$obsolete_targets" ]]; then
+    while IFS= read -r target; do
+      printf '[stale] shell completion: %s\n' "$target" >&2
+      errors=$((errors + 1))
+    done <<<"$obsolete_targets"
+  fi
 
   (( errors == 0 ))
 }

@@ -1356,11 +1356,12 @@ for_each_failed_write() {
   done
 }
 
-assert_list_reports_failed_write() {
-  [[ "$3" -ne 0 ]] || fail_test "completion list hid failed write $2 of $1"
+assert_reports_failed_write() {
+  [[ "$3" -ne 0 ]] || fail_test "completion run hid failed write $2 of $1"
 }
 
 assert_install_keeps_target() {
+  assert_reports_failed_write "$@"
   [[ -f "$1" ]] || fail_test "completion install removed $1 after failed write $2"
 }
 
@@ -1370,7 +1371,6 @@ run_completion_installer "$completion_write_data" install linux "$completion_man
 completion_write_listing="$(run_completion_installer "$completion_write_data" list linux "$completion_manifest")"
 completion_write_target="${completion_write_listing%%$'\n'*}"
 completion_write_obsolete="$(dirname "$completion_write_target")/_obsolete-fixture"
-cp "$completion_write_target" "$completion_write_obsolete"
 completion_write_bash_target=""
 while IFS= read -r completion_write_entry; do
   if [[ "$completion_write_entry" == *.bash ]]; then
@@ -1379,9 +1379,17 @@ while IFS= read -r completion_write_entry; do
   fi
 done <<<"$completion_write_listing"
 [[ -n "$completion_write_bash_target" ]] || fail_test "no Bash completion target to test failed writes"
-for_each_failed_write list "$completion_write_target" assert_list_reports_failed_write
-for_each_failed_write list "$completion_write_bash_target" assert_list_reports_failed_write
-for_each_failed_write list "$completion_write_obsolete" assert_list_reports_failed_write
+# An obsolete file fails the check by itself, so test the check before adding one.
+run_completion_installer "$completion_write_data" check linux "$completion_manifest" >/dev/null 2>&1 \
+  || fail_test "completion check must pass before a write fails"
+for_each_failed_write check "$completion_write_target" assert_reports_failed_write
+for_each_failed_write check "$completion_write_bash_target" assert_reports_failed_write
+cp "$completion_write_target" "$completion_write_obsolete"
+for_each_failed_write list "$completion_write_target" assert_reports_failed_write
+for_each_failed_write list "$completion_write_bash_target" assert_reports_failed_write
+for_each_failed_write list "$completion_write_obsolete" assert_reports_failed_write
+# A successful install removes the obsolete file, so test that path first.
+for_each_failed_write install "$completion_write_obsolete" assert_reports_failed_write
 for_each_failed_write install "$completion_write_target" assert_install_keeps_target
 
 log_step "🔎" "Testing the standalone environment check with stubbed tools..."
