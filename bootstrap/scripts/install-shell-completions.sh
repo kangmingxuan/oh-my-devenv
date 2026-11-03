@@ -162,16 +162,16 @@ completion_entries() {
 }
 
 # The inventory functions below collect a producer's output before they print. On
-# Bash 3.2, a producer that exits while printf writes to a pipe can interrupt the
-# write with SIGCHLD. Process substitution hides that failure, and the inventory
-# silently loses an entry.
+# Bash 3.2, printf in a loop that read a process substitution failed with EINTR
+# under load, and the inventory silently lost an entry. A command substitution
+# disables errexit, so each assignment returns a producer's failure explicitly.
 completion_targets() {
   local entries=""
   local command_name=""
   local shell_name=""
   local target=""
 
-  entries="$(completion_entries)"
+  entries="$(completion_entries)" || return
   [[ -n "$entries" ]] || return 0
   while IFS=$'\t' read -r command_name shell_name target; do
     printf '%s\n' "$target"
@@ -249,10 +249,10 @@ obsolete_completion_targets() {
   local owned_files=""
   local file_path=""
 
-  current_targets="$(completion_targets)"
+  current_targets="$(completion_targets)" || return
   current_targets=$'\n'"$current_targets"$'\n'
 
-  owned_files="$(discover_owned_completion_files)"
+  owned_files="$(discover_owned_completion_files)" || return
   [[ -n "$owned_files" ]] || return 0
   while IFS= read -r file_path; do
     if [[ "$current_targets" == *$'\n'"$file_path"$'\n'* ]]; then
@@ -448,7 +448,7 @@ list_all() {
   local targets=""
   local target=""
 
-  targets="$(completion_targets)"
+  targets="$(completion_targets)" || return
   if [[ -n "$targets" ]]; then
     while IFS= read -r target; do
       completion_file_owned "$target" || continue
