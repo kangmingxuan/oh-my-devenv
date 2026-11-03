@@ -47,17 +47,18 @@ Before the next apply, migrate manually:
 
 ### Changed
 
-- Speed up CI. Apply jobs no longer wait for smoke jobs and reuse the Go build
-  cache, except in the weekly run. ShellCheck runs once. Pull requests that
-  change only prose skip the smoke and apply jobs. Every commit on `main` still
-  gets a complete run, and a newer run no longer cancels a pending one.
-- Replace the required status checks on `main` with one `ci-gate` job.
+- Speed up CI. Apply jobs reuse the Go build cache, except in the weekly run.
+  ShellCheck runs once and now lints the Bash templates for every platform arm.
+  Pull requests that change only listed prose paths skip the smoke and apply
+  jobs. Every commit on `main` gets a complete run, and a newer run no longer
+  cancels a pending one.
 - Detect native shell completions per command and shell. Generate only missing
   assets and prune marked files superseded by native assets. The completion
   manifest now lists one command per line. Keep Debian `batcat` wrappers as `bat`.
-- Run CI from one workflow, `ci.yml`, with the same required job names. Pull
-  requests run each job once, a new push cancels the previous run, apply jobs
-  wait for the smoke jobs, and a weekly run catches upstream drift.
+- Run CI from one workflow, `ci.yml`, with one required check, `ci-gate`. Pull
+  requests run each job at most once, a new push cancels the previous run, apply
+  jobs run in parallel with the smoke jobs, and a weekly run catches upstream
+  drift.
 - Every apply job now runs a clean-machine round trip through
   `bootstrap/scripts/ci-apply.sh`: apply, an unchanged reapply that must not
   rerun the final check hook, `uninstall.sh --confirm` with empty chezmoi state

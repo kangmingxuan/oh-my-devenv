@@ -81,7 +81,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # ShellCheck output does not depend on the host, so one platform runs it.
+          # The suite lints every platform arm on any host, so one platform runs it.
           - platform: linux
             runner: ubuntu-latest
             shellcheck: true
@@ -173,15 +173,14 @@ jobs:
         run: ${{ matrix.setup }}
       - uses: actions/checkout@v7
       # gopls and dlv have no official prebuilt binaries, and compiling them is
-      # the slowest part of the round trip. The weekly run stays uncached, so it
-      # still proves a truly clean install from upstream.
+      # the slowest part of the round trip. Cache only the build output: every run
+      # still downloads the pinned modules, so it proves they remain installable.
+      # The weekly run stays uncached and also proves a clean build.
       - name: Restore the Go tool build cache
         if: github.event_name != 'schedule'
         uses: actions/cache@v6
         with:
-          path: |
-            ${{ matrix.go-build-cache }}
-            ~/go/pkg/mod
+          path: ${{ matrix.go-build-cache }}
           key: go-tools-${{ matrix.platform }}-${{ hashFiles('bootstrap/manifests/ecosystem/go-tools.txt', 'dot_config/mise/config.toml.tmpl') }}
       - name: Run the clean-machine round trip
         run: bash bootstrap/scripts/ci-apply.sh "${{ matrix.desktop }}"

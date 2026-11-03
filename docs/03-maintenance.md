@@ -352,8 +352,9 @@ the pull request cannot merge.
 
 - `changes` lists the paths that a pull request changes.
   `bootstrap/scripts/ci-needs-checks.sh` skips the smoke and apply jobs when
-  every path is prose that no check consumes. Pushes to `main`, weekly runs, and
-  manual runs never skip them.
+  those jobs consume none of the paths. It accepts only an explicit list of
+  prose paths. `secret-scan` still runs. Pushes to `main`, weekly runs, and manual
+  runs never skip the smoke and apply jobs.
 - `secret-scan` runs `gitleaks` over the repository tree to catch committed
   secrets.
 - `smoke-tests-linux`, `smoke-tests-macos`, and `smoke-tests-arch` run
@@ -361,12 +362,14 @@ the pull request cannot merge.
   `/bin/bash` (Bash 3.2), and in an `archlinux:base` container. The suite
   renders and syntax-checks the baseline, validates contracts and deployment
   boundaries, and exercises selected behavior with stubs and temporary roots.
-  Only `smoke-tests-linux` runs ShellCheck, because its result does not depend
-  on the host.
+  Only `smoke-tests-linux` runs ShellCheck. The suite renders each Bash template
+  for every platform arm, so one host lints all of them.
 - `apply-linux`, `apply-ubuntu-desktop`, `apply-arch`, and `apply-macos` run in
   parallel with the smoke jobs. Each runs `bootstrap/scripts/ci-apply.sh` on a
-  clean runner. Each restores the Go build and module caches, except in the
-  weekly run, which stays uncached to prove a clean install from upstream:
+  clean runner. Each tries to restore the Go build cache and saves it after a
+  miss. The weekly run does neither, to prove a clean build. The Go module
+  download cache is never restored, so every run proves that the pinned modules
+  remain installable:
   - `apply-linux` uses `ubuntu-latest` without the desktop baseline.
     All apply jobs use the fixed `$HOME/.config` root.
   - `apply-ubuntu-desktop` uses an `ubuntu:26.04` container,
