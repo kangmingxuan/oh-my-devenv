@@ -168,6 +168,10 @@ jobs:
               sh -c "$(curl -fsLS get.chezmoi.io)" -- -b "$HOME/.local/bin"
               echo "$HOME/.local/bin" >> "$GITHUB_PATH"
               echo "HOMEBREW_NO_INSTALL_CLEANUP=1" >> "$GITHUB_ENV"
+              # The weekly run keeps auto-update to catch upstream drift.
+              if [ "$GITHUB_EVENT_NAME" != schedule ]; then
+                echo "HOMEBREW_NO_AUTO_UPDATE=1" >> "$GITHUB_ENV"
+              fi
     steps:
       - name: Prepare the platform
         run: ${{ matrix.setup }}
@@ -183,12 +187,6 @@ jobs:
             ${{ matrix.go-build-cache }}
             ~/go/pkg/mod
           key: go-tools-${{ matrix.platform }}-${{ hashFiles('bootstrap/manifests/ecosystem/go-tools.txt', 'dot_config/mise/config.toml.tmpl') }}
-      - name: Restore the Homebrew download cache
-        if: runner.os == 'macOS' && github.event_name != 'schedule'
-        uses: actions/cache@v6
-        with:
-          path: ~/Library/Caches/Homebrew/downloads
-          key: brew-downloads-${{ hashFiles('bootstrap/manifests/system/Brewfile', 'bootstrap/manifests/desktop/Brewfile') }}
       - name: Run the clean-machine round trip
         run: bash bootstrap/scripts/ci-apply.sh "${{ matrix.desktop }}"
 
