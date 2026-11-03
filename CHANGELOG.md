@@ -66,6 +66,11 @@ Before the next apply, migrate manually:
 
 ### Fixed
 
+- Make the shell completion `list` command fail on a failed write instead of
+  printing a shortened inventory. On Bash 3.2, a write could fail with `EINTR`
+  under load. `uninstall.sh` could then leave a completion file behind, the
+  installer could remove a current file, and `smoke-tests-macos` failed once for
+  this reason.
 - Rebuild uv tool environments when their Python version differs from the
   global mise-selected Python, and use that interpreter for every uv tool install.
   The standalone environment check now reports this mismatch.

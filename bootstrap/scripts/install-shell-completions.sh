@@ -153,22 +153,29 @@ completion_entries() {
 
   for command_name in ${completion_commands[@]+"${completion_commands[@]}"}; do
     if ! native_completion_exists "$command_name" zsh; then
-      printf '%s\tzsh\t%s\n' "$command_name" "$zsh_completion_dir/_$command_name"
+      printf '%s\tzsh\t%s\n' "$command_name" "$zsh_completion_dir/_$command_name" || return
     fi
     if [[ "$platform" == linux ]] && ! native_completion_exists "$command_name" bash; then
-      printf '%s\tbash\t%s\n' "$command_name" "$bash_completion_dir/$command_name.bash"
+      printf '%s\tbash\t%s\n' "$command_name" "$bash_completion_dir/$command_name.bash" || return
     fi
   done
 }
 
+# The inventory functions below collect a producer's output before they print. On
+# Bash 3.2, printf in a loop that read a process substitution failed with EINTR
+# under load, and the inventory silently lost an entry. A command substitution
+# disables errexit, so each write and assignment returns its failure explicitly.
 completion_targets() {
+  local entries=""
   local command_name=""
   local shell_name=""
   local target=""
 
+  entries="$(completion_entries)" || return
+  [[ -n "$entries" ]] || return 0
   while IFS=$'\t' read -r command_name shell_name target; do
-    printf '%s\n' "$target"
-  done < <(completion_entries)
+    printf '%s\n' "$target" || return
+  done <<<"$entries"
 }
 
 # A regular, non-symlink file carrying the ownership marker in its first two
@@ -231,7 +238,7 @@ discover_owned_completion_files() {
       fi
       [[ "$command_name" =~ $completion_command_pattern ]] || continue
       completion_file_owned "$file_path" || continue
-      printf '%s\n' "$file_path"
+      printf '%s\n' "$file_path" || return
     done
   done
 }
@@ -239,17 +246,20 @@ discover_owned_completion_files() {
 # Owned files that no current manifest entry targets on this platform.
 obsolete_completion_targets() {
   local current_targets=""
+  local owned_files=""
   local file_path=""
 
-  current_targets="$(completion_targets)"
+  current_targets="$(completion_targets)" || return
   current_targets=$'\n'"$current_targets"$'\n'
 
+  owned_files="$(discover_owned_completion_files)" || return
+  [[ -n "$owned_files" ]] || return 0
   while IFS= read -r file_path; do
     if [[ "$current_targets" == *$'\n'"$file_path"$'\n'* ]]; then
       continue
     fi
-    printf '%s\n' "$file_path"
-  done < <(discover_owned_completion_files)
+    printf '%s\n' "$file_path" || return
+  done <<<"$owned_files"
 }
 
 # Command-specific generator adapters. The CLIs expose completion generation
@@ -435,12 +445,16 @@ check_all() {
 # Owned current targets first, then obsolete owned files. Missing targets,
 # unmarked files, and symlinks are not uninstall candidates.
 list_all() {
+  local targets=""
   local target=""
 
-  while IFS= read -r target; do
-    completion_file_owned "$target" || continue
-    printf '%s\n' "$target"
-  done < <(completion_targets)
+  targets="$(completion_targets)" || return
+  if [[ -n "$targets" ]]; then
+    while IFS= read -r target; do
+      completion_file_owned "$target" || continue
+      printf '%s\n' "$target" || return
+    done <<<"$targets"
+  fi
   obsolete_completion_targets
 }
 

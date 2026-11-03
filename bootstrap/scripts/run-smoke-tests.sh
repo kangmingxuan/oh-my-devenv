@@ -1307,6 +1307,83 @@ HOMEBREW_PREFIX='' OH_MY_DEVENV_SMOKE_COMPLETION_ROOT="$completion_system_fixtur
   [[ "$errors" == 2 ]] || fail_test "check helpers must count each missing command and path; counted $errors"
 )
 
+# Fail one write of a path with an exported printf, so the test needs no race.
+# Every write counts, so each write site on the path fails in turn.
+run_completion_with_failed_write() (
+  export FAIL_WRITE_PATH="$1"
+  export FAIL_WRITE_AT="$2"
+  export FAIL_WRITE_COUNTER="$completion_write_counter"
+  shift 2
+  # shellcheck disable=SC2317,SC2329
+  printf() {
+    local writes=""
+    local argument=""
+    for argument in "$@"; do
+      [[ "$argument" == "$FAIL_WRITE_PATH" ]] || continue
+      read -r writes <"$FAIL_WRITE_COUNTER"
+      writes=$((writes + 1))
+      echo "$writes" >"$FAIL_WRITE_COUNTER"
+      [[ "$writes" -ne "$FAIL_WRITE_AT" ]] || return 1
+    done
+    # shellcheck disable=SC2059
+    builtin printf "$@"
+  }
+  export -f printf
+  run_completion_installer "$completion_write_data" "$@" >/dev/null 2>&1
+)
+
+# Call a check once for each write of the path. Its arguments are the path, the
+# write number, and the exit status.
+for_each_failed_write() {
+  local action="$1"
+  local path="$2"
+  local check="$3"
+  local fail_at=1
+  local writes=0
+  local status=0
+
+  while :; do
+    echo 0 >"$completion_write_counter"
+    status=0
+    run_completion_with_failed_write "$path" "$fail_at" "$action" linux "$completion_manifest" || status=$?
+    read -r writes <"$completion_write_counter"
+    if [[ "$writes" -lt "$fail_at" ]]; then
+      [[ "$fail_at" -gt 1 ]] || fail_test "no $action write of $path was injected"
+      return 0
+    fi
+    "$check" "$path" "$fail_at" "$status"
+    fail_at=$((fail_at + 1))
+  done
+}
+
+assert_list_reports_failed_write() {
+  [[ "$3" -ne 0 ]] || fail_test "completion list hid failed write $2 of $1"
+}
+
+assert_install_keeps_target() {
+  [[ -f "$1" ]] || fail_test "completion install removed $1 after failed write $2"
+}
+
+completion_write_data="$tmp_dir/completion-write-data"
+completion_write_counter="$tmp_dir/completion-write-counter"
+run_completion_installer "$completion_write_data" install linux "$completion_manifest"
+completion_write_listing="$(run_completion_installer "$completion_write_data" list linux "$completion_manifest")"
+completion_write_target="${completion_write_listing%%$'\n'*}"
+completion_write_obsolete="$(dirname "$completion_write_target")/_obsolete-fixture"
+cp "$completion_write_target" "$completion_write_obsolete"
+completion_write_bash_target=""
+while IFS= read -r completion_write_entry; do
+  if [[ "$completion_write_entry" == *.bash ]]; then
+    completion_write_bash_target="$completion_write_entry"
+    break
+  fi
+done <<<"$completion_write_listing"
+[[ -n "$completion_write_bash_target" ]] || fail_test "no Bash completion target to test failed writes"
+for_each_failed_write list "$completion_write_target" assert_list_reports_failed_write
+for_each_failed_write list "$completion_write_bash_target" assert_list_reports_failed_write
+for_each_failed_write list "$completion_write_obsolete" assert_list_reports_failed_write
+for_each_failed_write install "$completion_write_target" assert_install_keeps_target
+
 log_step "🔎" "Testing the standalone environment check with stubbed tools..."
 check_root="$tmp_dir/check-fixture"
 check_stub_bin="$check_root/bin"
