@@ -153,10 +153,10 @@ completion_entries() {
 
   for command_name in ${completion_commands[@]+"${completion_commands[@]}"}; do
     if ! native_completion_exists "$command_name" zsh; then
-      printf '%s\tzsh\t%s\n' "$command_name" "$zsh_completion_dir/_$command_name"
+      printf '%s\tzsh\t%s\n' "$command_name" "$zsh_completion_dir/_$command_name" || return
     fi
     if [[ "$platform" == linux ]] && ! native_completion_exists "$command_name" bash; then
-      printf '%s\tbash\t%s\n' "$command_name" "$bash_completion_dir/$command_name.bash"
+      printf '%s\tbash\t%s\n' "$command_name" "$bash_completion_dir/$command_name.bash" || return
     fi
   done
 }
@@ -164,7 +164,7 @@ completion_entries() {
 # The inventory functions below collect a producer's output before they print. On
 # Bash 3.2, printf in a loop that read a process substitution failed with EINTR
 # under load, and the inventory silently lost an entry. A command substitution
-# disables errexit, so each assignment returns a producer's failure explicitly.
+# disables errexit, so each write and assignment returns its failure explicitly.
 completion_targets() {
   local entries=""
   local command_name=""
@@ -174,7 +174,7 @@ completion_targets() {
   entries="$(completion_entries)" || return
   [[ -n "$entries" ]] || return 0
   while IFS=$'\t' read -r command_name shell_name target; do
-    printf '%s\n' "$target"
+    printf '%s\n' "$target" || return
   done <<<"$entries"
 }
 
@@ -238,7 +238,7 @@ discover_owned_completion_files() {
       fi
       [[ "$command_name" =~ $completion_command_pattern ]] || continue
       completion_file_owned "$file_path" || continue
-      printf '%s\n' "$file_path"
+      printf '%s\n' "$file_path" || return
     done
   done
 }
@@ -258,7 +258,7 @@ obsolete_completion_targets() {
     if [[ "$current_targets" == *$'\n'"$file_path"$'\n'* ]]; then
       continue
     fi
-    printf '%s\n' "$file_path"
+    printf '%s\n' "$file_path" || return
   done <<<"$owned_files"
 }
 
@@ -452,7 +452,7 @@ list_all() {
   if [[ -n "$targets" ]]; then
     while IFS= read -r target; do
       completion_file_owned "$target" || continue
-      printf '%s\n' "$target"
+      printf '%s\n' "$target" || return
     done <<<"$targets"
   fi
   obsolete_completion_targets
