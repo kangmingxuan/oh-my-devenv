@@ -205,8 +205,14 @@ check_oh_my_zsh_manifest_contract() {
   done < <(manifest_entries "$manifest")
 }
 
+# CI sets SMOKE_SHELLCHECK=false on all but one platform. The platform loop below
+# lints every rendered Bash template for every platform arm on any host.
+if [[ "${SMOKE_SHELLCHECK:-true}" == false ]]; then
+  shellcheck() { :; }
+else
+  require_command shellcheck
+fi
 require_command chezmoi
-require_command shellcheck
 require_command bash
 require_command git
 require_command zsh
@@ -788,6 +794,15 @@ for hook_platform in "${hook_platforms[@]}"; do
       execute-template --file "$hook_template" >"$rendered_hook"
     syntax_check bash "$rendered_hook"
     shellcheck_rendered_bash "$rendered_hook"
+  done
+  for bash_template in dot_bashrc.tmpl dot_bash/env.bash.tmpl; do
+    rendered_bash="$tmp_dir/bash-$hook_platform_name-$(basename "$bash_template" .tmpl)"
+    chezmoi --source="$repo_root" \
+      --override-data-file "$tmp_data_file" \
+      --override-data "{\"chezmoi\":${hook_platform#*|}}" \
+      execute-template --file "$repo_root/$bash_template" >"$rendered_bash"
+    syntax_check bash "$rendered_bash"
+    shellcheck_rendered_bash "$rendered_bash"
   done
   # Register each main-source application template for every platform arm.
   for config_template in "$repo_root"/dot_config/*/*.tmpl "$repo_root"/dot_config/fontconfig/conf.d/*.tmpl; do
@@ -2558,6 +2573,25 @@ while IFS= read -r bash_source; do
     fail_test "Bash 4+ construct in $bash_source; Bash code must run on Bash 3.2"
   fi
 done <<<"$bash_sources"
+log_step "🧭" "Classifying pull request paths for CI..."
+ci_needs_checks="$script_dir/ci-needs-checks.sh"
+assert_ci_needs_checks() {
+  local expected="$1"
+  local paths="$2"
+  local actual=""
+
+  actual="$(printf '%s' "$paths" | bash "$ci_needs_checks")"
+  [[ "$actual" == "$expected" ]] \
+    || fail_test "ci-needs-checks.sh printed $actual, expected $expected, for: $paths"
+}
+assert_ci_needs_checks false $'README.md\ndocs/design/README.md\n'
+assert_ci_needs_checks true $'README.md\nbootstrap/scripts/common.sh\n'
+assert_ci_needs_checks true $'docs/local-overlay-examples/README.md\n'
+assert_ci_needs_checks true $'docs/hook.sh\n'
+assert_ci_needs_checks true $'docs/dot_bashrc.md\n'
+assert_ci_needs_checks true $'LICENSE\n'
+assert_ci_needs_checks true ''
+
 log_step "🔍" "Running shellcheck on bootstrap scripts..."
 shellcheck "$repo_root"/bootstrap/scripts/*.sh \
   "$repo_root/docs/local-overlay-examples/git-pre-push.example"
