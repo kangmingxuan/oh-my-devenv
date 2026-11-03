@@ -47,6 +47,11 @@ Before the next apply, migrate manually:
 
 ### Changed
 
+- Speed up CI. Apply jobs no longer wait for smoke jobs and reuse the Go build
+  cache, except in the weekly run. ShellCheck runs once. Pull requests that
+  change only prose skip the smoke and apply jobs. Every commit on `main` still
+  gets a complete run, and a newer run no longer cancels a pending one.
+- Replace the required status checks on `main` with one `ci-gate` job.
 - Detect native shell completions per command and shell. Generate only missing
   assets and prune marked files superseded by native assets. The completion
   manifest now lists one command per line. Keep Debian `batcat` wrappers as `bat`.

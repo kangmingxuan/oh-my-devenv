@@ -205,8 +205,14 @@ check_oh_my_zsh_manifest_contract() {
   done < <(manifest_entries "$manifest")
 }
 
+# CI sets SMOKE_SHELLCHECK=false on all but one platform. Rendered templates take
+# their platform from override data, so every host analyzes the same input.
+if [[ "${SMOKE_SHELLCHECK:-true}" == false ]]; then
+  shellcheck() { :; }
+else
+  require_command shellcheck
+fi
 require_command chezmoi
-require_command shellcheck
 require_command bash
 require_command git
 require_command zsh
@@ -2558,6 +2564,23 @@ while IFS= read -r bash_source; do
     fail_test "Bash 4+ construct in $bash_source; Bash code must run on Bash 3.2"
   fi
 done <<<"$bash_sources"
+log_step "🧭" "Classifying pull request paths for CI..."
+ci_needs_checks="$script_dir/ci-needs-checks.sh"
+assert_ci_needs_checks() {
+  local expected="$1"
+  local paths="$2"
+  local actual=""
+
+  actual="$(printf '%s' "$paths" | bash "$ci_needs_checks")"
+  [[ "$actual" == "$expected" ]] \
+    || fail_test "ci-needs-checks.sh printed $actual, expected $expected, for: $paths"
+}
+assert_ci_needs_checks false $'README.md\ndocs/design/README.md\n'
+assert_ci_needs_checks true $'README.md\nbootstrap/scripts/common.sh\n'
+assert_ci_needs_checks true $'docs/local-overlay-examples/README.md\n'
+assert_ci_needs_checks true $'docs/hook.sh\n'
+assert_ci_needs_checks true ''
+
 log_step "🔍" "Running shellcheck on bootstrap scripts..."
 shellcheck "$repo_root"/bootstrap/scripts/*.sh \
   "$repo_root/docs/local-overlay-examples/git-pre-push.example"

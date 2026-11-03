@@ -341,11 +341,19 @@ reflect
 `.github/workflows/ci.yml` is the only workflow. It runs on every pull
 request, on every push to `main`, once a week, and on manual dispatch. The
 weekly run catches upstream drift in unpinned layers when nobody pushes. A new
-push to a pull request cancels the previous run.
+push to a pull request cancels the previous run. Runs on `main` are never
+cancelled by a newer run, so every commit gets a complete run.
 
-Every job below is a required status check on `main`. Keep the job names
-stable; renaming one requires the same change in the branch protection rule.
+`ci-gate` is the only required status check on `main`. It passes only when every
+job that had to run succeeded. Add a new job to its `needs` list. Renaming
+`ci-gate` requires the same change in the branch protection rule. Do not add a
+workflow-level `paths` filter: a filtered workflow leaves `ci-gate` pending, and
+the pull request cannot merge.
 
+- `changes` lists the paths that a pull request changes.
+  `bootstrap/scripts/ci-needs-checks.sh` skips the smoke and apply jobs when
+  every path is prose that no check consumes. Pushes to `main`, weekly runs, and
+  manual runs never skip them.
 - `secret-scan` runs `gitleaks` over the repository tree to catch committed
   secrets.
 - `smoke-tests-linux`, `smoke-tests-macos`, and `smoke-tests-arch` run
@@ -353,9 +361,12 @@ stable; renaming one requires the same change in the branch protection rule.
   `/bin/bash` (Bash 3.2), and in an `archlinux:base` container. The suite
   renders and syntax-checks the baseline, validates contracts and deployment
   boundaries, and exercises selected behavior with stubs and temporary roots.
-- `apply-linux`, `apply-ubuntu-desktop`, `apply-arch`, and `apply-macos` start
-  only after every smoke job passes. Each runs
-  `bootstrap/scripts/ci-apply.sh` on a clean runner:
+  Only `smoke-tests-linux` runs ShellCheck, because its result does not depend
+  on the host.
+- `apply-linux`, `apply-ubuntu-desktop`, `apply-arch`, and `apply-macos` run in
+  parallel with the smoke jobs. Each runs `bootstrap/scripts/ci-apply.sh` on a
+  clean runner. Each restores the Go build and module caches, except in the
+  weekly run, which stays uncached to prove a clean install from upstream:
   - `apply-linux` uses `ubuntu-latest` without the desktop baseline.
     All apply jobs use the fixed `$HOME/.config` root.
   - `apply-ubuntu-desktop` uses an `ubuntu:26.04` container,
