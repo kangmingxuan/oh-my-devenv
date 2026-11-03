@@ -98,7 +98,9 @@ jobs:
             # Every `bash` the suite starts resolves to macOS /bin/bash, the
             # oldest Bash the baseline supports.
             setup: |
-              brew install chezmoi
+              mkdir -p "$HOME/.local/bin"
+              sh -c "$(curl -fsLS get.chezmoi.io)" -- -b "$HOME/.local/bin"
+              echo "$HOME/.local/bin" >> "$GITHUB_PATH"
               mkdir -p "$RUNNER_TEMP/system-bash"
               ln -s /bin/bash "$RUNNER_TEMP/system-bash/bash"
               echo "$RUNNER_TEMP/system-bash" >> "$GITHUB_PATH"
@@ -142,6 +144,8 @@ jobs:
             desktop: true
             go-build-cache: ~/.cache/go-build
             setup: |
+              # A disposable container does not need dpkg to fsync every file.
+              echo force-unsafe-io > /etc/dpkg/dpkg.cfg.d/force-unsafe-io
               apt-get update
               DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
                 ca-certificates curl git sudo
@@ -160,7 +164,9 @@ jobs:
             desktop: true
             go-build-cache: ~/Library/Caches/go-build
             setup: |
-              brew install chezmoi
+              mkdir -p "$HOME/.local/bin"
+              sh -c "$(curl -fsLS get.chezmoi.io)" -- -b "$HOME/.local/bin"
+              echo "$HOME/.local/bin" >> "$GITHUB_PATH"
               echo "HOMEBREW_NO_INSTALL_CLEANUP=1" >> "$GITHUB_ENV"
     steps:
       - name: Prepare the platform
@@ -177,6 +183,12 @@ jobs:
             ${{ matrix.go-build-cache }}
             ~/go/pkg/mod
           key: go-tools-${{ matrix.platform }}-${{ hashFiles('bootstrap/manifests/ecosystem/go-tools.txt', 'dot_config/mise/config.toml.tmpl') }}
+      - name: Restore the Homebrew download cache
+        if: runner.os == 'macOS' && github.event_name != 'schedule'
+        uses: actions/cache@v6
+        with:
+          path: ~/Library/Caches/Homebrew/downloads
+          key: brew-downloads-${{ hashFiles('bootstrap/manifests/system/Brewfile', 'bootstrap/manifests/desktop/Brewfile') }}
       - name: Run the clean-machine round trip
         run: bash bootstrap/scripts/ci-apply.sh "${{ matrix.desktop }}"
 
