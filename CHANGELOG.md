@@ -66,6 +66,9 @@ Before the next apply, migrate manually:
 
 ### Fixed
 
+- Stop the shell completion inventory from silently losing an entry on Bash 3.2,
+  where a child's exit could interrupt a write to a pipe. `uninstall.sh` could
+  leave a completion file behind, and `smoke-tests-macos` could fail at random.
 - Rebuild uv tool environments when their Python version differs from the
   global mise-selected Python, and use that interpreter for every uv tool install.
   The standalone environment check now reports this mismatch.

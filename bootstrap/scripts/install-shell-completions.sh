@@ -161,14 +161,21 @@ completion_entries() {
   done
 }
 
+# The inventory functions below collect a producer's output before they print. On
+# Bash 3.2, a producer that exits while printf writes to a pipe can interrupt the
+# write with SIGCHLD. Process substitution hides that failure, and the inventory
+# silently loses an entry.
 completion_targets() {
+  local entries=""
   local command_name=""
   local shell_name=""
   local target=""
 
+  entries="$(completion_entries)"
+  [[ -n "$entries" ]] || return 0
   while IFS=$'\t' read -r command_name shell_name target; do
     printf '%s\n' "$target"
-  done < <(completion_entries)
+  done <<<"$entries"
 }
 
 # A regular, non-symlink file carrying the ownership marker in its first two
@@ -239,17 +246,20 @@ discover_owned_completion_files() {
 # Owned files that no current manifest entry targets on this platform.
 obsolete_completion_targets() {
   local current_targets=""
+  local owned_files=""
   local file_path=""
 
   current_targets="$(completion_targets)"
   current_targets=$'\n'"$current_targets"$'\n'
 
+  owned_files="$(discover_owned_completion_files)"
+  [[ -n "$owned_files" ]] || return 0
   while IFS= read -r file_path; do
     if [[ "$current_targets" == *$'\n'"$file_path"$'\n'* ]]; then
       continue
     fi
     printf '%s\n' "$file_path"
-  done < <(discover_owned_completion_files)
+  done <<<"$owned_files"
 }
 
 # Command-specific generator adapters. The CLIs expose completion generation
@@ -435,12 +445,16 @@ check_all() {
 # Owned current targets first, then obsolete owned files. Missing targets,
 # unmarked files, and symlinks are not uninstall candidates.
 list_all() {
+  local targets=""
   local target=""
 
-  while IFS= read -r target; do
-    completion_file_owned "$target" || continue
-    printf '%s\n' "$target"
-  done < <(completion_targets)
+  targets="$(completion_targets)"
+  if [[ -n "$targets" ]]; then
+    while IFS= read -r target; do
+      completion_file_owned "$target" || continue
+      printf '%s\n' "$target"
+    done <<<"$targets"
+  fi
   obsolete_completion_targets
 }
 
