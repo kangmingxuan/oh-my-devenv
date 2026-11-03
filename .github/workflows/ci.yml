@@ -168,10 +168,6 @@ jobs:
               sh -c "$(curl -fsLS get.chezmoi.io)" -- -b "$HOME/.local/bin"
               echo "$HOME/.local/bin" >> "$GITHUB_PATH"
               echo "HOMEBREW_NO_INSTALL_CLEANUP=1" >> "$GITHUB_ENV"
-              # The weekly run keeps auto-update to catch upstream drift.
-              if [ "$GITHUB_EVENT_NAME" != schedule ]; then
-                echo "HOMEBREW_NO_AUTO_UPDATE=1" >> "$GITHUB_ENV"
-              fi
     steps:
       - name: Prepare the platform
         run: ${{ matrix.setup }}
