@@ -1317,14 +1317,14 @@ run_completion_with_failed_write() (
   # shellcheck disable=SC2317,SC2329
   printf() {
     local writes=""
-    case "$*" in
-      *"$FAIL_WRITE_PATH"*)
-        read -r writes <"$FAIL_WRITE_COUNTER"
-        writes=$((writes + 1))
-        echo "$writes" >"$FAIL_WRITE_COUNTER"
-        [[ "$writes" -ne "$FAIL_WRITE_AT" ]] || return 1
-        ;;
-    esac
+    local argument=""
+    for argument in "$@"; do
+      [[ "$argument" == "$FAIL_WRITE_PATH" ]] || continue
+      read -r writes <"$FAIL_WRITE_COUNTER"
+      writes=$((writes + 1))
+      echo "$writes" >"$FAIL_WRITE_COUNTER"
+      [[ "$writes" -ne "$FAIL_WRITE_AT" ]] || return 1
+    done
     # shellcheck disable=SC2059
     builtin printf "$@"
   }
@@ -1371,7 +1371,16 @@ completion_write_listing="$(run_completion_installer "$completion_write_data" li
 completion_write_target="${completion_write_listing%%$'\n'*}"
 completion_write_obsolete="$(dirname "$completion_write_target")/_obsolete-fixture"
 cp "$completion_write_target" "$completion_write_obsolete"
+completion_write_bash_target=""
+while IFS= read -r completion_write_entry; do
+  if [[ "$completion_write_entry" == *.bash ]]; then
+    completion_write_bash_target="$completion_write_entry"
+    break
+  fi
+done <<<"$completion_write_listing"
+[[ -n "$completion_write_bash_target" ]] || fail_test "no Bash completion target to test failed writes"
 for_each_failed_write list "$completion_write_target" assert_list_reports_failed_write
+for_each_failed_write list "$completion_write_bash_target" assert_list_reports_failed_write
 for_each_failed_write list "$completion_write_obsolete" assert_list_reports_failed_write
 for_each_failed_write install "$completion_write_target" assert_install_keeps_target
 
