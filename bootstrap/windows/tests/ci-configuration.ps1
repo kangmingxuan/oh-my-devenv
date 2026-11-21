@@ -21,6 +21,17 @@ function Invoke-FixtureChezmoi {
 }
 
 function Invoke-FixtureApply {
+    if ($Mode -eq 'apply') {
+        $text = & $chezmoi.Source @chezmoiArgs apply --force --verbose | ForEach-Object {
+            Write-Host $_
+            $_
+        }
+        if ($LASTEXITCODE -ne 0 -or ($text -join "`n") -notmatch 'All checks passed\.') {
+            throw "The hosted Windows apply did not pass (exit $LASTEXITCODE)."
+        }
+        return
+    }
+
     $result = Invoke-FixtureChezmoi -Arguments @('apply', '--force')
     Write-Host $result.Stdout
     Write-Host $result.Stderr
