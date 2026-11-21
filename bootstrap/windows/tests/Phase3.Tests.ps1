@@ -13,6 +13,7 @@ BeforeAll {
     $manifests = Join-Path $helpers '../manifests'
     $fontManifestPath = Join-Path $manifests 'desktop/maple-mono-nf-cn.env'
     $packageManifestPath = Join-Path $manifests 'system/winget-packages.json'
+    $desktopPackageManifestPath = Join-Path $manifests 'desktop/winget-packages.json'
 }
 
 Describe 'The WinGet layer' {
@@ -32,6 +33,7 @@ Describe 'The WinGet layer' {
 
     It 'reads the source inventory and validates its package contract' {
         @(Read-WinGetPackageManifest -Path $packageManifestPath).Count | Should -BeGreaterThan 0
+        @(Read-WinGetPackageManifest -Path $desktopPackageManifestPath).Count | Should -BeGreaterThan 0
     }
 
     It 'rejects an alternate source' {
@@ -58,14 +60,14 @@ Describe 'The WinGet layer' {
     It 'reports missing winget without running an installer' {
         Mock Get-PathApplication { $null } -ParameterFilter { $Name -eq 'winget.exe' }
         Mock Invoke-NativeCommand { throw 'Unexpected native call' }
-        { Install-SystemPackage -ManifestPath $packagePath } | Should -Throw '*winget.exe*not found on PATH*'
+        { Install-WinGetPackage -ManifestPath $packagePath } | Should -Throw '*winget.exe*not found on PATH*'
         Should -Invoke Invoke-NativeCommand -Times 0 -Exactly
     }
 
     It 'preserves a failed import exit code and package diagnostic' {
         Mock Get-PathApplication { @{ Source = 'winget fixture' } }
         Mock Invoke-NativeCommand { @{ ExitCode = 42; Stdout = ''; Stderr = 'Fixture installer blocked' } }
-        { Install-SystemPackage -ManifestPath $packagePath } |
+        { Install-WinGetPackage -ManifestPath $packagePath } |
             Should -Throw '*source ''winget'' failed (exit 42)*Example.First*Fixture installer blocked*'
         Should -Invoke Invoke-NativeCommand -Times 1 -Exactly -ParameterFilter { $Arguments[0] -eq 'import' }
     }
@@ -73,7 +75,7 @@ Describe 'The WinGet layer' {
     It 'reports every absent ID by the WinGet HRESULT' {
         Mock Get-PathApplication { @{ Source = 'winget fixture' } }
         Mock Invoke-NativeCommand { @{ ExitCode = 0x8A150014; Stdout = ''; Stderr = '' } }
-        { Confirm-SystemPackage -ManifestPath $packagePath } | Should -Throw '*Missing WinGet packages: Example.First, Example.Second*'
+        { Confirm-WinGetPackage -ManifestPath $packagePath } | Should -Throw '*Missing WinGet packages: Example.First, Example.Second*'
         Should -Invoke Invoke-NativeCommand -Times 1 -Exactly -ParameterFilter {
             $Arguments[0] -eq 'export' -and $Arguments[3] -eq '--source' -and $Arguments[4] -eq 'winget'
         }
@@ -97,26 +99,33 @@ Describe 'The WinGet layer' {
             $inventory | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $Arguments[2]
             @{ ExitCode = 0; Stdout = ''; Stderr = '' }
         } -ParameterFilter { $Arguments[0] -eq 'export' }
-        { Confirm-SystemPackage -ManifestPath $packagePath } | Should -Throw '*Missing WinGet packages: Example.Second. Install*'
+        { Confirm-WinGetPackage -ManifestPath $packagePath } | Should -Throw '*Missing WinGet packages: Example.Second. Install*'
         $inventory.Sources[0].Packages += @{ PackageIdentifier = 'Example.Second' }
-        { Confirm-SystemPackage -ManifestPath $packagePath } | Should -Not -Throw
+        { Confirm-WinGetPackage -ManifestPath $packagePath } | Should -Not -Throw
     }
 
     It 'reports a source failure with its exit code and diagnostic' {
         Mock Get-PathApplication { @{ Source = 'winget fixture' } }
         Mock Invoke-NativeCommand { @{ ExitCode = 0x8A150012; Stdout = ''; Stderr = 'Fixture source disabled' } }
-        { Confirm-SystemPackage -ManifestPath $packagePath } |
+        { Confirm-WinGetPackage -ManifestPath $packagePath } |
             Should -Throw "*could not export installed packages from source 'winget'*Fixture source disabled*"
     }
 
-    It 'reports a missing Visual C++ runtime without attempting installation' {
-        Mock Test-Path { $false } -ParameterFilter { $LiteralPath -like '*vcruntime140.dll' -and $PathType -eq 'Leaf' }
-        Mock Invoke-NativeCommand { throw 'Unexpected native call' }
-        $architecture = [Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture.ToString().ToLowerInvariant()
-        { Confirm-VisualCppRuntime -PackageIds @('Example.First', 'Example.Second') } |
-            Should -Throw "*Example.First, Example.Second*administrator*winget install --id Microsoft.VCRedist.2015+.$architecture --exact*"
-        Should -Invoke Test-Path -Times 1 -Exactly -ParameterFilter { $LiteralPath -like '*vcruntime140.dll' }
-        Should -Invoke Invoke-NativeCommand -Times 0 -Exactly
+    It 'reports an absent desktop ID when both layers use one inventory export' {
+        $desktopPath = Join-Path $TestDrive 'desktop manifest.json'
+        $desktop = @{ Sources = @(@{
+            SourceDetails = $manifest.Sources[0].SourceDetails
+            Packages = @(@{ PackageIdentifier = 'Example.Desktop'; Scope = 'user' })
+        }) }
+        $desktop | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $desktopPath
+        Mock Get-PathApplication { @{ Source = 'winget fixture' } }
+        Mock Invoke-NativeCommand {
+            Copy-Item -LiteralPath $packagePath -Destination $Arguments[2]
+            @{ ExitCode = 0; Stdout = ''; Stderr = '' }
+        } -ParameterFilter { $Arguments[0] -eq 'export' }
+        { Confirm-WinGetPackage -ManifestPath @($packagePath, $desktopPath) } |
+            Should -Throw '*Missing WinGet packages: Example.Desktop. Install*'
+        Should -Invoke Invoke-NativeCommand -Times 1 -Exactly
     }
 }
 

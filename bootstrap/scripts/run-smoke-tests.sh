@@ -804,6 +804,9 @@ for hook_platform in "${hook_platforms[@]}" "windows|$windows_chezmoi_data"; do
       || fail_test 'Windows and macOS mise configs differ'
     grep -Fxq '.config/oh-my-devenv/powershell/profile.ps1' <<<"$managed_platform" \
       || fail_test 'Windows does not manage the PowerShell profile body'
+    windows_prompt_theme='.config/oh-my-devenv/powershell/robbyrussell.omp.json'
+    grep -Fxq "$windows_prompt_theme" <<<"$managed_platform" \
+      || fail_test 'Windows does not manage the Oh My Posh theme'
     for unix_startup in .bash_profile .bashrc .profile .zprofile .zshenv .zshrc; do
       if grep -Fxq "$unix_startup" <<<"$managed_platform"; then
         fail_test "Windows manages Unix startup file $unix_startup"
@@ -851,6 +854,8 @@ for hook_platform in "${hook_platforms[@]}" "windows|$windows_chezmoi_data"; do
       fi
       grep -Fxq '.chezmoiscripts/20-install-system-packages.ps1' <<<"$managed_windows_minimal" \
         || fail_test 'Windows disables system packages with the desktop baseline'
+      grep -Fxq "$windows_prompt_theme" <<<"$managed_windows_minimal" \
+        || fail_test 'Windows does not manage the prompt theme with the desktop baseline disabled or omitted'
       chezmoi --source="$repo_root" --destination="$windows_desktop_home" \
         --override-data "$windows_minimal_override" apply --exclude=scripts "$windows_desktop_home/AppData"
       [[ ! -e "$windows_desktop_target" ]] || fail_test 'Windows desktop opt-out left the Terminal fragment in place'
@@ -873,7 +878,7 @@ for hook_platform in "${hook_platforms[@]}" "windows|$windows_chezmoi_data"; do
     continue
   fi
   if grep -Eq '^([.]chezmoiscripts/.*[.]ps1|[.]config/oh-my-devenv(/|$)|AppData(/|$))' <<<"$managed_platform"; then
-    fail_test "$hook_platform_name manages a Windows-only target"
+    fail_test "$hook_platform_name manages a Windows-only target, including the PowerShell profile and theme"
   fi
   for hook_template in "$repo_root"/.chezmoiscripts/*.sh.tmpl; do
     rendered_hook="$tmp_dir/hook-$hook_platform_name-$(basename "$hook_template" .tmpl)"
@@ -2613,7 +2618,7 @@ chezmoi --source="$repo_root" --override-data "$windows_init_override" \
 assert_toml_section_contains "$tmp_dir/windows-init.toml" "data" 'desktopBaseline = true'
 chezmoi --source="$repo_root" --override-data "$windows_init_override" \
   execute-template --init --file "$repo_root/.chezmoi.toml.tmpl" \
-  --promptBool 'Install Windows desktop baseline (Windows Terminal settings + Maple Mono NF CN)=false' >"$tmp_dir/windows-init.toml"
+  --promptBool 'Install Windows desktop baseline (PowerToys + Windows Terminal settings + Maple Mono NF CN)=false' >"$tmp_dir/windows-init.toml"
 assert_toml_section_contains "$tmp_dir/windows-init.toml" "data" 'desktopBaseline = false'
 
 log_step "📦" "Exercising the pacman installer with a stubbed sudo..."

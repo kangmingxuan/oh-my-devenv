@@ -10,7 +10,7 @@
 
 oh-my-devenv is an opinionated, declarative development environment. It publishes one maintainer's current choices as a coherent baseline: use it when those choices fit, and do not use it when they do not. Point `chezmoi` at it on a fresh machine and minutes later you have managed shells, language runtimes, and a curated CLI toolchain — all from a single source of truth. Secrets and private machine facts stay in local overlays so the public baseline remains safe to clone.
 
-Native Windows has a [quick start](#native-windows-quick-start) for the configuration, WinGet system packages, and optional Windows Terminal desktop baseline.
+Native Windows has a [quick start](#native-windows-quick-start) for the configuration, WinGet system packages, and optional desktop baseline.
 
 ## What you get
 
@@ -81,9 +81,10 @@ chezmoi init --apply https://github.com/kangmingxuan/oh-my-devenv.git
 ```
 
 If device policy blocks PowerShell hooks, the `winget` source, or an installer,
-stop and contact the device administrator. The desktop prompt enables
-Maple Mono NF CN and the Windows Terminal fragment. After apply succeeds,
-open a new `pwsh` session to load the profile. See the
+stop and contact the device administrator. The system baseline installs Git,
+GitHub CLI, ripgrep, jq, and Oh My Posh. The optional desktop baseline adds
+PowerToys, Maple Mono NF CN, and Windows Terminal settings. After apply succeeds,
+open a new `pwsh` session to load the robbyrussell prompt. See the
 [Windows onboarding notes](docs/01-onboarding.md#native-windows) for backups, overlays, checks, and uninstall.
 
 ### macOS and Linux

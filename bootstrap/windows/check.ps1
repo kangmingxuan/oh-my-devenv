@@ -47,7 +47,7 @@ if ($null -eq (Resolve-RegularFile -Path $ProfilePath) -or
     throw "The managed line is missing from PowerShell profile '$ProfilePath'. Run chezmoi apply."
 }
 
-Confirm-ManagedProfile -ProfilePath $ProfilePath
+Confirm-ManagedProfile -ProfilePath $ProfilePath -Destination $Destination
 
 $ssh = Get-PathApplication -Name ssh
 $version = Invoke-NativeCommand -Executable $ssh.Source -Arguments @('-V')
@@ -67,14 +67,16 @@ if (-not (Test-SshConfigRead -Diagnostic $result.Stderr -Path $sshConfig)) {
 Write-Host "SSH read managed config: $sshConfig"
 
 $manifestRoot = Join-Path $PSScriptRoot '../manifests'
-Confirm-SystemPackage -ManifestPath (Join-Path $manifestRoot 'system/winget-packages.json')
-Confirm-VisualCppRuntime -PackageIds (Get-Content -LiteralPath (Join-Path $manifestRoot 'system/winget-vc-runtime-packages.txt'))
-
 if (-not $PSBoundParameters.ContainsKey('DesktopBaseline')) {
     $chezmoi = Get-PathApplication -Name chezmoi
     $data = Invoke-NativeCommand -Executable $chezmoi.Source -Arguments @('data', '--format=json')
     $DesktopBaseline = [bool](ConvertFrom-Json -InputObject $data.Stdout -AsHashtable)['desktopBaseline']
 }
+$packageManifests = @(
+    Join-Path $manifestRoot 'system/winget-packages.json'
+    if ($DesktopBaseline) { Join-Path $manifestRoot 'desktop/winget-packages.json' }
+)
+Confirm-WinGetPackage -ManifestPath $packageManifests
 if ($DesktopBaseline) {
     $localData = Get-DesktopLocalData -Destination $Destination
     $target = Get-DesktopFontTarget -LocalData $localData

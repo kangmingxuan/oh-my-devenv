@@ -1,3 +1,6 @@
 # Copy to ~/.config/oh-my-devenv/powershell/profile.local.ps1.
 # Put machine-local PowerShell settings here.
 # $env:EDITOR = 'code --wait'
+
+# This overlay loads after Oh My Posh. Define prompt here to use your own prompt.
+# function prompt { "PS $($executionContext.SessionState.Path.CurrentLocation)> " }

@@ -52,6 +52,7 @@ bootstrap/**
 {{ end -}}
 {{ else -}}
 .chezmoiscripts/*.ps1
+# Includes the managed PowerShell profile and Oh My Posh theme.
 .config/oh-my-devenv
 .config/oh-my-devenv/powershell
 .config/oh-my-devenv/powershell/**

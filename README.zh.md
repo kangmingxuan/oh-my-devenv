@@ -10,7 +10,7 @@
 
 oh-my-devenv 是一套主观鲜明、声明式的开发环境。它公开的是维护者当前认可的一整套选择：认同这些选择就使用，不认同就不使用。在一台全新机器上让 `chezmoi` 指向它，几分钟后你就拥有受管的 shell、语言运行时和精选 CLI 工具链，全部来自同一份事实来源。密钥与机器私有事实留在本地 overlay 中，使公开基线可以安全检出。
 
-原生 Windows 提供[快速开始](#原生-windows-快速开始)，覆盖配置、WinGet 系统包和可选的 Windows Terminal 桌面基线。
+原生 Windows 提供[快速开始](#原生-windows-快速开始)，覆盖配置、WinGet 系统包和可选的桌面基线。
 
 ## 功能亮点
 
@@ -79,8 +79,9 @@ chezmoi init --apply https://github.com/kangmingxuan/oh-my-devenv.git
 ```
 
 如果设备策略阻止 PowerShell hook、`winget` 源或安装器，停止并联系设备管理员。
-通过桌面提示启用 Maple Mono NF CN 和 Windows Terminal fragment。
-apply 成功后，打开新的 `pwsh` 会话加载 profile。备份、overlay、校验和卸载见
+系统基线安装 Git、GitHub CLI、ripgrep、jq 和 Oh My Posh。可选的桌面基线增加
+PowerToys、Maple Mono NF CN 和 Windows Terminal 设置。
+apply 成功后，打开新的 `pwsh` 会话加载 robbyrussell 提示符。备份、overlay、校验和卸载见
 [Windows 上手说明](docs/01-onboarding.md#native-windows)。
 
 ### macOS 和 Linux

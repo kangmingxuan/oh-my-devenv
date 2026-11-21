@@ -14,4 +14,4 @@ if (-not $IsWindows) {
 . {{ includeTemplate "powershell-literal" (joinPath .chezmoi.sourceDir "bootstrap/windows/system-packages.ps1") }}
 
 Update-HookPath
-Install-SystemPackage -ManifestPath {{ includeTemplate "powershell-literal" (joinPath .chezmoi.sourceDir "bootstrap/manifests/system/winget-packages.json") }}
+Install-WinGetPackage -ManifestPath {{ includeTemplate "powershell-literal" (joinPath .chezmoi.sourceDir "bootstrap/manifests/system/winget-packages.json") }}

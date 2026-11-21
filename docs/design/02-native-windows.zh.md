@@ -23,14 +23,16 @@ WSL 不属于本设计。WSL 是 Linux 环境，继续走现有的 Linux 路径�
 | --- | --- |
 | 支持原生 Windows | 工作环境依赖原生 Windows，仅靠 WSL 不能满足需求。 |
 | 使用当前仓库 | 不另开仓库。 |
-| 平台保持一致，作为软规则 | Windows 默认使用相同的版本和工具清单。某个工具在 Windows 上不可用时，允许 Windows 例外。 |
+| 共享运行时和生态工具 | 用户于 2026-11-21 确认，Windows 使用共享的 mise 语言版本和生态工具清单。按工具在 Windows 上的实用性选定系统包。 |
+| 默认安装 Oh My Posh | 用户于 2026-11-21 选用 Oh My Posh，作为 PowerShell 中对应 oh-my-zsh 的提示符工具。 |
+| 批准 Windows 系统包清单 | 用户于 2026-11-21 批准第 10 节中 Claude 提出的五个系统包。Claude 选择了对 Windows 实用、运行良好且广泛使用的工具。 |
 | Windows 定位为通用开发环境基线 | Windows 内容保持公开、通用。雇主特定的内容不进入本仓库。 |
-| Windows 工具盘点延后 | 用户尚未收集完整的 Windows 日常工具。以 macOS 和 Linux 基线为起点。 |
+| Windows 工具盘点延后 | 用户尚未收集完整的 Windows 日常工具。以已批准的 Windows 系统包清单为起点。 |
 | 使用当前用户、所有宿主的 PowerShell profile | 由 Claude 提出，用户批准。 |
 | 请 Gemini 4 Argon 和 Kimi K3.1 Pro 做设计评审 | 用户要求 Claude 把这两份评审与 Codex 的事实核查一起权衡。 |
 | 把受管目录持久化写入用户 `Path` | 用户于 2026-11-21 做出这一决定，让 PowerShell 之外启动的应用也能找到受管工具。Claude 在第 7 节设计了具体机制。 |
 
-本文其余决策均由 Claude 在上述范围内提出。第 16 节列出 Claude 采纳了哪些评审意见。用户于 2026-11-21 批准阶段 3，并将首次 Windows 实机 apply 安排在所有计划阶段完成后。Claude 在授权范围内确定了阶段 3 的包清单、安装范围、安装与检查行为、设备策略处理、桌面安装与验证，以及卸载边界。
+本文其余决策均由 Claude 在上述范围内提出。第 16 节列出 Claude 采纳了哪些评审意见。用户于 2026-11-21 批准阶段 3，并将首次 Windows 实机 apply 安排在所有计划阶段完成后。Claude 在授权范围内确定了阶段 3 的安装范围、安装与检查行为、设备策略处理、桌面安装与验证，以及卸载边界。
 
 ## 3. 目标与非目标
 
@@ -63,12 +65,13 @@ bootstrap/
 ├── manifests/
 │   ├── system/winget-packages.json    # 新增；Windows 系统包
 │   ├── ecosystem/*.txt                # 共享，格式不变
+│   ├── desktop/winget-packages.json   # Windows 桌面包
 │   └── desktop/maple-mono-nf-cn.env   # 共享的字体信息
 ├── scripts/                           # Unix Bash 辅助脚本，不变
 └── windows/                           # 新增；PowerShell 辅助脚本与测试
 dot_config/
 ├── mise/config.toml.tmpl              # 共享目标
-└── oh-my-devenv/powershell/           # 新增；PowerShell profile 主体
+└── oh-my-devenv/powershell/           # 新增；PowerShell profile 主体和主题
 AppData/Local/Microsoft/Windows Terminal/Fragments/oh-my-devenv/  # 新增；仅桌面基线
 ```
 
@@ -86,13 +89,13 @@ AppData/Local/Microsoft/Windows Terminal/Fragments/oh-my-devenv/  # 新增；仅
 
 - `.chezmoi.os` 为 `windows` 时，`.chezmoitemplates/system-package-manager` 返回 `winget`。
 - `.chezmoitemplates/desktop-platform-supported` 在 Windows 上返回 `true`。
-- `.chezmoi.toml.tmpl` 在 Windows 上把桌面基线提示的默认值设为是，提示文字写明 Windows 上的内容：Windows Terminal 设置和 Maple Mono NF CN。
+- `.chezmoi.toml.tmpl` 在 Windows 上把桌面基线提示的默认值设为是，提示文字写明 Windows 上的内容：PowerToys、Windows Terminal 设置和 Maple Mono NF CN。
 
 hook 和部署文件都通过 `.chezmoiignore` 做门控：
 
 - ignore 规则写成相对于 home 目录的目标路径，而不是 source 路径。脚本的目标名会去掉 `run_` 属性和 `.tmpl` 后缀，所以 `.chezmoiscripts/*.ps1` 能匹配所有 Windows hook。Claude 用 chezmoi v2.73.2 在一个临时 fixture 上确认了这条规则。
 - 在 Windows 上，忽略 `.chezmoiscripts/*.sh` 和 Unix 专属目标：Zsh 和 Bash 文件、`.local/share/oh-my-devenv/xdg.sh`、Fontconfig 和 Ghostty。
-- 在 Windows 之外，忽略 `.chezmoiscripts/*.ps1` 和 Windows 专属目标：PowerShell profile 主体和 Windows Terminal fragment。
+- 在 Windows 之外，忽略 `.chezmoiscripts/*.ps1` 和 Windows 专属目标：PowerShell profile、Oh My Posh 主题和 Windows Terminal fragment。
 - 不为这个门控修改现有的 Unix hook 模板。`.chezmoiignore` 把门控集中在一处，而不是分散在十个模板里。chezmoi 对渲染后的脚本计算哈希，所以外包条件只有在改变渲染结果时才会让 Unix hook 重跑；但每个被修改的模板都是门控可能产生偏差的地方。
 
 ## 6. Hook 对应关系
@@ -105,7 +108,7 @@ hook 和部署文件都通过 `.chezmoiignore` 做门控：
 | 10 | 前置条件与首次运行备份 | `run_once_before_`：检查 `git`，首次运行备份 | 2 |
 | 15 | — | `run_after_`，每次 apply：确保 profile 中有 dot-source 行（第 9 节，阶段 2），并确保持久化用户 `Path` 中有受管条目（第 7 节，阶段 4） | 2 |
 | 20 | 系统包 | 检查 `winget`，然后从 `winget-packages.json` 执行 `winget import` | 3 |
-| 22 | 桌面资产 | 检查 Windows Terminal，然后把 Maple Mono NF CN 装到用户字体目录 | 3 |
+| 22 | 桌面资产 | 检查 Windows Terminal，导入桌面包，再把 Maple Mono NF CN 装到用户字体目录 | 3 |
 | 25 | oh-my-zsh 资产 | 无 | — |
 | 30 | 安装 mise | `mise` 不在 `PATH` 上时，用 winget 安装 mise | 4 |
 | 40 | 运行时 | `mise install` | 4 |
@@ -232,7 +235,10 @@ chezmoi 可以通过 `.chezmoiexternal` 用配置数据计算目标路径。Clau
 - 把 mise shims 目录、`~/.local/bin` 和 `$GOBIN` 放到 `PATH` 最前面。
 - 把 `BAT_THEME` 设为与 Unix env 模板相同的值。
 - 仅在 `mise` 位于 `PATH` 上时，用 `(&mise activate pwsh) | Out-String | Invoke-Expression` 激活 mise。Unix rc 文件也用同样方式保护激活。
-- 本地 overlay `~/.config/oh-my-devenv/powershell/profile.local.ps1` 存在时加载它。
+- 激活 mise 后，查找 `PATH` 上第一个 `oh-my-posh` 应用程序。找到时，使用受管文件 `~/.config/oh-my-devenv/powershell/robbyrussell.omp.json` 初始化。这个本地主题沿用 Unix 的 `robbyrussell` 提示符。主题和 MIT 许可证声明来自 [Oh My Posh v33.0.0](https://github.com/JanDeDobbeleer/oh-my-posh/tree/v33.0.0)。
+- 主题关闭自动升级和升级通知。它启用 `async`，因此即使设备缓存打开了升级功能，Oh My Posh 也会禁用它们。profile 通过 `init pwsh --print` 获取完整的初始化脚本并立即执行。主题从磁盘加载，路径和 Git 段读取本地状态。[功能选择](https://github.com/JanDeDobbeleer/oh-my-posh/blob/v33.0.0/src/config/config.go#L144-L191)、[PowerShell 初始化脚本生成器](https://github.com/JanDeDobbeleer/oh-my-posh/blob/v33.0.0/src/shell/init.go#L47-L76)。
+- 初始化脚本导出解析后的 `POSH_CONFIG` 和 `POSH_SESSION_ID`。提示符模块加载后，profile 在运行 overlay 前记录该配置路径。检查器在新 PowerShell 进程中清除继承值，并要求记录的路径与已部署主题一致。[会话变量](https://github.com/JanDeDobbeleer/oh-my-posh/blob/v33.0.0/src/shell/init.go#L315-L326)。
+- 本地 overlay `~/.config/oh-my-devenv/powershell/profile.local.ps1` 存在时加载它。overlay 可以覆盖提示符。
 - 运行 overlay 后，把缺失的受管目录放到 `PATH` 最前面，包括实际生效的 `GOBIN`。保留 overlay 中已有的 `PATH` 条目及其顺序。
 
 profile 只影响 PowerShell 会话。从 Windows shell 启动的应用（例如从开始菜单启动的 IDE）不会加载它。持久化的用户 `Path` 条目覆盖这些应用（第 7 节）。
@@ -266,30 +272,40 @@ hook 00 的 XDG 根目录检查仍只用于 Unix。Windows 不导出 `XDG_*` 变
 - 传入 `--no-upgrade`。hook 20 只确保每个包存在；升级仍是用户单独执行的操作（`winget upgrade`）。安装器升级可能需要提权或重启，hook 不能触发这些。Arch Linux 路径同样把完整升级留给用户。
 - WinGet 缺失、源打不开或安装失败时，hook 20 失败。错误指出源和清单条目，并保留 WinGet 诊断。设备策略可能限制源或安装。使用现有源。遇到策略限制时联系设备管理员。
 - `check.ps1` 通过 `winget export --source winget` 导出已安装清单。它使用 JSON 中归属内置源的完整包 ID 与清单比较。它列出全部缺失 ID，并在导出失败时保留 WinGet 诊断。[WinGet export](https://learn.microsoft.com/en-us/windows/package-manager/winget/export)。
-- `sharkdp.fd` 和 `sharkdp.bat` 声明依赖 Visual C++ 2015+ 运行库。WinGet 1.11 的 import 会跳过包依赖。检查器要求 PowerShell 进程可见的 Windows 系统目录中存在 `vcruntime140.dll`。缺失时，请管理员安装匹配架构的运行库。x64 的命令为 `winget install --id Microsoft.VCRedist.2015+.x64 --exact`。hook 仅执行用户范围的安装。[WinGet import 实现](https://github.com/microsoft/winget-cli/blob/v1.11.510/src/AppInstallerCLICore/Workflows/ImportExportFlow.cpp#L309-L322)。[Microsoft 运行库下载](https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist/)。
 
-用户盘点前，Claude 从 Unix 基线选定起始清单。
-[Microsoft 目录](https://github.com/microsoft/winget-pkgs/tree/master/manifests)确认了包 ID 和安装器类型。
-托管作业验证了用户范围的导入。用户设备上的首次 apply 仍待进行。
+[系统包清单](../../bootstrap/manifests/system/winget-packages.json)保存了已批准的条目。
 
-| Unix 条目 | Windows 决定 |
+| 包 ID | 安装器 |
 | --- | --- |
-| `git` | 纳入 `Git.Git`。WinGet 提供用户范围的 Inno 安装器。 |
-| `curl` | 跳过；Windows 自带 `curl.exe` |
-| `wget` | 跳过；使用 `curl.exe` |
-| `ca-certificates`、`bash-completion`、`zsh` | 不适用 |
-| `build-essential`、`pkg-config` | 跳过；盘点后再决定原生工具链 |
-| `tmux` | 跳过；盘点后再决定原生终端复用器 |
-| `jq`、`yq`、`ripgrep`、`fzf`、`fd`、`bat` | 纳入 `jqlang.jq`、`MikeFarah.yq`、`BurntSushi.ripgrep.MSVC`、`junegunn.fzf`、`sharkdp.fd` 和 `sharkdp.bat`。WinGet 提供便携安装器。fzf 的 MSI 为机器范围。 |
-| `direnv` | 跳过。[上游实现](https://github.com/direnv/direnv#how-it-works)用 Bash 执行 `.envrc`。 |
-| `tree`、`zip`、`unzip` | 跳过；Windows 有内置的对应功能 |
-| `shellcheck`、`shfmt` | 纳入便携版 `koalaman.shellcheck` 和 `mvdan.shfmt`，供编辑源码时使用。已核实的安装器均提供 x64，shfmt 也提供 x86。目录中缺少两者的原生 arm64 安装器。 |
-| `gnupg`、`pinentry-mac` | 盘点后再决定 |
-| `gh` | 纳入 `GitHub.cli` 并使用便携安装器。其 MSI 为机器范围。 |
+| `Git.Git` | 用户范围的 Inno 安装器 |
+| `GitHub.cli` | ZIP 归档中的便携包 |
+| `BurntSushi.ripgrep.MSVC` | ZIP 归档中的便携包 |
+| `jqlang.jq` | 便携包 |
+| `JanDeDobbeleer.OhMyPosh` | MSIX，在[目录](https://github.com/microsoft/winget-pkgs/blob/master/manifests/j/JanDeDobbeleer/OhMyPosh/33.0.0/JanDeDobbeleer.OhMyPosh.installer.yaml)中声明为 `appx` |
+
+WinGet 将清单要求的用户范围应用到 Oh My Posh MSIX。
+[安装器类型映射](https://github.com/microsoft/winget-cli/blob/v1.11.510/src/AppInstallerCommonCore/Manifest/ManifestCommon.cpp#L144-L151)、
+[范围筛选](https://github.com/microsoft/winget-cli/blob/v1.11.510/src/AppInstallerCommonCore/Manifest/ManifestComparator.cpp#L469-L484)。
+
+| 未纳入或待讨论的工具 | 原因 |
+| --- | --- |
+| `fd`、`bat`、`fzf` | `Get-ChildItem` 和 `Get-Content` 覆盖日常查找和读取文件。PowerShell 筛选覆盖日常选择。 |
+| `yq`、`shellcheck`、`shfmt` | YAML 编辑和 Unix shell 维护在此 Windows 基线中的使用较少。 |
+| Everything | 标准账户的 NTFS 快速索引依赖一项需要管理员权限才能安装的服务。[Everything 服务](https://www.voidtools.com/support/everything/everything_service/) |
+| 7-Zip | Windows 11 24H2 的文件资源管理器可解压普通 7z 和 RAR 归档。[Microsoft 支持](https://support.microsoft.com/en-gb/windows/experience/storage-filemanagement/zip-and-unzip-files) |
+| DevToys | 当前 DevToys 应用的目录条目是 2.0 预览版。[WinGet 目录](https://github.com/microsoft/winget-pkgs/tree/master/manifests/d/DevToys-app/DevToys) |
+| `gsudo` | 提权超出基线范围。 |
+| `zoxide`、`lazygit`、`delta` | 留待 mise 层单独讨论。 |
+| `curl`、`wget`、`tree`、`zip`、`unzip` | Windows 提供 `curl.exe` 及内置的目录和归档工具。 |
+| `ca-certificates`、`bash-completion`、`zsh` | 这些 Unix 包不适用于 Windows 基线。 |
+| `direnv` | 它用 Bash 执行 `.envrc`。[上游实现](https://github.com/direnv/direnv#how-it-works) |
+| 原生工具链、终端复用器、`gnupg`、`pinentry` | 完成 Windows 工具盘点后再决定。 |
 
 ## 11. 桌面基线
 
-在 Windows 上，桌面基线是 Maple Mono NF CN 字体和 Windows Terminal fragment。
+在 Windows 上，桌面基线包括 PowerToys、Maple Mono NF CN 和 Windows Terminal fragment。
+
+- 启用 `desktopBaseline` 时，hook 22 导入[桌面包清单](../../bootstrap/manifests/desktop/winget-packages.json)。`Microsoft.PowerToys` 提供用户范围的 Burn 安装器。hook 22 复用 hook 20 的导入参数、源校验和失败处理。检查器通过一次导出验证两个已启用层的完整包 ID。[PowerToys 目录清单](https://github.com/microsoft/winget-pkgs/blob/master/manifests/m/Microsoft/PowerToys/0.102.3101/Microsoft.PowerToys.installer.yaml)。
 
 - hook 22 从 `maple-mono-nf-cn.env` 读取 URL、摘要、字族和必需字面。先校验归档摘要，再提取必需的 TrueType 文件。已有文件的字节一致时保留原文件。
 - 将字体复制到 `%LOCALAPPDATA%\Microsoft\Windows\Fonts`。在 `HKCU\Software\Microsoft\Windows NT\CurrentVersion\Fonts` 下为每个字面写入完整文件路径，值类型为字符串。字体为当前用户持久注册。如果当前会话无法使用字体，注销并重新登录。[Microsoft 字体安装器实现](https://github.com/microsoft/winget-cli/blob/master/src/AppInstallerCommonCore/Fonts.cpp)、[FontLab 用户级注册表实现](https://github.com/fontlaborg/fontlift-win-cli/blob/main/src/sys_utils.cpp)。
@@ -369,22 +385,9 @@ Windows OpenSSH 9.5p2 读取了受管的默认配置，并拒绝了顶层配置�
 上的不安全 ACL。这些结果适用于该 runner 上的工具。
 [托管 apply job 136793367571](https://github.com/kangmingxuan/oh-my-devenv/actions/runs/44886671628/job/136793367571)
 
-第 10 节和第 11 节记录了 Claude 的阶段 3 决策。检查器按精确包 ID 查询。
-包清单使用内置源和用户范围。字体使用当前用户的目录和注册表。源或安装器受限时，
-apply 会停止并输出诊断。
+第 2、9、10 和 11 节记录了已批准的阶段 3 基线及其验证规则。
 
-阶段 3 托管 smoke 作业通过 PSScriptAnalyzer 和 73 项 Pester 测试，跳过 1 项。
-它验证了使用其他桌面目标目录时，apply 会在写入 fragment 前停止。
-[托管 smoke 作业 136844172633](https://github.com/kangmingxuan/oh-my-devenv/actions/runs/44903506985/job/136844172633)。
-
-阶段 3 托管 apply 作业使用 `windows-2025-vs2026` 镜像 `20261116.315.1`、
-WinGet `1.11.510` 和 Windows Terminal `1.23.20211.0`。它执行真实导入、
-检查全部 10 个包 ID 和 x64 运行库，并验证字体注册与已部署的 fragment。
-它还验证了卸载和恢复。[托管 apply 作业 136844172639](https://github.com/kangmingxuan/oh-my-devenv/actions/runs/44903506985/job/136844172639)。
-
-在该客户端上，按 ID 筛选已安装包时，WinGet 无法将 yq 的注册项关联到目录 ID。
-完整列表和 WinGet 导出都找到了该包。检查器现在从已安装清单导出结果中比较完整的目录 ID。
-[首次诊断作业](https://github.com/kangmingxuan/oh-my-devenv/actions/runs/44902747366/job/136841925517)。
+托管 smoke 和 apply 证据见[阶段 3 PR 检查](https://github.com/kangmingxuan/oh-my-devenv/pull/66/checks)。用户设备上的首次 apply 仍待进行。
 
 在依赖某一项的阶段开始前解决其余事项。
 

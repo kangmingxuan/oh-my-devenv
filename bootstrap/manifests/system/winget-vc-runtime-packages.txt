@@ -1,2 +1,0 @@
-sharkdp.fd
-sharkdp.bat

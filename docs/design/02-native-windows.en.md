@@ -23,14 +23,16 @@ The user made these decisions on 2026-11-20, except where another date is stated
 | --- | --- |
 | Support native Windows | The work environment depends on native Windows, so WSL alone does not meet the need. |
 | Use the current repository | Do not start a separate repository. |
-| Keep platforms consistent, as a soft rule | Windows uses the same versions and tool lists by default. A Windows exception is allowed when a tool does not work there. |
+| Share runtimes and ecosystem tools | On 2026-11-21, the user confirmed that Windows uses the shared mise language versions and ecosystem tool manifests. Select Windows system packages for their usefulness on Windows. |
+| Install Oh My Posh by default | On 2026-11-21, the user chose Oh My Posh as the PowerShell counterpart of oh-my-zsh. |
+| Approve the Windows system inventory | On 2026-11-21, the user approved Claude's five-package proposal in section 10. Claude selected tools that are useful on Windows, run well there, and are widely used. |
 | Scope Windows as a general development baseline | Windows content stays public and general. Employer-specific content stays out of the repository. |
-| Defer the Windows tool inventory | The user has not collected the full set of daily Windows tools yet. Use the macOS and Linux baseline as the starting point. |
+| Defer the Windows tool inventory | The user has not collected the full set of daily Windows tools yet. Start with the approved Windows system inventory. |
 | Use the current-user, all-hosts PowerShell profile | Claude proposed this target and the user approved it. |
 | Ask for design reviews from Gemini 4 Argon and Kimi K3.1 Pro | The user asked Claude to weigh these reviews together with the Codex fact-checks. |
 | Persist the managed directories in the user `Path` | The user decided this on 2026-11-21, so that applications started outside PowerShell find the managed tools. Claude designed the mechanism in section 7. |
 
-Claude proposed every other decision in this document within the scope above. Section 16 lists which review findings Claude adopted. The user approved phase 3 on 2026-11-21 and deferred the first live Windows apply until after all planned phases. Claude decided the phase-3 package inventory, scope, installer and checker behavior, device-policy handling, desktop installation and validation, and the phase-3 uninstall boundary within that approval.
+Claude proposed every other decision in this document within the scope above. Section 16 lists which review findings Claude adopted. The user approved phase 3 on 2026-11-21 and deferred the first live Windows apply until after all planned phases. Claude decided the installation scope, installer and checker behavior, device-policy handling, desktop installation and validation, and the phase-3 uninstall boundary within that approval.
 
 ## 3. Goals and Non-Goals
 
@@ -63,12 +65,13 @@ bootstrap/
 ├── manifests/
 │   ├── system/winget-packages.json    # new; Windows system packages
 │   ├── ecosystem/*.txt                # shared, unchanged format
+│   ├── desktop/winget-packages.json   # Windows desktop packages
 │   └── desktop/maple-mono-nf-cn.env   # shared font facts
 ├── scripts/                           # Unix Bash helpers, unchanged
 └── windows/                           # new; PowerShell helpers and tests
 dot_config/
 ├── mise/config.toml.tmpl              # shared target
-└── oh-my-devenv/powershell/           # new; PowerShell profile body
+└── oh-my-devenv/powershell/           # new; PowerShell profile body and theme
 AppData/Local/Microsoft/Windows Terminal/Fragments/oh-my-devenv/  # new; desktop only
 ```
 
@@ -86,13 +89,13 @@ Keep the platform decisions in the same places that the Unix platforms use:
 
 - `.chezmoitemplates/system-package-manager` returns `winget` when `.chezmoi.os` is `windows`.
 - `.chezmoitemplates/desktop-platform-supported` returns `true` on Windows.
-- `.chezmoi.toml.tmpl` defaults the desktop-baseline prompt to yes on Windows, and its prompt text names the Windows contents: Windows Terminal settings and Maple Mono NF CN.
+- `.chezmoi.toml.tmpl` defaults the desktop-baseline prompt to yes on Windows, and its prompt text names the Windows contents (PowerToys, Windows Terminal settings, and Maple Mono NF CN).
 
 Gate both hooks and deployed files through `.chezmoiignore`:
 
 - Write ignore patterns as target paths relative to the home directory, not as source paths. A script's target name drops its `run_` attributes and `.tmpl` suffix, so `.chezmoiscripts/*.ps1` matches every Windows hook. Claude confirmed this pattern with chezmoi v2.73.2 on a disposable fixture.
 - On Windows, ignore `.chezmoiscripts/*.sh` and the Unix-only targets: Zsh and Bash files, `.local/share/oh-my-devenv/xdg.sh`, Fontconfig, and Ghostty.
-- Outside Windows, ignore `.chezmoiscripts/*.ps1` and the Windows-only targets: the PowerShell profile body and the Windows Terminal fragment.
+- Outside Windows, ignore `.chezmoiscripts/*.ps1` and the Windows-only targets: the PowerShell profile, Oh My Posh theme, and Windows Terminal fragment.
 - Do not edit the existing Unix hook templates for this gate. `.chezmoiignore` keeps the gate in one place instead of ten templates. chezmoi hashes the rendered script, so a wrapper reruns a Unix hook only when it changes the rendered output, but each edited template is still a place where the gate can drift.
 
 ## 6. Hook Mapping
@@ -105,7 +108,7 @@ Keep the Unix hook numbers, so the order of the layers is the same on every plat
 | 10 | Prerequisites and first-run backup | `run_once_before_`: check `git`, first-run backup | 2 |
 | 15 | — | `run_after_`, every apply: ensure the profile dot-source line (section 9, phase 2) and the persistent user `Path` entries (section 7, phase 4) | 2 |
 | 20 | System packages | Check `winget`, then `winget import` from `winget-packages.json` | 3 |
-| 22 | Desktop assets | Check Windows Terminal, then Maple Mono NF CN in the user font directory | 3 |
+| 22 | Desktop assets | Check Windows Terminal, import the desktop packages, and install Maple Mono NF CN in the user font directory | 3 |
 | 25 | oh-my-zsh assets | None | — |
 | 30 | Install mise | Install mise with winget when `mise` is not on `PATH` | 4 |
 | 40 | Runtimes | `mise install` | 4 |
@@ -236,7 +239,10 @@ The body mirrors the Unix env templates where they apply on Windows:
 - Prepend the mise shims directory, `~/.local/bin`, and `$GOBIN` to `PATH`.
 - Set `BAT_THEME` to the same value as the Unix env templates.
 - Activate mise with `(&mise activate pwsh) | Out-String | Invoke-Expression`, only when `mise` is on `PATH`. The Unix rc files guard activation in the same way.
-- Load the local overlay at `~/.config/oh-my-devenv/powershell/profile.local.ps1` when it exists.
+- After mise activation, resolve the first `oh-my-posh` application on `PATH`. When it exists, initialize it with the managed `~/.config/oh-my-devenv/powershell/robbyrussell.omp.json`. This local theme follows the Unix `robbyrussell` profile. The theme and its MIT notice are from [Oh My Posh v33.0.0](https://github.com/JanDeDobbeleer/oh-my-posh/tree/v33.0.0).
+- The theme disables automatic upgrades and upgrade notices. It also enables `async` so Oh My Posh disables upgrade features even when its device cache enables them. The profile uses `init pwsh --print` to evaluate the full initialization script immediately. The theme loads from disk. Its path and Git segments use local state. [Feature selection](https://github.com/JanDeDobbeleer/oh-my-posh/blob/v33.0.0/src/config/config.go#L144-L191), [PowerShell init generator](https://github.com/JanDeDobbeleer/oh-my-posh/blob/v33.0.0/src/shell/init.go#L47-L76).
+- The init script exports the resolved `POSH_CONFIG` and a `POSH_SESSION_ID`. After the prompt module loads, the profile records that config path before the overlay runs. The checker clears inherited values in its fresh PowerShell process and requires that recorded path to match the deployed theme. [Session variables](https://github.com/JanDeDobbeleer/oh-my-posh/blob/v33.0.0/src/shell/init.go#L315-L326).
+- Load the local overlay at `~/.config/oh-my-devenv/powershell/profile.local.ps1` when it exists. It can override the prompt.
 - After the overlay runs, prepend any missing managed directories, including the effective `GOBIN`. Preserve the overlay's existing `PATH` order and entries.
 
 The profile affects PowerShell sessions only. Applications started from the Windows shell, such as an IDE launched from the Start menu, do not load it. The persistent user `Path` entries cover these applications (section 7).
@@ -270,31 +276,40 @@ Use `winget import` with a JSON file in the format that `winget export` produces
 - Pass `--no-upgrade`. Hook 20 ensures that each package is present; upgrades stay a separate user action (`winget upgrade`). An installer upgrade can need elevation or a restart, which a hook must not trigger. The Arch Linux path also leaves a full upgrade to the user.
 - Hook 20 fails when WinGet is missing, the source cannot be opened, or an install fails. The error identifies the source and manifest entries and includes the WinGet diagnostic. Device policy can block the source or installation. Use the existing source and contact the device administrator if policy blocks it.
 - `check.ps1` exports the installed inventory with `winget export --source winget`. It compares complete package IDs in the JSON from the built-in source against the manifest. It reports all absent IDs and includes the native diagnostic if export fails. [WinGet export](https://learn.microsoft.com/en-us/windows/package-manager/winget/export).
-- `sharkdp.fd` and `sharkdp.bat` declare the Visual C++ 2015+ runtime. WinGet 1.11 import skips package dependencies. The checker requires `vcruntime140.dll` in the Windows system directory seen by the PowerShell process. If it is missing, ask an administrator to install the matching architecture. For x64, run `winget install --id Microsoft.VCRedist.2015+.x64 --exact`. The hooks run only user-scope installs. [WinGet import implementation](https://github.com/microsoft/winget-cli/blob/v1.11.510/src/AppInstallerCLICore/Workflows/ImportExportFlow.cpp#L309-L322). [Microsoft runtime downloads](https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist/).
 
-Claude chose the starting inventory from the Unix baseline while the user
-inventory is pending. The [Microsoft catalog](https://github.com/microsoft/winget-pkgs/tree/master/manifests)
-confirms the package IDs and installer types. The hosted run verified the
-user-scope import. The first apply on a user machine is still pending.
+The [system manifest](../../bootstrap/manifests/system/winget-packages.json) holds the approved list.
 
-| Unix entry | Windows decision |
+| Package ID | Installer |
 | --- | --- |
-| `git` | Include `Git.Git`. WinGet has a user-scope Inno installer. |
-| `curl` | Skip; Windows ships `curl.exe` |
-| `wget` | Skip; use `curl.exe` |
-| `ca-certificates`, `bash-completion`, `zsh` | Not applicable |
-| `build-essential`, `pkg-config` | Skip; decide on a native toolchain after the inventory |
-| `tmux` | Skip; decide on a native terminal multiplexer after the inventory |
-| `jq`, `yq`, `ripgrep`, `fzf`, `fd`, `bat` | Include `jqlang.jq`, `MikeFarah.yq`, `BurntSushi.ripgrep.MSVC`, `junegunn.fzf`, `sharkdp.fd`, and `sharkdp.bat`. WinGet has portable installers. The fzf MSI is machine scope. |
-| `direnv` | Skip. The [upstream implementation](https://github.com/direnv/direnv#how-it-works) evaluates `.envrc` in Bash. |
-| `tree`, `zip`, `unzip` | Skip; Windows has built-in equivalents |
-| `shellcheck`, `shfmt` | Include the portable `koalaman.shellcheck` and `mvdan.shfmt` for source editing. The inspected installers offer x64 for both and x86 for shfmt. Native arm64 installers were absent. |
-| `gnupg`, `pinentry-mac` | Decide after the inventory |
-| `gh` | Include `GitHub.cli`. Use its portable installer. Its MSI is machine scope. |
+| `Git.Git` | User-scope Inno |
+| `GitHub.cli` | Portable in a ZIP archive |
+| `BurntSushi.ripgrep.MSVC` | Portable in a ZIP archive |
+| `jqlang.jq` | Portable |
+| `JanDeDobbeleer.OhMyPosh` | MSIX, declared as `appx` in the [catalog](https://github.com/microsoft/winget-pkgs/blob/master/manifests/j/JanDeDobbeleer/OhMyPosh/33.0.0/JanDeDobbeleer.OhMyPosh.installer.yaml) |
+
+WinGet applies the manifest's user scope to the Oh My Posh MSIX.
+[Installer type mapping](https://github.com/microsoft/winget-cli/blob/v1.11.510/src/AppInstallerCommonCore/Manifest/ManifestCommon.cpp#L144-L151),
+[scope filter](https://github.com/microsoft/winget-cli/blob/v1.11.510/src/AppInstallerCommonCore/Manifest/ManifestComparator.cpp#L469-L484).
+
+| Excluded or deferred tools | Reason |
+| --- | --- |
+| `fd`, `bat`, `fzf` | `Get-ChildItem` and `Get-Content` cover routine file lookup and reading. PowerShell filtering covers routine selection. |
+| `yq`, `shellcheck`, `shfmt` | YAML editing and Unix shell maintenance have limited use in this Windows baseline. |
+| Everything | Fast NTFS indexing under a standard account uses a service that requires administrator rights to install. [Everything Service](https://www.voidtools.com/support/everything/everything_service/) |
+| 7-Zip | Windows 11 24H2 extracts ordinary 7z and RAR archives in File Explorer. [Microsoft Support](https://support.microsoft.com/en-gb/windows/experience/storage-filemanagement/zip-and-unzip-files) |
+| DevToys | The current DevToys app catalog entry is a 2.0 preview. [WinGet catalog](https://github.com/microsoft/winget-pkgs/tree/master/manifests/d/DevToys-app/DevToys) |
+| `gsudo` | Elevation is outside the baseline. |
+| `zoxide`, `lazygit`, `delta` | Discuss separately in the mise layer. |
+| `curl`, `wget`, `tree`, `zip`, `unzip` | Windows supplies `curl.exe` and built-in directory and archive tools. |
+| `ca-certificates`, `bash-completion`, `zsh` | These Unix packages do not apply to the Windows baseline. |
+| `direnv` | It evaluates `.envrc` in Bash. [Upstream implementation](https://github.com/direnv/direnv#how-it-works) |
+| Native toolchain, multiplexer, `gnupg`, `pinentry` | Decide after the Windows tool inventory. |
 
 ## 11. Desktop Baseline
 
-On Windows, the desktop baseline is the Maple Mono NF CN font and the Windows Terminal fragment.
+On Windows, the desktop baseline includes PowerToys, Maple Mono NF CN, and the Windows Terminal fragment.
+
+- Hook 22 imports the [desktop manifest](../../bootstrap/manifests/desktop/winget-packages.json) when `desktopBaseline` is enabled. `Microsoft.PowerToys` has a user-scope Burn installer. The hook uses the same import flags, source checks, and failure handling as hook 20. The checker uses one export to verify the complete IDs of both enabled layers. [PowerToys catalog manifest](https://github.com/microsoft/winget-pkgs/blob/master/manifests/m/Microsoft/PowerToys/0.102.3101/Microsoft.PowerToys.installer.yaml).
 
 - Hook 22 reads the URL, digest, family, and required faces from `maple-mono-nf-cn.env`. It validates the archive digest before extracting the required TrueType files and keeps files whose bytes already match.
 - Copy the files to `%LOCALAPPDATA%\Microsoft\Windows\Fonts`. Register each full file path as a string value under `HKCU\Software\Microsoft\Windows NT\CurrentVersion\Fonts`. This persists the fonts for the current user. If the fonts are unavailable in the current session, sign out and back in. [Microsoft's font installer implementation](https://github.com/microsoft/winget-cli/blob/master/src/AppInstallerCommonCore/Fonts.cpp), [FontLab's per-user registry implementation](https://github.com/fontlaborg/fontlift-win-cli/blob/main/src/sys_utils.cpp).
@@ -375,25 +390,9 @@ default configuration and rejected unsafe ACLs on the top-level configuration
 and a local drop-in. These results apply to the tools on that runner.
 [Hosted apply job 136793367571](https://github.com/kangmingxuan/oh-my-devenv/actions/runs/44886671628/job/136793367571)
 
-Phase-3 decisions by Claude are recorded in sections 10 and 11. The checker
-queries exact package IDs. The inventory uses the built-in source and user
-scope. Font registration uses current-user file and registry targets. A blocked
-source or installer stops apply with a diagnostic.
+Sections 2, 9, 10, and 11 record the approved phase-3 baseline and its verification rules.
 
-The hosted phase-3 smoke job passed PSScriptAnalyzer and 73 Pester tests, with
-one skip. It rejected an alternate desktop destination before writing the
-fragment. [Hosted smoke job 136844172633](https://github.com/kangmingxuan/oh-my-devenv/actions/runs/44903506985/job/136844172633).
-
-The hosted phase-3 apply job used `windows-2025-vs2026` image `20261116.315.1`,
-WinGet `1.11.510`, and Windows Terminal `1.23.20211.0`. It ran the real import,
-checked all ten package IDs and the x64 runtime, and verified the registered
-fonts and the deployed fragment. It also exercised uninstall and restore.
-[Hosted apply job 136844172639](https://github.com/kangmingxuan/oh-my-devenv/actions/runs/44903506985/job/136844172639).
-
-On that client, the filtered installed-package query could not correlate the
-yq registration to its catalog ID. The unfiltered list and WinGet export found
-it. The checker now compares complete catalog IDs from the installed export.
-[Initial diagnostic job](https://github.com/kangmingxuan/oh-my-devenv/actions/runs/44902747366/job/136841925517).
+See the [phase-3 PR checks](https://github.com/kangmingxuan/oh-my-devenv/pull/66/checks) for the hosted smoke and apply evidence. First apply on a user device remains pending.
 
 Resolve each remaining item before the phase that depends on it.
 

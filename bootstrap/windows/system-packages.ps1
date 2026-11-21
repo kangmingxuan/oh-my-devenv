@@ -40,17 +40,6 @@ function Read-WinGetPackageManifest {
     $packages.PackageIdentifier
 }
 
-function Confirm-VisualCppRuntime {
-    param([Parameter(Mandatory)][string[]]$PackageIds)
-
-    $architecture = [Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture.ToString().ToLowerInvariant()
-    $runtimePath = Join-Path ([Environment]::SystemDirectory) 'vcruntime140.dll'
-    if (-not (Test-Path -LiteralPath $runtimePath -PathType Leaf)) {
-        throw "The Visual C++ 2015+ runtime ($architecture) is missing at '$runtimePath'. These WinGet packages declare it: $($PackageIds -join ', '). Ask an administrator to run: winget install --id Microsoft.VCRedist.2015+.$architecture --exact"
-    }
-    Write-Host "Visual C++ 2015+ runtime ($architecture): $runtimePath"
-}
-
 function Get-WinGetApplication {
     $winget = Get-PathApplication -Name winget.exe -Optional
     if ($null -eq $winget) {
@@ -59,7 +48,7 @@ function Get-WinGetApplication {
     $winget
 }
 
-function Install-SystemPackage {
+function Install-WinGetPackage {
     param([Parameter(Mandatory)][string]$ManifestPath)
 
     $ids = @(Read-WinGetPackageManifest -Path $ManifestPath)
@@ -77,10 +66,10 @@ function Install-SystemPackage {
     }
 }
 
-function Confirm-SystemPackage {
-    param([Parameter(Mandatory)][string]$ManifestPath)
+function Confirm-WinGetPackage {
+    param([Parameter(Mandatory)][string[]]$ManifestPath)
 
-    $ids = @(Read-WinGetPackageManifest -Path $ManifestPath)
+    $ids = @(foreach ($path in $ManifestPath) { Read-WinGetPackageManifest -Path $path })
     $winget = Get-WinGetApplication
     # WinGet 1.11 can enumerate an installed package that its exact-ID list filter misses.
     # Export enumerates installed registrations and supplies the catalog IDs as JSON.
@@ -115,5 +104,5 @@ function Confirm-SystemPackage {
     if ($missing) {
         throw "Missing WinGet packages: $($missing -join ', '). Install them from the winget source using user scope."
     }
-    Write-Host "WinGet reported all $($ids.Count) system packages."
+    Write-Host "WinGet reported all $($ids.Count) packages from the enabled layers."
 }

@@ -10,15 +10,10 @@
       },
       "Packages": [
         { "PackageIdentifier": "Git.Git", "Scope": "user" },
-        { "PackageIdentifier": "jqlang.jq", "Scope": "user" },
-        { "PackageIdentifier": "MikeFarah.yq", "Scope": "user" },
+        { "PackageIdentifier": "GitHub.cli", "Scope": "user" },
         { "PackageIdentifier": "BurntSushi.ripgrep.MSVC", "Scope": "user" },
-        { "PackageIdentifier": "junegunn.fzf", "Scope": "user" },
-        { "PackageIdentifier": "sharkdp.fd", "Scope": "user" },
-        { "PackageIdentifier": "sharkdp.bat", "Scope": "user" },
-        { "PackageIdentifier": "koalaman.shellcheck", "Scope": "user" },
-        { "PackageIdentifier": "mvdan.shfmt", "Scope": "user" },
-        { "PackageIdentifier": "GitHub.cli", "Scope": "user" }
+        { "PackageIdentifier": "jqlang.jq", "Scope": "user" },
+        { "PackageIdentifier": "JanDeDobbeleer.OhMyPosh", "Scope": "user" }
       ]
     }
   ]

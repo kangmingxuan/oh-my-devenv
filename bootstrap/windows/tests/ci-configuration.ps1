@@ -116,6 +116,17 @@ class Stub
         }
         if (program == "mise" && args.Length == 2 && args[0] == "activate" && args[1] == "pwsh")
             return 0;
+        if (program == "oh-my-posh")
+        {
+            if (args.Length != 5 || args[0] != "init" || args[1] != "pwsh" ||
+                args[2] != "--config" || !File.Exists(args[3]) || args[4] != "--print")
+                return 95;
+            string configPath = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(args[3]));
+            Console.WriteLine("$env:POSH_CONFIG = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('" + configPath + "'))");
+            Console.WriteLine("$env:POSH_SESSION_ID = 'fixture'");
+            Console.WriteLine("New-Module -Name oh-my-posh-core -ScriptBlock {} | Import-Module");
+            return 0;
+        }
         if (program != "ssh")
         {
             File.AppendAllText(Environment.GetEnvironmentVariable("OH_MY_DEVENV_TEST_INSTALLERS"), "unexpected installer");
@@ -135,7 +146,7 @@ class Stub
 }
 '@
     $null = Invoke-NativeCommand -Executable $compiler -Arguments @('/nologo', "/out:$shim", $stubSource)
-    foreach ($tool in @('ssh', 'mise', 'uv', 'winget')) {
+    foreach ($tool in @('ssh', 'mise', 'uv', 'winget', 'oh-my-posh')) {
         Copy-Item -LiteralPath $shim -Destination (Join-Path $shimDirectory "$tool.exe")
     }
     $env:OH_MY_DEVENV_TEST_INSTALLERS = Join-Path $fixture 'unexpected-installers'
@@ -263,6 +274,7 @@ try {
     $profileBody = Join-Path $destination '.config/oh-my-devenv/powershell/profile.ps1'
     $profileEnvironment = Join-Path $destination '.config/oh-my-devenv/powershell/environment.ps1'
     $profileOverlay = Join-Path $destination '.config/oh-my-devenv/powershell/profile.local.ps1'
+    $poshTheme = Join-Path $destination '.config/oh-my-devenv/powershell/robbyrussell.omp.json'
     $sshConfig = Join-Path $destination '.ssh/config'
     $sshOverlay = Join-Path $destination '.ssh/config.d/oh-my-devenv-fixture.conf'
     $terminalFragment = Join-Path $destination 'AppData/Local/Microsoft/Windows Terminal/Fragments/oh-my-devenv/desktop.json'
@@ -276,6 +288,7 @@ try {
 $env:OH_MY_DEVENV_PROFILE_FIXTURE = 'loaded'
 $env:GOBIN = '{0}'
 $env:PATH = '{1};' + $env:PATH
+function prompt {{ 'overlay prompt> ' }}
 '@ -f $overlayGoBin.Replace("'", "''"), $overlayPath.Replace("'", "''")
     Set-FixtureText -Path $config -Content ($fixtureConfig | ConvertTo-Json -Depth 4)
     Set-FixtureText -Path $miseConfig -Content $oldMise
@@ -459,6 +472,15 @@ $env:OH_MY_DEVENV_PROFILE_LOADED = '1'
             $env:GOBIN = $originalGoBin
             Set-FixtureText -Path $profileBody -Content $installedBody
         }
+        $alternateTheme = Join-Path (Split-Path -Parent $poshTheme) 'fixture.omp.json'
+        Copy-Item -LiteralPath $poshTheme -Destination $alternateTheme
+        try {
+            Set-FixtureText -Path $profileBody -Content ($installedBody.Replace('robbyrussell.omp.json', 'fixture.omp.json'))
+            Assert-FixtureCheckFailure -Pattern 'managed profile did not initialize Oh My Posh with .*robbyrussell\.omp\.json'
+        } finally {
+            Set-FixtureText -Path $profileBody -Content $installedBody
+            [IO.File]::Delete($alternateTheme)
+        }
         Set-FixtureText -Path $profilePath -Content $oldProfile
         Invoke-FixtureApply
         Assert-FixtureWinGet
@@ -470,13 +492,14 @@ $env:OH_MY_DEVENV_PROFILE_LOADED = '1'
 
     $baselineProfile = [IO.File]::ReadAllText($profilePath)
     $probe = Invoke-NativeCommand -Executable $pwsh -Arguments @(
-        '-NoLogo', '-NonInteractive', '-Command', '[Console]::WriteLine($env:OH_MY_DEVENV_PROFILE_FIXTURE); [Console]::Write($env:PATH)'
+        '-NoLogo', '-NonInteractive', '-Command',
+        '[Console]::WriteLine($env:OH_MY_DEVENV_PROFILE_FIXTURE); [Console]::WriteLine((prompt)); [Console]::Write($env:PATH)'
     )
-    $profileOutput = $probe.Stdout -split '\r?\n', 2
-    if ($profileOutput.Count -ne 2 -or $profileOutput[0] -cne 'loaded') {
+    $profileOutput = $probe.Stdout -split '\r?\n', 3
+    if ($profileOutput.Count -ne 3 -or $profileOutput[0] -cne 'loaded' -or $profileOutput[1] -cne 'overlay prompt> ') {
         throw "A new PowerShell process did not load the profile overlay.`n$($probe.Stderr)`n$($probe.Stdout)"
     }
-    if (-not ";$($profileOutput[1])".Contains(";$overlayGoBin;$overlayPath;", [StringComparison]::Ordinal)) {
+    if (-not ";$($profileOutput[2])".Contains(";$overlayGoBin;$overlayPath;", [StringComparison]::Ordinal)) {
         throw 'The new PowerShell process did not prepend the overlay GOBIN and preserve its PATH order.'
     }
 

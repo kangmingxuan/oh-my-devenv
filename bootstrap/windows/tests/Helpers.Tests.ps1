@@ -243,10 +243,10 @@ Describe 'Fresh profile probe' {
         [IO.File]::WriteAllText($body, "throw 'The fixture profile body ran.'")
         $line = Get-ManagedProfileLine -Destination $TestDrive
         [IO.File]::WriteAllText($profilePath, "$statement`n$line`n")
-        { Confirm-ManagedProfile -ProfilePath $profilePath } | Should -Throw $expected
+        { Confirm-ManagedProfile -ProfilePath $profilePath -Destination $TestDrive } | Should -Throw $expected
 
         [IO.File]::WriteAllText($profilePath, "$line`n")
-        { Confirm-ManagedProfile -ProfilePath $profilePath } | Should -Throw '*fixture profile body ran*'
+        { Confirm-ManagedProfile -ProfilePath $profilePath -Destination $TestDrive } | Should -Throw '*fixture profile body ran*'
     }
 
     It 'strips every equivalent managed entry from the merged process and machine PATH' {
