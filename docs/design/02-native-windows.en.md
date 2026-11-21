@@ -394,7 +394,7 @@ and a local drop-in. These results apply to the tools on that runner.
 
 Sections 2, 9, 10, and 11 record the approved phase-3 baseline and its verification rules.
 
-See the [phase-3 PR checks](https://github.com/kangmingxuan/oh-my-devenv/pull/66/checks) for the hosted smoke and apply evidence. First apply on a user device remains pending.
+The hosted phase-3 run on `905d27a` passed all jobs. Windows smoke passed 74 Pester tests and skipped one. Windows apply completed the user-scope WinGet imports, including PowerToys. It verified the managed prompt using a copy of the installed Oh My Posh executable. A separate plain `pwsh -File` loaded the profile and overlay and exited. The first apply and Oh My Posh app execution alias check on a user device remain pending. [Full CI run](https://github.com/kangmingxuan/oh-my-devenv/actions/runs/44912366118), [Windows smoke](https://github.com/kangmingxuan/oh-my-devenv/actions/runs/44912366118/job/136870704931), [Windows apply](https://github.com/kangmingxuan/oh-my-devenv/actions/runs/44912366118/job/136870704962).
 
 Resolve each remaining item before the phase that depends on it.
 

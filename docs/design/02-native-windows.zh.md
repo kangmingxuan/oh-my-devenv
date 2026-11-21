@@ -389,7 +389,7 @@ Windows OpenSSH 9.5p2 读取了受管的默认配置，并拒绝了顶层配置�
 
 第 2、9、10 和 11 节记录了已批准的阶段 3 基线及其验证规则。
 
-托管 smoke 和 apply 证据见[阶段 3 PR 检查](https://github.com/kangmingxuan/oh-my-devenv/pull/66/checks)。用户设备上的首次 apply 仍待进行。
+`905d27a` 的阶段 3 托管运行通过了所有作业。Windows smoke 通过 74 项 Pester 测试，跳过 1 项。Windows apply 完成了用户范围的 WinGet 导入，包括 PowerToys。它使用已安装的 Oh My Posh 可执行文件副本验证了受管提示符。单独运行的普通 `pwsh -File` 加载了 profile 和 overlay，随后正常退出。用户设备上的首次 apply 和 Oh My Posh 应用执行别名检查仍待进行。[完整 CI 运行](https://github.com/kangmingxuan/oh-my-devenv/actions/runs/44912366118)、[Windows smoke](https://github.com/kangmingxuan/oh-my-devenv/actions/runs/44912366118/job/136870704931)、[Windows apply](https://github.com/kangmingxuan/oh-my-devenv/actions/runs/44912366118/job/136870704962)。
 
 在依赖某一项的阶段开始前解决其余事项。
 
