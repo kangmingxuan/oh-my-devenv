@@ -1,6 +1,6 @@
 # 技术设计：原生 Windows 平台
 
-状态：提议中，尚未开始实现。
+状态：已接受。阶段 2（仅配置）已实现，阶段 3–5 尚未开始。
 
 ## 1. 概要
 
@@ -154,6 +154,9 @@ hook 30 使用 winget，让 mise 与其他系统工具来自同一个包管理�
 
 `check.ps1` 还通过一个新启动、会加载 profile 的 PowerShell 检查命令解析。子进程会继承父进程的环境，所以检查从不含 hook 附加项的机器与用户环境构建子进程环境。在加载 profile 前，检查从合并后的子进程 `Path` 中移除受管目录的每一次出现，包括来自机器 `Path` 的条目。检查不修改持久化值。否则，hook 环境或已有条目可能掩盖 profile 没有把某个工具加入 `PATH` 的问题。一个负向测试从 fixture profile 中去掉一个必需路径，并期望检查失败。第二个负向测试通过 fixture 机器 `Path` 提供同一目录。
 
+在阶段 2，新进程检查受管 profile 主体是否运行完毕，以及它是否加入了受管目录。
+smoke fixture 要求两种情况报错：profile 在受管行之前返回，或者报告运行完毕却没有加入必需路径。
+
 ### 首次运行备份
 
 hook 10 在文件内容上沿用 Unix 的约定：首次 apply 覆盖目标之前，把每个已存在的受管文件和符号链接目标复制到带时间戳的备份目录；任何错误都要明确失败。Unix hook 还用 `cp -p` 保留文件模式和时间；在 Windows 上保留最后写入时间，但不声称保留 ACL。
@@ -169,6 +172,7 @@ hook 10 在文件内容上沿用 Unix 的约定：首次 apply 覆盖目标之�
 - 逐个回读副本：把长度和内容哈希与源文件比较。哈希比较能发现复制期间的大多数变化，但备份不是原子快照。
 - 列表、映射、复制或回读出错时，报告源路径和目标路径，并在 chezmoi 写入目标之前以非零状态退出。保留部分完成的备份以便检查。
 - 输出完成的备份目录，或报告无需复制。卸载保留这些备份。
+- 移除受管配置后，卸载重置 apply 配置所用的 `scriptState` 和 `entryState`。下次 apply 会重新运行 hook 10。卸载预览会列出这两个状态桶。
 - 备份中可能含有密钥。与 Unix hook 一样，备份不检查也不修改权限。
 
 测试：
@@ -190,7 +194,7 @@ hook 10 在文件内容上沿用 Unix 的约定：首次 apply 覆盖目标之�
 | --- | --- |
 | `dot_config/mise/config.toml.tmpl` | 目标相同，版本相同。mise 在 Windows 上从 `%USERPROFILE%\.config\mise` 读取全局配置。某个工具在 Windows 上不可用时，在模板中用 `.chezmoi.os` 条件把它排除。 |
 | `ecosystem/go-tools.txt`、`ecosystem/uv-tools.txt` | Windows 安装器读取同一组文件，解析规则相同。 |
-| `dot_gitconfig.tmpl` | 同一个模板。出现具体需求时，在 Windows 分支中加入 Windows 专属设置。 |
+| `dot_gitconfig.tmpl` | 同一个模板。出现具体需求时，在 Windows 分支中加入 Windows 专属设置。`check.ps1` 要求 Git 的全局配置路径包含受管的 `.gitconfig`。 |
 | `private_dot_ssh/private_config.tmpl` | 同一个模板。Windows 分支去掉 `ControlMaster`、`ControlPath` 和 `ControlPersist`。Windows OpenSSH 会解析它们，但它的连接复用函数是空实现，而且 Unix 的 `ControlPath` 含有 `:`，这在 Windows 文件名中无效。保留 `Include`、`IdentitiesOnly`、`TCPKeepAlive`、`ServerAliveInterval` 和 `SendEnv`。Windows OpenSSH 会检查配置文件的所有者和 ACL，不安全时失败。chezmoi 不会把 `private_` 转换成 Windows ACL。`check.ps1` 回读所用 `ssh` 可执行文件的路径和版本，并检查受管文件位于该可执行文件的默认用户配置路径。随后不带 `-F`、用一个测试主机名运行 `ssh -v -G`，检查退出码，并检查调试输出中有针对受管文件的 `Reading configuration data` 行。输出中的设置值不能证明其来源，因为默认值和其他配置文件也可能给出同样的值。macOS 上的 OpenSSH 10.5p1 会输出这一调试行；阶段 2 的原生 fixture 在 Windows 上确认这一点。检查过的源码中，用 `-F` 指定的顶层文件跳过所有者和 ACL 检查，默认配置文件缺失时也被忽略。本地 drop-in 是可选的；检查覆盖实际存在的 drop-in。不要自动改写 ACL。这些结论来自公开的 Win32-OpenSSH 9.5p1 和 10.4 源码。实际的 Windows `ssh` 可执行文件及其版本可能不同，例如来自 Git for Windows 的版本，所以阶段 2 在隔离的 home 中用原生 fixture 确认它们：不安全的顶层 ACL 和不安全的 drop-in ACL 都必须导致失败。 |
 | `desktop/maple-mono-nf-cn.env` | 相同的字体信息，包括钉死的 URL 和 SHA-256 摘要。显式解析带引号的值。 |
 | 系统包 | 本质上按平台区分。Windows 有自己的 winget manifest。 |
@@ -217,11 +221,12 @@ chezmoi 可以通过 `.chezmoiexternal` 用配置数据计算目标路径。Clau
 
 主体在适用于 Windows 的范围内对齐 Unix env 模板：
 
-- 用第 7 节的默认值设置 `GOPATH` 和 `GOBIN`。
+- `GOPATH` 默认为 `~/go`。`GOBIN` 默认为 `GOPATH` 中第一个分号分隔条目下的 `bin` 目录。
 - 把 mise shims 目录、`~/.local/bin` 和 `$GOBIN` 放到 `PATH` 最前面。
 - 把 `BAT_THEME` 设为与 Unix env 模板相同的值。
 - 仅在 `mise` 位于 `PATH` 上时，用 `(&mise activate pwsh) | Out-String | Invoke-Expression` 激活 mise。Unix rc 文件也用同样方式保护激活。
 - 本地 overlay `~/.config/oh-my-devenv/powershell/profile.local.ps1` 存在时加载它。
+- 运行 overlay 后，把缺失的受管目录放到 `PATH` 最前面，包括实际生效的 `GOBIN`。保留 overlay 中已有的 `PATH` 条目及其顺序。
 
 profile 只影响 PowerShell 会话。从 Windows shell 启动的应用（例如从开始菜单启动的 IDE）不会加载它。持久化的用户 `Path` 条目覆盖这些应用（第 7 节）。
 
@@ -339,12 +344,23 @@ hook 00 的 XDG 根目录检查仍只用于 Unix。Windows 不导出 `XDG_*` 变
 
 ## 17. 待决问题
 
+首轮托管 Windows smoke job 使用 PowerShell 7.6.10。实际生效的执行策略是
+`LocalMachine` 范围的 `RemoteSigned`。在该 runner 上，chezmoi 用正斜杠
+呈现 `.chezmoi.homeDir` 和 `.chezmoi.destDir`，用反斜杠呈现 `joinPath` 的结果。
+该轮的两个 Windows job 都未进入 apply。
+[托管运行 44885242196](https://github.com/kangmingxuan/oh-my-devenv/actions/runs/44885242196)
+
+第二轮托管 Windows apply job 确认了 Git include。原生 Git 读回的配置来源为
+`C:\Users\runneradmin\.config\oh-my-devenv\git\config`，fixture 值为 `loaded`。
+Windows OpenSSH 9.5p2 读取了受管的默认配置，并拒绝了顶层配置和本地 drop-in
+上的不安全 ACL。这些结果适用于该 runner 上的工具。
+[托管 apply job 136793367571](https://github.com/kangmingxuan/oh-my-devenv/actions/runs/44886671628/job/136793367571)
+
 在依赖某一项的阶段开始前解决该项。
 
 | 事项 | 阶段 |
 | --- | --- |
 | 实际生效的脚本执行策略是否允许 chezmoi 运行 `.ps1` hook，以及不允许时的停止条件。不绕过设备策略。PowerShell 7 与 Windows PowerShell 5.1 分开存储执行策略设置。组策略可以让它使用 Windows PowerShell 的策略设置，所以要在 `pwsh` 下检查实际生效的策略。 | 2 |
-| chezmoi 在 Windows 上如何呈现 `.chezmoi.homeDir` 和拼接后的路径，`dot_gitconfig.tmpl` 中的 Git include 路径能否正确解析 | 2 |
 | `check.ps1` 如何检查 winget manifest：通过 winget 按包 ID 检查，还是按命令是否存在检查 | 3 |
 | 每个纳入工具的 winget 包 ID，以及能否不提权安装 | 3 |
 | Windows 上按用户安装字体的方法 | 3 |

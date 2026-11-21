@@ -47,9 +47,43 @@ chezmoi 是唯一入口：它先渲染你的 dotfiles，再运行有序的引导
 
 ## 快速开始
 
+### 原生 Windows 快速开始
+
+在可以运行 winget 的终端中安装前置工具。
+
+```powershell
+winget install --id Microsoft.PowerShell --exact --source winget
+winget install --id Git.Git --exact --source winget
+winget install --id twpayne.chezmoi --exact --source winget
+```
+
+打开新的 PowerShell（`pwsh`）会话。确认版本达到 7.6，且 `PATH` 上有
+Git、OpenSSH 和 chezmoi。如果找不到 `ssh`，启用 Windows 的 OpenSSH 客户端
+可选功能，或使用已安装的 OpenSSH 客户端。
+
+```powershell
+$PSVersionTable.PSVersion
+Get-Command git, ssh, chezmoi -CommandType Application
+Get-ExecutionPolicy
+```
+
+确认前置条件后，应用配置。
+
+```powershell
+chezmoi init --apply https://github.com/kangmingxuan/oh-my-devenv.git
+```
+
+如果执行策略阻止 hook 运行，停止并联系设备管理员。apply 成功后，打开新的
+`pwsh` 会话加载 profile。当前 Windows 阶段只部署 PowerShell、Git、OpenSSH
+和 mise 配置。桌面提示会保存选择，供以后部署 Windows Terminal 设置和
+Maple Mono NF CN 时使用。备份、overlay、校验和卸载见
+[Windows 上手说明](docs/01-onboarding.md#native-windows)。
+
+### macOS 和 Linux
+
 这是全新机器的默认首次运行路径。你应当无需打开其他文档即可完成。
 
-### 1. 安装 `git`、`curl` 和 `chezmoi`
+#### 1. 安装 `git`、`curl` 和 `chezmoi`
 
 运行与你平台对应的代码块。在最后一行打印出 `git`、`curl`、`chezmoi` 三者的路径之前，请勿继续。一旦打印成功，`chezmoi` 就已在当前 shell 会话的 `PATH` 中，你可以直接进行下面的步骤 2，无需打开新终端。
 
@@ -88,7 +122,7 @@ command -v git curl chezmoi
 应用前先完成 Arch 的完整系统更新。引导脚本使用现有数据库执行
 `pacman -S --needed`，不会单独刷新数据库或自行升级整个系统。
 
-### 2. 引导安装基线
+#### 2. 引导安装基线
 
 使用下面的仓库 URL。
 

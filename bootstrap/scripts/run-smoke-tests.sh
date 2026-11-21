@@ -231,6 +231,7 @@ EOF
 # Synthetic chezmoi platform data for boundary renders. --override-data merges
 # into the host data, so every osRelease field the templates read is explicit.
 darwin_chezmoi_data='{"os":"darwin","osRelease":null,"kernel":null}'
+windows_chezmoi_data='{"os":"windows","osRelease":null,"kernel":null}'
 supported_linux_chezmoi_data='{"os":"linux","osRelease":{"id":"ubuntu","versionID":"99.04","idLike":""},"kernel":{"osrelease":"linux"}}'
 wsl_chezmoi_data='{"os":"linux","osRelease":{"id":"ubuntu","versionID":"99.04","idLike":""},"kernel":{"osrelease":"microsoft-standard-WSL2"}}'
 unsupported_chezmoi_data='{"os":"linux","osRelease":{"id":"unsupported-smoke-distro","idLike":"","versionID":""},"kernel":{"osrelease":"linux"}}'
@@ -765,15 +766,6 @@ for mise_case in default xdg-data mise-data shims-dir; do
   done
 done
 
-render_template dot_gitconfig.tmpl "$tmp_dir/dot_gitconfig"
-assert_file_contains "$tmp_dir/dot_gitconfig" "$gitconfig_include_literal"
-# The managed gitconfig must stay host-neutral: no hard-coded URL rewrites, so
-# the baseline carries no organization-specific Git routing.
-assert_file_not_contains "$tmp_dir/dot_gitconfig" 'insteadOf'
-
-render_template private_dot_ssh/private_config.tmpl "$tmp_dir/private_dot_ssh_config"
-assert_file_contains "$tmp_dir/private_dot_ssh_config" "$ssh_include_literal"
-
 log_step "📜" "Rendering and checking chezmoi hooks..."
 # Render every hook for synthetic platforms so each package-manager and desktop
 # template arm is syntax-checked and linted on any host.
@@ -785,8 +777,56 @@ hook_platforms=(
   "wsl|$wsl_chezmoi_data"
   "unsupported|$unsupported_chezmoi_data"
 )
-for hook_platform in "${hook_platforms[@]}"; do
+for hook_platform in "${hook_platforms[@]}" "windows|$windows_chezmoi_data"; do
   hook_platform_name="${hook_platform%%|*}"
+  platform_override="{\"desktopBaseline\":true,\"chezmoi\":${hook_platform#*|}}"
+  for shared_template in dot_gitconfig.tmpl private_dot_ssh/private_config.tmpl dot_config/mise/config.toml.tmpl; do
+    shared_render="$tmp_dir/$hook_platform_name-$(basename "$shared_template" .tmpl)"
+    chezmoi --source="$repo_root" --destination="$HOME" \
+      --override-data-file "$tmp_data_file" --override-data "$platform_override" \
+      execute-template --file "$repo_root/$shared_template" >"$shared_render"
+  done
+  assert_file_contains "$tmp_dir/$hook_platform_name-dot_gitconfig" "$gitconfig_include_literal"
+  assert_file_not_contains "$tmp_dir/$hook_platform_name-dot_gitconfig" 'insteadOf'
+  assert_file_contains "$tmp_dir/$hook_platform_name-private_config" "$ssh_include_literal"
+
+  managed_platform="$(chezmoi --source="$repo_root" --destination="$HOME" \
+    --override-data-file "$tmp_data_file" --override-data "$platform_override" managed --format=)"
+  if [[ "$hook_platform_name" == windows ]]; then
+    windows_dispatch="$(chezmoi --source="$repo_root" --override-data "$platform_override" \
+      execute-template '{{ includeTemplate "system-package-manager" . }} {{ includeTemplate "desktop-platform-supported" . }}')"
+    [[ "$windows_dispatch" == 'winget true' ]] || fail_test "unexpected Windows dispatch: $windows_dispatch"
+    assert_file_contains "$tmp_dir/windows-private_config" 'IdentitiesOnly yes'
+    for ssh_option in ControlMaster ControlPath ControlPersist; do
+      assert_file_not_contains "$tmp_dir/windows-private_config" "$ssh_option"
+    done
+    cmp -s "$tmp_dir/macos-config.toml" "$tmp_dir/windows-config.toml" \
+      || fail_test 'Windows and macOS mise configs differ'
+    grep -Fxq '.config/oh-my-devenv/powershell/profile.ps1' <<<"$managed_platform" \
+      || fail_test 'Windows does not manage the PowerShell profile body'
+    for unix_startup in .bash_profile .bashrc .profile .zprofile .zshenv .zshrc; do
+      if grep -Fxq "$unix_startup" <<<"$managed_platform"; then
+        fail_test "Windows manages Unix startup file $unix_startup"
+      fi
+    done
+    if grep -Eq '^([.]chezmoiscripts/.*[.]sh$|[.](bash|zsh|local)(/|$)|[.]config/(fontconfig|ghostty)(/|$))' <<<"$managed_platform"; then
+      fail_test 'Windows manages a Unix-only target'
+    fi
+    # Native syntax and lint checks of the rendered hooks run in Windows CI.
+    for hook_template in "$repo_root"/.chezmoiscripts/*.ps1.tmpl; do
+      rendered_hook="$tmp_dir/hook-windows-$(basename "$hook_template" .tmpl)"
+      chezmoi --source="$repo_root" --destination="$HOME" --override-data "$platform_override" \
+        execute-template --file "$hook_template" >"$rendered_hook"
+      [[ -s "$rendered_hook" ]] || fail_test "empty Windows hook: $hook_template"
+      hook_target="$(basename "$hook_template" .tmpl)"
+      grep -Fxq ".chezmoiscripts/${hook_target##*_}" <<<"$managed_platform" \
+        || fail_test "Windows does not manage $hook_template"
+    done
+    continue
+  fi
+  if grep -Eq '^([.]chezmoiscripts/.*[.]ps1|[.]config/oh-my-devenv(/|$)|AppData/)' <<<"$managed_platform"; then
+    fail_test "$hook_platform_name manages a Windows-only target"
+  fi
   for hook_template in "$repo_root"/.chezmoiscripts/*.sh.tmpl; do
     rendered_hook="$tmp_dir/hook-$hook_platform_name-$(basename "$hook_template" .tmpl)"
     chezmoi --source="$repo_root" \
@@ -2518,6 +2558,15 @@ chezmoi execute-template --init \
 assert_toml_section_contains "$tmp_chezmoi_toml" "data" 'name = "Smoke Tests"'
 assert_toml_section_contains "$tmp_chezmoi_toml" "data" 'email = "smoke@example.com"'
 assert_toml_section_contains "$tmp_chezmoi_toml" "data" 'desktopBaseline = true'
+
+windows_init_override="{\"name\":\"Smoke Tests\",\"email\":\"smoke@example.com\",\"chezmoi\":$windows_chezmoi_data}"
+chezmoi --source="$repo_root" --override-data "$windows_init_override" \
+  execute-template --init --file "$repo_root/.chezmoi.toml.tmpl" >"$tmp_dir/windows-init.toml"
+assert_toml_section_contains "$tmp_dir/windows-init.toml" "data" 'desktopBaseline = true'
+chezmoi --source="$repo_root" --override-data "$windows_init_override" \
+  execute-template --init --file "$repo_root/.chezmoi.toml.tmpl" \
+  --promptBool 'Install Windows desktop baseline (Windows Terminal settings + Maple Mono NF CN)=false' >"$tmp_dir/windows-init.toml"
+assert_toml_section_contains "$tmp_dir/windows-init.toml" "data" 'desktopBaseline = false'
 
 log_step "📦" "Exercising the pacman installer with a stubbed sudo..."
 pacman_stub_bin="$tmp_dir/pacman-stub-bin"

@@ -1,4 +1,4 @@
-{{- if eq .chezmoi.os "darwin" -}}
+{{- if or (eq .chezmoi.os "darwin") (eq .chezmoi.os "windows") -}}
 true
 {{- else if eq .chezmoi.os "linux" -}}
 {{- $id := get .chezmoi.osRelease "id" | default "" -}}

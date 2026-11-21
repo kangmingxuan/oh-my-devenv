@@ -7,12 +7,14 @@
     (ne (env "DISPLAY") "")
 -}}
 {{- $desktopBaselineDefault := or
-    (eq .chezmoi.os "darwin")
+    (or (eq .chezmoi.os "darwin") (eq .chezmoi.os "windows"))
     (and $isSupportedDesktop $hasGraphicalSession)
 -}}
 {{- $desktopBaselinePrompt := "Install desktop baseline (Ghostty + Maple Mono NF CN)" -}}
 {{- if eq .chezmoi.os "darwin" -}}
 {{- $desktopBaselinePrompt = "Install macOS desktop baseline (Ghostty + Maple Mono NF CN + OrbStack)" -}}
+{{- else if eq .chezmoi.os "windows" -}}
+{{- $desktopBaselinePrompt = "Install Windows desktop baseline (Windows Terminal settings + Maple Mono NF CN)" -}}
 {{- end -}}
 {{- $desktopBaseline := promptBoolOnce . "desktopBaseline" $desktopBaselinePrompt $desktopBaselineDefault -}}
 

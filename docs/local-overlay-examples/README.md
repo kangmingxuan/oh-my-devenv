@@ -12,6 +12,7 @@ the baseline leaves to each user's home directory or user-owned tool config:
 | `secrets.sh.example` | `$XDG_CONFIG_HOME/oh-my-devenv/secrets.sh` | interactive Bash and Zsh | interactive secrets |
 | `zshrc.zsh.example` | `$XDG_CONFIG_HOME/oh-my-devenv/zshrc.zsh` | Zsh | interactive shell |
 | `bashrc.bash.example` | `$XDG_CONFIG_HOME/oh-my-devenv/bashrc.bash` | Bash | interactive shell |
+| `profile.local.ps1.example` | `$HOME/.config/oh-my-devenv/powershell/profile.local.ps1` | PowerShell 7 | interactive shell |
 | `git-config.example` | `$XDG_CONFIG_HOME/oh-my-devenv/git/config` | Git include | tool-native configuration |
 | `git-pre-push.example` | `$XDG_CONFIG_HOME/oh-my-devenv/git/hooks/*` | Git configured hooks (2.54+) | tool-native guardrails |
 | `ssh-config.d.corp.conf.example` | `$HOME/.ssh/config.d/*.conf` | OpenSSH Include | tool-native configuration |
@@ -41,6 +42,10 @@ The config root is fixed at `$HOME/.config`. The managed shells export
 values, including empty and relative values. Shells warn once and use the fixed
 root. Local env files must not change it. `XDG_DATA_HOME` still supports custom
 absolute roots exported before the shell or chezmoi starts.
+
+On native Windows, PowerShell loads its overlay from the fixed `~/.config`
+root. Git, Git hooks, SSH, npm, and mise use the shared overlay locations in
+that root or directly under the home directory, as shown in the table.
 
 1. Pick the example file that matches the extension point you want to use.
 2. Copy it to the real overlay location shown in the table above, **dropping the

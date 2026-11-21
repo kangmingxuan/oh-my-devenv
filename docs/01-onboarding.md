@@ -4,7 +4,48 @@ This page goes deeper on the first install after you finish the [Quick Start](..
 
 ---
 
-## What you'll have in 5 minutes
+## Native Windows
+
+Follow the [Windows quick start](../README.md#native-windows-quick-start). A
+successful apply configures Git, OpenSSH, and mise under your home directory
+and deploys the PowerShell profile body. It prints `All checks passed.` after
+checking the managed files and confirming that Git and OpenSSH use the managed
+user configuration. PowerShell must be 7.6 or later. Check the effective execution
+policy with `Get-ExecutionPolicy` inside `pwsh`. Stop if policy blocks the hooks.
+
+On the first apply, review any backup under
+`%LOCALAPPDATA%\oh-my-devenv\chezmoi-first-run-backup`. The path follows the
+effective LocalApplicationData known folder. A run directory holds the previous
+versions under `drives\<drive letter>\...`. Keep the backups private. If
+OpenSSH rejects an existing file or drop-in due to its permissions, review the
+file's owner and ACL. The checker leaves ACLs under your control.
+
+Every apply checks for the managed line in `$PROFILE.CurrentUserAllHosts` and
+adds it if needed. This uses the Documents location that PowerShell resolves.
+Apply takes a separate pre-edit copy when it adds the line to an existing
+profile. Start a new PowerShell session to load the profile. Put machine-local
+settings in the [PowerShell overlay](local-overlay-examples/profile.local.ps1.example)
+at `~/.config/oh-my-devenv/powershell/profile.local.ps1`. If the overlay sets
+`GOBIN`, the profile prepends that directory to `PATH` when it is missing.
+
+```powershell
+$source = chezmoi source-path
+& (Join-Path $source 'bootstrap/windows/check.ps1')
+& (Join-Path $source 'bootstrap/windows/uninstall.ps1')  # Preview
+& (Join-Path $source 'bootstrap/windows/uninstall.ps1') -Apply
+```
+
+Close editors and wait for running Git commands to finish before uninstall
+because the pre-delete backup holds the content seen when it ran.
+Uninstall backs up the files it will remove and the profile it will edit.
+Review the verified backup under `%LOCALAPPDATA%\oh-my-devenv\chezmoi-uninstall-backup`.
+If backup fails, uninstall stops before it changes the profile or removes
+files. After removal, uninstall resets chezmoi's script and entry state so that
+the next `chezmoi apply` backs up any files that already exist at managed targets.
+If apply used a custom configuration file, pass the same file to uninstall with
+`-Config`.
+
+## What you'll have in 5 minutes on macOS and Linux
 
 After a successful first `chezmoi apply`, you should have:
 

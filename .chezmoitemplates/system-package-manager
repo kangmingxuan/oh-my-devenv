@@ -1,5 +1,7 @@
 {{- if eq .chezmoi.os "darwin" -}}
 brew
+{{- else if eq .chezmoi.os "windows" -}}
+winget
 {{- else if eq .chezmoi.os "linux" -}}
 {{- $id := get .chezmoi.osRelease "id" | default "" -}}
 {{- $like := splitList " " (get .chezmoi.osRelease "idLike" | default "") -}}

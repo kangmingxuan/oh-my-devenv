@@ -1,0 +1,22 @@
+Set-StrictMode -Version Latest
+$ErrorActionPreference = 'Stop'
+
+. {{ includeTemplate "powershell-literal" (joinPath .chezmoi.sourceDir "bootstrap/windows/common.ps1") }}
+. {{ includeTemplate "powershell-literal" (joinPath .chezmoi.sourceDir "bootstrap/windows/backup.ps1") }}
+
+Update-HookPath
+$git = Get-PathApplication -Name git
+$result = Invoke-NativeCommand -Executable $git.Source -Arguments @('--version')
+Write-Host $result.Stdout.Trim()
+
+$destination = {{ includeTemplate "powershell-literal" .chezmoi.destDir }}
+$homeDirectory = {{ includeTemplate "powershell-literal" .chezmoi.homeDir }}
+$paths = @{
+    Executable = {{ includeTemplate "powershell-literal" .chezmoi.executable }}
+    Config = {{ includeTemplate "powershell-literal" .chezmoi.configFile }}
+    Source = {{ includeTemplate "powershell-literal" .chezmoi.sourceDir }}
+    Destination = $destination
+}
+$backupRoot = Get-HookBackupRoot -Destination $destination -HomeDirectory $homeDirectory
+$managedFiles = @(Get-ManagedFile @paths)
+Backup-ExistingFile -Paths $managedFiles -BackupRoot $backupRoot

@@ -376,8 +376,16 @@ the pull request cannot merge.
     `apply-arch` uses an `archlinux:base` container, and `apply-macos` uses
     `macos-latest`. These three enable the desktop baseline. The macOS job
     installs the OrbStack cask without launching OrbStack.
+- `smoke-tests-windows` lints the PowerShell helpers, profile, and rendered
+  hooks, runs Pester, and applies the configuration to a temporary destination
+  with fixture profile and backup paths.
+- `apply-windows` applies, reapplies, uninstalls, and restores the configuration
+  under the hosted runner user's home. It uses native OpenSSH and checks rejection
+  of unsafe ACLs on a managed config and a local drop-in. Both Windows jobs log
+  the effective PowerShell execution policy, rendered home paths, and the Git
+  include origin.
 
-`ci-apply.sh` runs the same round trip on every platform:
+`ci-apply.sh` runs the following round trip on macOS and Linux.
 
 1. Seed pre-existing user files and render the chezmoi config at its default
    location.

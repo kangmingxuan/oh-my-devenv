@@ -28,7 +28,7 @@ The repository is a single-maintainer, best-effort, opinionated baseline publish
 - [`design/README.md`](design/README.md): index of the long-form rationale and architectural decisions.
 - [`design/00-cross-platform-bootstrap.en.md`](design/00-cross-platform-bootstrap.en.md) ([中文](design/00-cross-platform-bootstrap.zh.md)): the layered bootstrap model (system / runtime / ecosystem) and why chezmoi.
 - [`design/01-release-and-versioning.en.md`](design/01-release-and-versioning.en.md): release, changelog, and tag policy.
-- [`design/02-native-windows.en.md`](design/02-native-windows.en.md) ([中文](design/02-native-windows.zh.md)): proposed design for native Windows as a fourth platform.
+- [`design/02-native-windows.en.md`](design/02-native-windows.en.md) ([中文](design/02-native-windows.zh.md)): design for native Windows as a fourth platform (accepted; phase 2 implemented).
 
 ### Maintain and contribute
 

@@ -7,6 +7,7 @@ CONTRIBUTING.md
 AGENTS.md
 LICENSE
 docs/**
+.gitattributes
 .gitignore
 .pre-commit-config.yaml
 .github
@@ -25,3 +26,32 @@ docs/**
 # Source-only assets. Hooks read bootstrap directly.
 bootstrap
 bootstrap/**
+
+{{ if eq .chezmoi.os "windows" -}}
+.chezmoiscripts/*.sh
+.bash
+.bash/**
+.bash_profile
+.bashrc
+.profile
+.zsh
+.zsh/**
+.zshenv
+.zprofile
+.zshrc
+.local
+.local/share
+.local/share/oh-my-devenv
+.local/share/oh-my-devenv/xdg.sh
+.config/fontconfig
+.config/fontconfig/**
+.config/ghostty
+.config/ghostty/**
+{{ else -}}
+.chezmoiscripts/*.ps1
+.config/oh-my-devenv
+.config/oh-my-devenv/powershell
+.config/oh-my-devenv/powershell/**
+AppData/Local/Microsoft/Windows Terminal/Fragments/oh-my-devenv
+AppData/Local/Microsoft/Windows Terminal/Fragments/oh-my-devenv/**
+{{ end -}}

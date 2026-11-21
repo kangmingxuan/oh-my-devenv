@@ -1,0 +1,12 @@
+Set-StrictMode -Version Latest
+$ErrorActionPreference = 'Stop'
+
+. {{ includeTemplate "powershell-literal" (joinPath .chezmoi.sourceDir "bootstrap/windows/common.ps1") }}
+. {{ includeTemplate "powershell-literal" (joinPath .chezmoi.sourceDir "bootstrap/windows/backup.ps1") }}
+. {{ includeTemplate "powershell-literal" (joinPath .chezmoi.sourceDir "bootstrap/windows/profile.ps1") }}
+
+$destination = {{ includeTemplate "powershell-literal" .chezmoi.destDir }}
+$homeDirectory = {{ includeTemplate "powershell-literal" .chezmoi.homeDir }}
+$profilePath = Get-HookProfilePath -Destination $destination -HomeDirectory $homeDirectory
+$backupRoot = Get-HookBackupRoot -Destination $destination -HomeDirectory $homeDirectory
+Add-ManagedProfileLine -ProfilePath $profilePath -Destination $destination -BackupRoot $backupRoot
