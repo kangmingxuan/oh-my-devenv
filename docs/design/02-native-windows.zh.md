@@ -101,7 +101,7 @@ hook 和部署文件都通过 `.chezmoiignore` 做门控：
 
 | 编号 | Unix hook | Windows hook | 阶段 |
 | --- | --- | --- | --- |
-| 00 | Banner 与 XDG 根目录检查 | `run_before_`：banner；解释器不是 PowerShell 7 时失败 | 2 |
+| 00 | Banner 与 XDG 根目录检查 | `run_before_`：banner；解释器不是 PowerShell 7.6 或更高版本时失败 | 2 |
 | 10 | 前置条件与首次运行备份 | `run_once_before_`：检查 `git`，首次运行备份 | 2 |
 | 15 | — | `run_after_`，每次 apply：确保 profile 中有 dot-source 行（第 9 节，阶段 2），并确保持久化用户 `Path` 中有受管条目（第 7 节，阶段 4） | 2 |
 | 20 | 系统包 | 检查 `winget`，然后从 `winget-packages.json` 执行 `winget import` | 3 |
@@ -119,10 +119,11 @@ hook 30 使用 winget，让 mise 与其他系统工具来自同一个包管理�
 
 ## 7. PowerShell 规则
 
-- 在第一次 `chezmoi init --apply` 之前，要求 PowerShell 7 与 `git`、`chezmoi` 一起作为前置条件。快速开始用 winget 安装它。
-- Windows hook 和辅助脚本只面向 PowerShell 7 编写。
+- 在第一次 `chezmoi init --apply` 之前，要求 PowerShell 7.6 或更高版本与 `git`、`chezmoi` 一起作为前置条件。7.6 是当前的 LTS 分支。PowerShell 支持生命周期表给出的支持结束日期是 2028-11-14，7.4 和 7.5 是 2026-11-10。Microsoft Lifecycle 目录显示的日期各晚一天；本设计采用较早的日期。本设计用到的所有 PowerShell 功能在 7.6 中都有。
+- 快速开始用 `winget install --id Microsoft.PowerShell --exact --source winget` 安装 PowerShell。在使用不受限 winget 源的全新客户端上，省略 `--version` 会选择最高的适用版本，它可能是非 LTS 版本。已有安装和源策略可能改变结果或导致安装失败。检查过的 winget 目录中没有单独的 LTS 包 ID。
+- Windows hook 和辅助脚本只面向 PowerShell 7.6 或更高版本编写。
 - 理由：chezmoi 用 `pwsh` 运行 `.ps1` 脚本，`pwsh` 不可用时回退到 Windows PowerShell。在首次 apply 中安装 `pwsh` 的 hook 帮不了同一次 apply 中后续的 hook，因为正在运行的 chezmoi 进程保留原来的 `PATH`。设一个前置条件，比让每个 hook 都兼容 5.1 更简单。
-- PowerShell 7 的确切最低版本在阶段 2 确定，并写进 `AGENTS.md`，与 Bash 3.2 规则并列。
+- 正在运行的 PowerShell 版本低于 7.6 时，hook 00 失败。这只是兼容性下限；hook 00 不检查支持状态。与其他前置条件一样，由用户让 PowerShell 保持在受支持的版本并装上最新的服务更新。把最低版本写进 `AGENTS.md`，与 Bash 3.2 规则并列。
 - 每个脚本以 `Set-StrictMode -Version Latest` 和 `$ErrorActionPreference = 'Stop'` 开头。
 - 检查每个原生命令的退出码。默认情况下，原生命令失败时 `$ErrorActionPreference` 不会中止执行。
 
@@ -153,6 +154,28 @@ hook 30 使用 winget，让 mise 与其他系统工具来自同一个包管理�
 
 `check.ps1` 还通过一个新启动、会加载 profile 的 PowerShell 检查命令解析。子进程会继承父进程的环境，所以检查从不含 hook 附加项的机器与用户环境构建子进程环境。在加载 profile 前，检查从合并后的子进程 `Path` 中移除受管目录的每一次出现，包括来自机器 `Path` 的条目。检查不修改持久化值。否则，hook 环境或已有条目可能掩盖 profile 没有把某个工具加入 `PATH` 的问题。一个负向测试从 fixture profile 中去掉一个必需路径，并期望检查失败。第二个负向测试通过 fixture 机器 `Path` 提供同一目录。
 
+### 首次运行备份
+
+hook 10 在文件内容上沿用 Unix 的约定：首次 apply 覆盖目标之前，把每个已存在的受管文件和符号链接目标复制到带时间戳的备份目录；任何错误都要明确失败。Unix hook 还用 `cp -p` 保留文件模式和时间；在 Windows 上保留最后写入时间，但不声称保留 ACL。
+
+- 与 Unix hook 一样，用正在运行的 apply 所用的同一个 chezmoi 可执行文件、配置、源目录和目标目录列出受管文件和符号链接。列表命令使用独立的临时持久化状态，传入 `--format=`，并在 `finally` 中删除临时状态。分别捕获 stdout 和 stderr，使错误信息永远不会被当作备份路径。读取列表前先检查退出码。
+- 在本设计检查过的 chezmoi 版本中，普通本地盘路径使用正斜杠和盘符，例如 `C:/Users/Example/.ssh/config`。chezmoi 也能识别 UNC 路径；本设计遇到 UNC 和设备路径时给出明确错误。
+- 备份根目录：实际生效的 LocalApplicationData 文件夹下的 `oh-my-devenv\chezmoi-first-run-backup`。通过 known folder API 解析该文件夹，结果为空时失败。XDG 仍只用于 Unix。
+- 备份辅助函数把备份根目录作为显式参数。生产环境传入 LocalApplicationData 路径；每个测试传入其 fixture 根目录下的目录，这样测试绝不会写入 runner 账户真实的备份根目录。
+- 把每个路径映射为本次运行目录下的 `drives\<盘符>\<路径其余部分>`，这样冒号被去掉，不同盘符也不会冲突。验证映射后的路径仍在本次运行目录内。
+- 只在确有文件需要复制时才创建本次运行目录。绝不复用之前的运行目录。
+- 只跳过已确认不存在的文件和已确认悬空的链接，并为每个跳过的悬空链接记录日志。访问错误、无法读取的元数据、链接循环和不支持的路径类型都视为失败。不要从一次为假的存在性检查推断文件不存在。
+- 用 `Copy-Item -LiteralPath` 把文件内容复制成一个新的普通文件。在检查过的 PowerShell 7.6 实现中，复制本地文件符号链接时复制的是目标内容，与 `cp -L` 相同。遇到目录或指向目录的链接时失败，不递归复制。
+- 逐个回读副本：把长度和内容哈希与源文件比较。哈希比较能发现复制期间的大多数变化，但备份不是原子快照。
+- 列表、映射、复制或回读出错时，报告源路径和目标路径，并在 chezmoi 写入目标之前以非零状态退出。保留部分完成的备份以便检查。
+- 输出完成的备份目录，或报告无需复制。卸载保留这些备份。
+- 备份中可能含有密钥。与 Unix hook 一样，备份不检查也不修改权限。
+
+测试：
+
+- 路径映射和备份辅助函数的 Pester fixture：空格、Unicode、通配符字符、多个盘符、普通文件、文件符号链接、悬空链接、目录链接、读写被拒、列表失败与为空、路径包含检查，以及运行目录冲突。阶段 2 验收前，在选定的 PowerShell 和 chezmoi 版本下运行这些测试。
+- 一次可丢弃的 Windows apply，故意让备份复制失败。期望非零退出，且旧目标保持不变。
+
 ### 辅助脚本中的 Windows 细节
 
 - uv 工具环境的解释器位于 `Scripts\python.exe`，而不是 `bin/python`。
@@ -168,7 +191,7 @@ hook 30 使用 winget，让 mise 与其他系统工具来自同一个包管理�
 | `dot_config/mise/config.toml.tmpl` | 目标相同，版本相同。mise 在 Windows 上从 `%USERPROFILE%\.config\mise` 读取全局配置。某个工具在 Windows 上不可用时，在模板中用 `.chezmoi.os` 条件把它排除。 |
 | `ecosystem/go-tools.txt`、`ecosystem/uv-tools.txt` | Windows 安装器读取同一组文件，解析规则相同。 |
 | `dot_gitconfig.tmpl` | 同一个模板。出现具体需求时，在 Windows 分支中加入 Windows 专属设置。 |
-| `private_dot_ssh/private_config.tmpl` | 同一个模板。加一个 Windows 分支，去掉 Windows OpenSSH 不支持的设置。 |
+| `private_dot_ssh/private_config.tmpl` | 同一个模板。Windows 分支去掉 `ControlMaster`、`ControlPath` 和 `ControlPersist`。Windows OpenSSH 会解析它们，但它的连接复用函数是空实现，而且 Unix 的 `ControlPath` 含有 `:`，这在 Windows 文件名中无效。保留 `Include`、`IdentitiesOnly`、`TCPKeepAlive`、`ServerAliveInterval` 和 `SendEnv`。Windows OpenSSH 会检查配置文件的所有者和 ACL，不安全时失败。chezmoi 不会把 `private_` 转换成 Windows ACL。`check.ps1` 回读所用 `ssh` 可执行文件的路径和版本，并检查受管文件位于该可执行文件的默认用户配置路径。随后不带 `-F`、用一个测试主机名运行 `ssh -v -G`，检查退出码，并检查调试输出中有针对受管文件的 `Reading configuration data` 行。输出中的设置值不能证明其来源，因为默认值和其他配置文件也可能给出同样的值。macOS 上的 OpenSSH 10.5p1 会输出这一调试行；阶段 2 的原生 fixture 在 Windows 上确认这一点。检查过的源码中，用 `-F` 指定的顶层文件跳过所有者和 ACL 检查，默认配置文件缺失时也被忽略。本地 drop-in 是可选的；检查覆盖实际存在的 drop-in。不要自动改写 ACL。这些结论来自公开的 Win32-OpenSSH 9.5p1 和 10.4 源码。实际的 Windows `ssh` 可执行文件及其版本可能不同，例如来自 Git for Windows 的版本，所以阶段 2 在隔离的 home 中用原生 fixture 确认它们：不安全的顶层 ACL 和不安全的 drop-in ACL 都必须导致失败。 |
 | `desktop/maple-mono-nf-cn.env` | 相同的字体信息，包括钉死的 URL 和 SHA-256 摘要。显式解析带引号的值。 |
 | 系统包 | 本质上按平台区分。Windows 有自己的 winget manifest。 |
 
@@ -187,7 +210,7 @@ profile 路径取决于 Documents 已知文件夹。OneDrive 文件夹重定向�
 chezmoi 可以通过 `.chezmoiexternal` 用配置数据计算目标路径。Claude 选择了 stub，因为 profile 路径由 PowerShell 自己解析，stub 不需要额外的配置数据。
 
 - chezmoi 把 profile 主体部署到 `~/.config/oh-my-devenv/powershell/profile.ps1`。
-- hook 15 在 chezmoi 更新目标之后运行，每次 apply 都运行。它解析 `$PROFILE.CurrentUserAllHosts`，文件缺失时创建它，保留已有内容，受管行不存在时追加它。这一行永远不会重复添加。每次 apply 都运行，就能修复被删除的行，也能跟随移动后的 Documents 文件夹。
+- hook 15 在 chezmoi 更新目标之后运行，每次 apply 都运行。它解析 `$PROFILE.CurrentUserAllHosts`，文件缺失时创建它，保留已有内容，受管行不存在时加入它。profile 不在 hook 10 的受管路径备份范围内。hook 15 向已有 profile 加入这一行之前，先把 profile 复制到备份根目录下的一个新目录，并像 hook 10 一样回读副本。复制或回读出错时，hook 在编辑 profile 之前停止。随后 hook 15 向文件追加内容，保留已有字节。文件末尾没有换行时，先加一个换行。带 UTF-16 BOM 的文件以 UTF-16 写入这一行。带 UTF-8 BOM 或没有 BOM 的文件以 UTF-8 写入。没有 BOM 的文件不是有效 UTF-8 时，hook 停止。没有 BOM 的文件可能同时符合多种编码，所以 hook 把这类文件当作 UTF-8 处理，并依靠编辑前的副本进行恢复。追加出错时，hook 报告 profile 和备份路径。hook 15 在 chezmoi 写入目标之后运行，所以它的失败不会撤销这些写入。fixture 测试覆盖每种支持的编码、末尾没有换行的文件、复制失败、追加失败，以及对保留内容的逐字节比较。这一行永远不会重复添加。每次 apply 都运行，就能修复被删除的行，也能跟随移动后的 Documents 文件夹。
 - 受管行只在主体文件存在时才加载它，所以主体被删除时不会破坏 PowerShell 启动。
 - profile 辅助函数把 profile 路径作为显式参数。生产环境传入 `$PROFILE.CurrentUserAllHosts`；测试传入 fixture 内的路径，因此测试永远不会写入 runner 用户的真实 profile。
 - `$PROFILE.CurrentUserAllHosts` 所指的文件中没有受管行时，`check.ps1` 失败。
@@ -320,11 +343,8 @@ hook 00 的 XDG 根目录检查仍只用于 Unix。Windows 不导出 `XDG_*` 变
 
 | 事项 | 阶段 |
 | --- | --- |
-| PowerShell 7 的最低版本 | 2 |
 | 实际生效的脚本执行策略是否允许 chezmoi 运行 `.ps1` hook，以及不允许时的停止条件。不绕过设备策略。PowerShell 7 与 Windows PowerShell 5.1 分开存储执行策略设置。组策略可以让它使用 Windows PowerShell 的策略设置，所以要在 `pwsh` 下检查实际生效的策略。 | 2 |
 | chezmoi 在 Windows 上如何呈现 `.chezmoi.homeDir` 和拼接后的路径，`dot_gitconfig.tmpl` 中的 Git include 路径能否正确解析 | 2 |
-| Windows OpenSSH 不支持哪些 `Host *` 设置，尤其是连接复用 | 2 |
-| Windows 上首次运行备份的方法 | 2 |
 | `check.ps1` 如何检查 winget manifest：通过 winget 按包 ID 检查，还是按命令是否存在检查 | 3 |
 | 每个纳入工具的 winget 包 ID，以及能否不提权安装 | 3 |
 | Windows 上按用户安装字体的方法 | 3 |
@@ -345,3 +365,8 @@ hook 00 的 XDG 根目录检查仍只用于 Unix。Windows 不导出 `XDG_*` 变
 - Windows Terminal JSON fragment：<https://learn.microsoft.com/en-us/windows/terminal/json-fragment-extensions>
 - PowerShell profile 类型与位置：<https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_profiles>
 - PowerShell 执行策略：<https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_execution_policies>
+- PowerShell 支持生命周期：<https://learn.microsoft.com/en-us/powershell/scripting/install/powershell-support-lifecycle>
+- 用 winget 安装 PowerShell：<https://learn.microsoft.com/en-us/powershell/scripting/install/install-powershell-on-windows#install-powershell-using-winget>
+- Win32-OpenSSH 项目范围：<https://github.com/PowerShell/Win32-OpenSSH/wiki/Project-Scope>
+- Win32-OpenSSH 连接复用空实现：<https://github.com/PowerShell/openssh-portable/blob/274893f8d1fe86c4d128b514c3af4bc10cdc0c99/contrib/win32/win32compat/no-ops.c>
+- chezmoi 在 Windows 上：<https://www.chezmoi.io/user-guide/machines/windows/>

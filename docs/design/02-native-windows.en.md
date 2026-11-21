@@ -101,7 +101,7 @@ Keep the Unix hook numbers, so the order of the layers is the same on every plat
 
 | No. | Unix hook | Windows hook | Phase |
 | --- | --- | --- | --- |
-| 00 | Banner and XDG root check | `run_before_`: banner; fail when the interpreter is not PowerShell 7 | 2 |
+| 00 | Banner and XDG root check | `run_before_`: banner; fail when the interpreter is not PowerShell 7.6 or later | 2 |
 | 10 | Prerequisites and first-run backup | `run_once_before_`: check `git`, first-run backup | 2 |
 | 15 | — | `run_after_`, every apply: ensure the profile dot-source line (section 9, phase 2) and the persistent user `Path` entries (section 7, phase 4) | 2 |
 | 20 | System packages | Check `winget`, then `winget import` from `winget-packages.json` | 3 |
@@ -119,10 +119,11 @@ Hook 30 uses winget, so mise comes from the same package manager as the other sy
 
 ## 7. PowerShell Rules
 
-- Require PowerShell 7 before the first `chezmoi init --apply`, together with `git` and `chezmoi`. The quick start installs it with winget.
-- Write Windows hooks and helpers for PowerShell 7 only.
+- Require PowerShell 7.6 or later before the first `chezmoi init --apply`, together with `git` and `chezmoi`. 7.6 is the current LTS branch. The PowerShell support lifecycle table gives its end of support as 2028-11-14, and gives 2026-11-10 for 7.4 and 7.5. The Microsoft Lifecycle catalog shows one day later for each; the design uses the earlier dates. Every PowerShell feature this design uses exists in 7.6.
+- The quick start installs PowerShell with `winget install --id Microsoft.PowerShell --exact --source winget`. On a fresh client with the unrestricted winget source, omitting `--version` selects the highest applicable release, which can be a non-LTS release. Existing installs and source policy can change the result or make the install fail. The inspected winget catalog has no separate LTS package ID.
+- Write Windows hooks and helpers for PowerShell 7.6 or later only.
 - Reason: chezmoi runs `.ps1` scripts with `pwsh` and falls back to Windows PowerShell when `pwsh` is not available. A hook that installs `pwsh` during the first apply does not help the later hooks of the same apply, because the running chezmoi process keeps its original `PATH`. A prerequisite is simpler than keeping every hook compatible with 5.1.
-- Set the exact minimum PowerShell 7 version in phase 2. Record it in `AGENTS.md` next to the Bash 3.2 rule.
+- Hook 00 fails when the running PowerShell version is below 7.6. This is a compatibility floor only; hook 00 does not check support status. The user keeps PowerShell on a supported release with its latest servicing update, as for any other prerequisite. Record the minimum in `AGENTS.md` next to the Bash 3.2 rule.
 - Start every script with `Set-StrictMode -Version Latest` and `$ErrorActionPreference = 'Stop'`.
 - Check the exit code of every native command. `$ErrorActionPreference` does not stop on a failed native command by default.
 
@@ -153,6 +154,28 @@ The user decided to add the managed directories to the persistent user `Path` (s
 
 `check.ps1` also checks command resolution through a newly started PowerShell that loads the profile. A child process inherits its parent's environment, so the check builds the child environment from the machine and user environment without the hook additions. Before the profile loads, the check removes every occurrence of the managed directories from the combined child `Path`, including occurrences from the machine `Path`. The check does not change the persistent values. Otherwise the hook environment or an existing entry can hide a profile that does not put a tool on `PATH`. A negative test removes a required path from a fixture profile and expects the check to fail. A second negative test supplies the same directory through a fixture machine `Path`.
 
+### First-run backup
+
+Hook 10 keeps the Unix contract for file content: before the first apply overwrites a target, copy each pre-existing managed file and symlink target into a timestamped backup directory, and fail visibly on any error. The Unix hook also keeps file mode and times with `cp -p`; on Windows, keep the last-write time and do not claim to keep ACLs.
+
+- List the managed files and symlinks with the same chezmoi executable, config, source, and destination as the running apply, as the Unix hook does. Give the listing its own temporary persistent state, pass `--format=`, and delete the temporary state in `finally`. Capture stdout and stderr separately, so an error message never becomes a backup path. Check the exit code before reading the list.
+- With the chezmoi version inspected for this design, ordinary local-drive paths use forward slashes and a drive letter, for example `C:/Users/Example/.ssh/config`. chezmoi also recognizes UNC paths; this design rejects UNC and device paths with a clear error.
+- Backup root: `oh-my-devenv\chezmoi-first-run-backup` under the effective LocalApplicationData folder. Resolve the folder through the known-folder API, and fail when the result is empty. XDG stays Unix-only.
+- The backup helpers take the backup root as an explicit parameter. Production passes the LocalApplicationData path; every test passes a directory inside its fixture root, so a test never writes the runner account's real backup root.
+- Map each path to `drives\<drive letter>\<rest of the path>` under the run directory, so the colon disappears and different drives do not collide. Verify that the mapped path stays inside the run directory.
+- Create the run directory only when a file needs a copy. Never reuse an earlier run directory.
+- Skip only confirmed missing files and confirmed dangling links, and log each skipped dangling link. Treat access errors, unreadable metadata, link loops, and unsupported path kinds as failures. Do not infer absence from a false existence check.
+- Copy file content with `Copy-Item -LiteralPath` to a new regular file. In the inspected PowerShell 7.6 implementation, copying a local file symlink copies the target content, like `cp -L`. Fail on a directory or a link to a directory; do not copy recursively.
+- Read back each copy: compare its length and content hash with the source. The hash comparison detects most changes during the copy, but the backup is not an atomic snapshot.
+- On any listing, mapping, copy, or readback error, report the source and destination and exit nonzero before chezmoi writes the targets. Keep partial backups for inspection.
+- Print the completed backup directory, or report that no copy was needed. The uninstall keeps the backups.
+- A backup can contain secrets. Like the Unix hook, the backup does not check or change permissions.
+
+Tests:
+
+- Pester fixtures for the path mapper and the backup helper: spaces, Unicode, wildcard characters, several drive letters, regular files, file symlinks, dangling links, directory links, denied reads and writes, failed and empty listings, path containment, and run-directory collisions. Run them under the selected PowerShell and chezmoi versions before phase 2 is accepted.
+- A disposable Windows apply in which the backup copy fails on purpose. It expects a nonzero exit and an unchanged old target.
+
 ### Windows details in the helpers
 
 - A uv tool environment keeps its interpreter at `Scripts\python.exe`, not `bin/python`.
@@ -168,7 +191,7 @@ The soft consistency rule from section 2 works like this:
 | `dot_config/mise/config.toml.tmpl` | Same target and same versions. mise reads its global config from `%USERPROFILE%\.config\mise` on Windows. When a tool does not work on Windows, exclude it in the template with a `.chezmoi.os` condition. |
 | `ecosystem/go-tools.txt`, `ecosystem/uv-tools.txt` | The Windows installers read the same files with the same parsing rules. |
 | `dot_gitconfig.tmpl` | Same template. Add Windows-only settings in a Windows branch when a concrete need appears. |
-| `private_dot_ssh/private_config.tmpl` | Same template. Add a Windows branch that leaves out the settings that Windows OpenSSH does not support. |
+| `private_dot_ssh/private_config.tmpl` | Same template. The Windows branch leaves out `ControlMaster`, `ControlPath`, and `ControlPersist`. Windows OpenSSH parses them, but its connection multiplexing functions are empty stubs, and the Unix `ControlPath` contains a `:`, which is not valid in a Windows file name. Keep `Include`, `IdentitiesOnly`, `TCPKeepAlive`, `ServerAliveInterval`, and `SendEnv`. Windows OpenSSH checks the owner and ACL of the config files and fails on unsafe ones. chezmoi does not turn `private_` into a Windows ACL. `check.ps1` reads back the path and version of the `ssh` executable it uses, and checks that the managed file exists at that executable's default user config path. It then runs `ssh -v -G` with a test host name and no `-F`, checks the exit code, and checks that the debug output contains a `Reading configuration data` line for the managed file. A setting value in the output does not prove its source, because defaults and other config files can supply the same value. OpenSSH 10.5p1 on macOS prints that debug line; the phase-2 native fixture confirms it on Windows. The inspected source skips the owner and ACL check for a top-level file given with `-F`, and ignores a missing default config file. Local drop-ins are optional; the check covers the drop-ins that exist. Do not rewrite ACLs automatically. These statements come from the public Win32-OpenSSH 9.5p1 and 10.4 sources. The actual Windows `ssh` executable and its version can differ, for example one from Git for Windows, so phase 2 confirms them with native fixtures in an isolated home: an unsafe top-level ACL and an unsafe drop-in ACL must fail. |
 | `desktop/maple-mono-nf-cn.env` | Same font facts, including the pinned URL and SHA-256 digest. Parse the quoted values explicitly. |
 | System packages | Platform-specific by nature. Windows gets its own winget manifest. |
 
@@ -187,7 +210,7 @@ The profile path depends on the Documents known folder. OneDrive folder redirect
 chezmoi could compute the target path from config data through `.chezmoiexternal`. Claude chose a stub instead, because PowerShell itself resolves the profile path and the stub needs no extra config data.
 
 - chezmoi deploys the profile body to `~/.config/oh-my-devenv/powershell/profile.ps1`.
-- Hook 15 runs after chezmoi updates the targets, on every apply. It resolves `$PROFILE.CurrentUserAllHosts`, creates the file when it is missing, keeps any existing content, and appends the managed line when it is not present. It never adds the line twice. Running on every apply repairs a deleted line and follows a moved Documents folder.
+- Hook 15 runs after chezmoi updates the targets, on every apply. It resolves `$PROFILE.CurrentUserAllHosts`, creates the file when it is missing, keeps any existing content, and adds the managed line when it is not present. The profile is outside the managed-path backup of hook 10. Before hook 15 adds the line to an existing profile, it copies the profile into a new directory under the backup root and reads the copy back, as hook 10 does. Any copy or readback error stops the hook before it edits the profile. Hook 15 then appends to the file and keeps the existing bytes. It adds a line break first when the file does not end with one. A file with a UTF-16 BOM gets the line in UTF-16. A file with a UTF-8 BOM or with no BOM gets the line in UTF-8. The hook stops when a file without a BOM is not valid UTF-8. A file without a BOM can be valid in several encodings, so the hook treats such a file as UTF-8 and relies on the pre-edit copy for recovery. On an append error, the hook reports the profile and backup paths. Hook 15 runs after chezmoi writes the targets, so its failure does not undo them. Fixture tests cover each supported encoding, a file without a final line break, a failed copy, a failed append, and a byte-level comparison of the kept content. It never adds the line twice. Running on every apply repairs a deleted line and follows a moved Documents folder.
 - The managed line loads the body only when the body file exists, so a removed body does not break PowerShell startup.
 - The profile helper takes the profile path as an explicit parameter. Production passes `$PROFILE.CurrentUserAllHosts`; tests pass a path inside the fixture, so a test never writes the real profile of the runner user.
 - `check.ps1` fails when the file at `$PROFILE.CurrentUserAllHosts` does not contain the managed line.
@@ -320,11 +343,8 @@ Resolve each item before the phase that depends on it.
 
 | Item | Phase |
 | --- | --- |
-| The minimum PowerShell 7 version | 2 |
 | Whether the effective script execution policy lets chezmoi run the `.ps1` hooks, and the stop condition when it does not. Do not work around device policy. PowerShell 7 stores execution-policy settings separately from Windows PowerShell 5.1. Group Policy can make it use the Windows PowerShell policy settings, so check the effective policy under `pwsh`. | 2 |
 | How chezmoi renders `.chezmoi.homeDir` and joined paths on Windows, and whether the Git include path in `dot_gitconfig.tmpl` resolves correctly | 2 |
-| Which `Host *` settings Windows OpenSSH does not support, in particular connection multiplexing | 2 |
-| The method for first-run backups on Windows | 2 |
 | How `check.ps1` checks the winget manifest: by package ID through winget, or by command presence | 3 |
 | The winget package ID for each included tool, and whether each one installs without elevation | 3 |
 | The per-user font installation method on Windows | 3 |
@@ -345,3 +365,8 @@ Resolve each item before the phase that depends on it.
 - Windows Terminal JSON fragments: <https://learn.microsoft.com/en-us/windows/terminal/json-fragment-extensions>
 - PowerShell profile types and locations: <https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_profiles>
 - PowerShell execution policies: <https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_execution_policies>
+- PowerShell support lifecycle: <https://learn.microsoft.com/en-us/powershell/scripting/install/powershell-support-lifecycle>
+- Installing PowerShell with winget: <https://learn.microsoft.com/en-us/powershell/scripting/install/install-powershell-on-windows#install-powershell-using-winget>
+- Win32-OpenSSH project scope: <https://github.com/PowerShell/Win32-OpenSSH/wiki/Project-Scope>
+- Win32-OpenSSH multiplexing stubs: <https://github.com/PowerShell/openssh-portable/blob/274893f8d1fe86c4d128b514c3af4bc10cdc0c99/contrib/win32/win32compat/no-ops.c>
+- chezmoi on Windows: <https://www.chezmoi.io/user-guide/machines/windows/>
