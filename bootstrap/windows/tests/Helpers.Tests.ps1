@@ -164,10 +164,11 @@ Describe 'Uninstall platform boundary' {
 Describe 'Verified profile replacement' {
     It 'preserves an edit made after the profile was read' {
         $path = Join-Path $TestDrive 'edited.ps1'
+        $backup = Join-Path $TestDrive 'edited-backup.ps1'
         [IO.File]::WriteAllText($path, 'concurrent edit')
         $original = [Text.Encoding]::UTF8.GetBytes('original')
         $replacement = [Text.Encoding]::UTF8.GetBytes('replacement')
-        { Write-ProfileReplacement -Path $path -Original $original -Bytes $replacement } |
+        { Write-ProfileReplacement -Path $path -Original $original -Bytes $replacement -BackupPath $backup } |
             Should -Throw '*original profile changed*'
         [IO.File]::ReadAllText($path) | Should -BeExactly 'concurrent edit'
         @(Get-ChildItem -LiteralPath $TestDrive -Filter '.oh-my-devenv-*.tmp' -Force).Count | Should -Be 0
@@ -175,6 +176,7 @@ Describe 'Verified profile replacement' {
 
     It 'leaves the profile intact when staging cannot create the sibling file' {
         $path = Join-Path $TestDrive 'locked.ps1'
+        $backup = Join-Path $TestDrive 'locked-backup.ps1'
         [IO.File]::WriteAllText($path, 'original')
         $original = [IO.File]::ReadAllBytes($path)
         $replacement = [Text.Encoding]::UTF8.GetBytes('replacement')
@@ -182,25 +184,76 @@ Describe 'Verified profile replacement' {
         Mock New-Guid { $guid }
         $stagingPath = Join-Path $TestDrive ".oh-my-devenv-$guid.tmp"
         [IO.File]::WriteAllText($stagingPath, 'occupied')
-        { Write-ProfileReplacement -Path $path -Original $original -Bytes $replacement } | Should -Throw
+        { Write-ProfileReplacement -Path $path -Original $original -Bytes $replacement -BackupPath $backup } |
+            Should -Throw
         [IO.File]::ReadAllText($path) | Should -BeExactly 'original'
         [IO.File]::ReadAllText($stagingPath) | Should -BeExactly 'occupied'
+    }
+
+    It 'retains the staged profile and reports recovery paths if replacement fails' -Skip:(-not $IsWindows) {
+        $path = Join-Path $TestDrive 'replace-failure.ps1'
+        $backup = Join-Path $TestDrive 'replace-failure-backup.ps1'
+        $original = [Text.Encoding]::UTF8.GetBytes('original')
+        $replacement = [Text.Encoding]::UTF8.GetBytes('replacement')
+        [IO.File]::WriteAllBytes($path, $original)
+        [IO.File]::WriteAllBytes($backup, $original)
+        $guid = New-Guid
+        Mock New-Guid { $guid }
+        $staged = Join-Path $TestDrive ".oh-my-devenv-$guid.tmp"
+
+        # Let the verification read the profile but deny the delete access File.Replace needs.
+        $reader = [IO.File]::Open($path, 'Open', 'Read', 'Read')
+        try {
+            { Write-ProfileReplacement -Path $path -Original $original -Bytes $replacement -BackupPath $backup } |
+                Should -Throw "*profile '$path'. Staged profile: '$staged'. Pre-uninstall backup: '$backup'.*"
+        } finally {
+            $reader.Dispose()
+        }
+        [IO.File]::ReadAllText($staged) | Should -BeExactly 'replacement'
+        [IO.File]::ReadAllText($backup) | Should -BeExactly 'original'
     }
 }
 
 Describe 'Fresh profile probe' {
-    It 'rejects a profile that returns before reaching its managed line' {
+    It 'rejects <statement> before reaching the managed line' -ForEach @(
+        @{ Statement = 'return'; Expected = '*did not run to completion*' }
+        @{ Statement = '[Environment]::Exit(0)'; Expected = '*did not report the profile probe success marker*' }
+    ) {
         Mock Get-ProfileProbePath { $env:PATH }
         $profilePath = Join-Path $TestDrive 'return-early.ps1'
+        $body = Join-Path $TestDrive '.config/oh-my-devenv/powershell/profile.ps1'
+        [void][IO.Directory]::CreateDirectory((Split-Path -Parent $body))
+        [IO.File]::WriteAllText($body, "throw 'The fixture profile body ran.'")
         $line = Get-ManagedProfileLine -Destination $TestDrive
-        [IO.File]::WriteAllText($profilePath, "return`n$line`n")
-        { Confirm-ManagedProfile -ProfilePath $profilePath } | Should -Throw '*did not run to completion*'
+        [IO.File]::WriteAllText($profilePath, "$statement`n$line`n")
+        { Confirm-ManagedProfile -ProfilePath $profilePath } | Should -Throw $expected
+
+        [IO.File]::WriteAllText($profilePath, "$line`n")
+        { Confirm-ManagedProfile -ProfilePath $profilePath } | Should -Throw '*fixture profile body ran*'
     }
 
     It 'strips every equivalent managed entry from the merged process and machine PATH' {
         Mock Get-ManagedProfilePathEntry { 'C:/Users/Example/.local/bin' }
         Mock Get-HookPath { @('C:/Users/Example/.local/bin', 'C:/Windows', 'c:\USERS\EXAMPLE\.local\bin\') }
         Get-ProfileProbePath | Should -BeExactly 'C:/Windows'
+    }
+
+    It 'collects machine PATH entries absent from the process and user PATH' -Skip:(-not $IsWindows) {
+        $machine = [Environment]::GetEnvironmentVariable('Path', 'Machine') -split ';'
+        $user = [Environment]::GetEnvironmentVariable('Path', 'User') -split ';'
+        $machineOnly = @($machine | Where-Object { $_ -and $_ -notin $user })
+        $machineOnly.Count | Should -BeGreaterThan 0
+
+        $originalPath = $env:PATH
+        try {
+            $env:PATH = $TestDrive
+            $collected = @(Get-HookPath)
+            foreach ($entry in $machineOnly) {
+                $collected | Should -Contain $entry
+            }
+        } finally {
+            $env:PATH = $originalPath
+        }
     }
 }
 
@@ -305,7 +358,8 @@ Describe 'Profile line' {
 
         Add-ManagedProfileLine @settings
         [Convert]::ToHexString([IO.File]::ReadAllBytes($profileFile)) | Should -BeExactly ([Convert]::ToHexString($after))
-        Remove-ManagedProfileLine -ProfilePath $profileFile -Destination $settings.Destination
+        Remove-ManagedProfileLine -ProfilePath $profileFile -Destination $settings.Destination `
+            -BackupPath (Join-Path $TestDrive 'backup.ps1')
         $kept = "# café 中$ending"
         if (-not $ending) {
             $kept += [Environment]::NewLine

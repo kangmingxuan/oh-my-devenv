@@ -34,6 +34,8 @@ $source = chezmoi source-path
 & (Join-Path $source 'bootstrap/windows/uninstall.ps1') -Apply
 ```
 
+Close editors and wait for running Git commands to finish before uninstall
+because the pre-delete backup holds the content seen when it ran.
 Uninstall backs up the files it will remove and the profile it will edit.
 Review the verified backup under `%LOCALAPPDATA%\oh-my-devenv\chezmoi-uninstall-backup`.
 If backup fails, uninstall stops before it changes the profile or removes

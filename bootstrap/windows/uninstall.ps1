@@ -1,3 +1,13 @@
+<#
+.SYNOPSIS
+Preview or remove managed Windows configuration.
+
+.DESCRIPTION
+Close editors and wait for running Git commands to finish before uninstall because the pre-delete backup holds the content seen when it ran.
+
+.PARAMETER Apply
+Back up candidates and remove the managed configuration.
+#>
 [CmdletBinding(SupportsShouldProcess)]
 param(
     [switch]$Apply,
@@ -80,9 +90,10 @@ if (-not $backupCandidates.Count -or -not $PSCmdlet.ShouldProcess($root, 'Back u
 if (-not $BackupRoot) {
     $BackupRoot = Get-LocalBackupRoot -Name 'chezmoi-uninstall-backup'
 }
-Backup-ExistingFile -Paths $backupCandidates -BackupRoot $BackupRoot -BeforeUninstall
+$backupRun = Backup-ExistingFile -Paths $backupCandidates -BackupRoot $BackupRoot -BeforeUninstall -PassThru
 if ($removeProfileLine) {
-    Remove-ManagedProfileLine -ProfilePath $ProfilePath -Destination $root -Confirm:$false
+    $profileBackup = Get-BackupPath -Path $ProfilePath -RunDirectory $backupRun
+    Remove-ManagedProfileLine -ProfilePath $ProfilePath -Destination $root -BackupPath $profileBackup -Confirm:$false
 }
 foreach ($path in $candidates) {
     [IO.File]::Delete($path)

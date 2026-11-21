@@ -98,7 +98,7 @@ function Add-ManagedProfileLine {
 
 function Remove-ManagedProfileLine {
     [CmdletBinding(SupportsShouldProcess)]
-    param([string]$ProfilePath, [string]$Destination)
+    param([string]$ProfilePath, [string]$Destination, [Parameter(Mandatory)][string]$BackupPath)
 
     $file = Resolve-RegularFile -Path $ProfilePath
     if ($null -eq $file) {
@@ -108,15 +108,16 @@ function Remove-ManagedProfileLine {
     $updated = [regex]::Replace($profileFile.Content, (Get-ManagedProfilePattern -Destination $Destination), '')
     if ($updated -cne $profileFile.Content -and $PSCmdlet.ShouldProcess($ProfilePath, 'Remove managed profile line')) {
         $bytes = $profileFile.Encoding.GetPreamble() + $profileFile.Encoding.GetBytes($updated)
-        Write-ProfileReplacement -Path $file.FullName -Original $profileFile.Bytes -Bytes $bytes
+        Write-ProfileReplacement -Path $file.FullName -Original $profileFile.Bytes -Bytes $bytes -BackupPath $BackupPath
     }
 }
 
 function Write-ProfileReplacement {
-    param([string]$Path, [byte[]]$Original, [byte[]]$Bytes)
+    param([string]$Path, [byte[]]$Original, [byte[]]$Bytes, [Parameter(Mandatory)][string]$BackupPath)
 
     $temporary = Join-Path ([IO.Path]::GetDirectoryName($Path)) ".oh-my-devenv-$(New-Guid).tmp"
     $created = $false
+    $replaceFailed = $false
     try {
         $writer = [IO.File]::Open($temporary, 'CreateNew', 'Write', 'None')
         $created = $true
@@ -139,14 +140,22 @@ function Write-ProfileReplacement {
             if (-not [Linq.Enumerable]::SequenceEqual[byte]($currentHash, $originalHash)) {
                 throw 'The original profile changed after it was read.'
             }
-            [IO.File]::Replace($temporary, $Path, [NullString]::Value)
+            try {
+                [IO.File]::Replace($temporary, $Path, [NullString]::Value)
+            } catch {
+                $replaceFailed = $true
+                throw
+            }
         } finally {
             $reader.Dispose()
         }
     } catch {
+        if ($replaceFailed) {
+            throw "Could not replace PowerShell profile '$Path'. Staged profile: '$temporary'. Pre-uninstall backup: '$BackupPath'. $_"
+        }
         throw "Could not replace PowerShell profile '$Path'. $_"
     } finally {
-        if ($created) {
+        if ($created -and -not $replaceFailed) {
             [IO.File]::Delete($temporary)
         }
     }
@@ -166,7 +175,8 @@ function Confirm-ManagedProfile {
     if ($fixtureProfile) {
         $arguments += '-NoProfile'
     }
-    $arguments += @('-File', (Join-Path $PSScriptRoot 'profile-probe.ps1'))
+    $successMarker = "oh-my-devenv-profile-probe-$(New-Guid)"
+    $arguments += @('-File', (Join-Path $PSScriptRoot 'profile-probe.ps1'), '-SuccessMarker', $successMarker)
     if ($fixtureProfile) {
         $arguments += @('-FixtureProfilePath', $ProfilePath)
     }
@@ -176,7 +186,10 @@ function Confirm-ManagedProfile {
     }
     $pwsh = Join-Path $PSHOME $(if ($IsWindows) { 'pwsh.exe' } else { 'pwsh' })
     try {
-        $null = Invoke-NativeCommand -Executable $pwsh -Arguments $arguments -Environment $probeEnvironment
+        $result = Invoke-NativeCommand -Executable $pwsh -Arguments $arguments -Environment $probeEnvironment
+        if (($result.Stdout -split '\r?\n') -cnotcontains $successMarker) {
+            throw 'The child PowerShell did not report the profile probe success marker.'
+        }
     } catch {
         throw "PowerShell profile check failed for '$ProfilePath'. $_"
     }

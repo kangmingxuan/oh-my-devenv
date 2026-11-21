@@ -200,6 +200,9 @@ try {
         # The mise file sorts before Git and proves a partial backup cannot authorize deletions.
         $oldGit = "# pre-existing Git fixture`n"
         Set-FixtureText -Path $gitConfig -Content $oldGit
+        $oldGitBytes = [IO.File]::ReadAllBytes($gitConfig)
+        $oldMiseBytes = [IO.File]::ReadAllBytes($miseConfig)
+        $oldProfileBytes = [IO.File]::ReadAllBytes($profilePath)
         $originalAcl = Get-Acl -LiteralPath $gitConfig
         $blockedAcl = Get-Acl -LiteralPath $gitConfig
         $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
@@ -242,9 +245,10 @@ try {
         } finally {
             Set-Acl -LiteralPath $gitConfig -AclObject $originalAcl
         }
-        if ([IO.File]::ReadAllText($miseConfig) -cne $oldMise -or
-            [IO.File]::ReadAllText($gitConfig) -cne $oldGit -or
-            [IO.File]::ReadAllText($profilePath) -cne $oldProfile -or [IO.File]::Exists($profileBody)) {
+        if (-not [Linq.Enumerable]::SequenceEqual[byte]([IO.File]::ReadAllBytes($miseConfig), $oldMiseBytes) -or
+            -not [Linq.Enumerable]::SequenceEqual[byte]([IO.File]::ReadAllBytes($gitConfig), $oldGitBytes) -or
+            -not [Linq.Enumerable]::SequenceEqual[byte]([IO.File]::ReadAllBytes($profilePath), $oldProfileBytes) -or
+            [IO.File]::Exists($profileBody)) {
             throw 'The failed backups allowed changes to the destination.'
         }
         [IO.Directory]::Move($uninstallBackupRoot, (Join-Path $fixture 'failed-uninstall-backup'))
@@ -252,7 +256,8 @@ try {
         $run = Get-ChildItem -LiteralPath $uninstallBackupRoot -Directory
         $miseCopy = Get-BackupPath -Path $miseConfig -RunDirectory $run.FullName
         $gitCopy = Get-BackupPath -Path $gitConfig -RunDirectory $run.FullName
-        if ([IO.File]::ReadAllText($miseCopy) -cne $oldMise -or [IO.File]::ReadAllText($gitCopy) -cne $oldGit -or
+        if (-not [Linq.Enumerable]::SequenceEqual[byte]([IO.File]::ReadAllBytes($miseCopy), $oldMiseBytes) -or
+            -not [Linq.Enumerable]::SequenceEqual[byte]([IO.File]::ReadAllBytes($gitCopy), $oldGitBytes) -or
             [IO.File]::Exists($miseConfig) -or [IO.File]::Exists($gitConfig)) {
             throw 'Uninstall did not verify a backup and remove the pre-existing configuration.'
         }
@@ -288,12 +293,29 @@ try {
         Set-FixtureText -Path $profilePath -Content $installedProfile
         $installedBody = [IO.File]::ReadAllText($profileBody)
         $originalPath = $env:PATH
+        $originalGoBin = $env:GOBIN
         try {
-            $env:PATH = (@(Get-ManagedProfilePathEntry) + $originalPath) -join [IO.Path]::PathSeparator
-            Set-FixtureText -Path $profileBody -Content '$env:OH_MY_DEVENV_PROFILE_LOADED = ''1'''
-            Assert-FixtureCheckFailure -Pattern 'did not add .+ to PATH'
+            $env:GOBIN = Join-Path $fixture 'profile-go-bin'
+            $probeEntries = @(
+                (Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'mise/shims')
+                (Join-Path $HOME '.local/bin')
+                $env:GOBIN
+            )
+            $env:PATH = ($probeEntries + $originalPath) -join ';'
+            foreach ($missingEntry in $probeEntries) {
+                $keptEntries = ($probeEntries | Where-Object { $_ -ne $missingEntry }) -join ';'
+                $keptEntries = [Management.Automation.Language.CodeGeneration]::EscapeSingleQuotedStringContent($keptEntries)
+                $fixtureBody = @'
+$env:PATH = '{0};' + $env:PATH
+$env:OH_MY_DEVENV_PROFILE_LOADED = '1'
+'@ -f $keptEntries
+                Set-FixtureText -Path $profileBody -Content $fixtureBody
+                $missingName = [regex]::Escape((Split-Path -Leaf $missingEntry))
+                Assert-FixtureCheckFailure -Pattern "(?s)The managed profile did not add.*?[\\/]$missingName'"
+            }
         } finally {
             $env:PATH = $originalPath
+            $env:GOBIN = $originalGoBin
             Set-FixtureText -Path $profileBody -Content $installedBody
         }
         Set-FixtureText -Path $profilePath -Content $oldProfile

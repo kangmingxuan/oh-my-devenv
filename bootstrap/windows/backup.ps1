@@ -103,7 +103,7 @@ function Copy-VerifiedFile {
 }
 
 function Backup-ExistingFile {
-    param([string[]]$Paths, [string]$BackupRoot, [switch]$BeforeUninstall)
+    param([string[]]$Paths, [string]$BackupRoot, [switch]$BeforeUninstall, [switch]$PassThru)
 
     $purpose = if ($BeforeUninstall) { 'Pre-uninstall backup' } else { 'First-run backup' }
     $runDirectory = $null
@@ -129,6 +129,9 @@ function Backup-ExistingFile {
     }
     if ($runDirectory) {
         Write-Host "${purpose} completed: $runDirectory"
+        if ($PassThru) {
+            $runDirectory
+        }
     } else {
         Write-Host 'No pre-existing managed files to back up.'
     }

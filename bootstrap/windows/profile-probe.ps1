@@ -1,4 +1,4 @@
-param([string]$FixtureProfilePath)
+param([Parameter(Mandatory)][string]$SuccessMarker, [string]$FixtureProfilePath)
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
@@ -17,3 +17,4 @@ foreach ($entry in Get-ManagedProfilePathEntry) {
         throw "The managed profile did not add '$entry' to PATH."
     }
 }
+[Console]::WriteLine("`n$SuccessMarker")
