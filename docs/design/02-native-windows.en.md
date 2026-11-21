@@ -154,6 +154,11 @@ The user decided to add the managed directories to the persistent user `Path` (s
 
 `check.ps1` also checks command resolution through a newly started PowerShell that loads the profile. A child process inherits its parent's environment, so the check builds the child environment from the machine and user environment without the hook additions. Before the profile loads, the check removes every occurrence of the managed directories from the combined child `Path`, including occurrences from the machine `Path`. The check does not change the persistent values. Otherwise the hook environment or an existing entry can hide a profile that does not put a tool on `PATH`. A negative test removes a required path from a fixture profile and expects the check to fail. A second negative test supplies the same directory through a fixture machine `Path`.
 
+In phase 2, the fresh process checks that the managed profile body completed
+and that it added the managed directories. The smoke fixtures reject a profile
+that returns before the managed line and a profile that signals completion
+without adding the required paths.
+
 ### First-run backup
 
 Hook 10 keeps the Unix contract for file content: before the first apply overwrites a target, copy each pre-existing managed file and symlink target into a timestamped backup directory, and fail visibly on any error. The Unix hook also keeps file mode and times with `cp -p`; on Windows, keep the last-write time and do not claim to keep ACLs.
@@ -338,6 +343,13 @@ Add one Windows overlay, `profile.local.ps1` (section 9), in phase 2 together wi
 The review files are not part of the repository.
 
 ## 17. Open Questions
+
+The first hosted Windows smoke job ran PowerShell 7.6.10. Its effective
+execution policy was `RemoteSigned` from `LocalMachine`. On that runner,
+chezmoi rendered `.chezmoi.homeDir` and `.chezmoi.destDir` with forward slashes
+and `joinPath` with backslashes. Neither Windows job reached apply. The Git
+include remains open until the native apply job reports the include origin.
+[Hosted run 44885242196](https://github.com/kangmingxuan/oh-my-devenv/actions/runs/44885242196)
 
 Resolve each item before the phase that depends on it.
 

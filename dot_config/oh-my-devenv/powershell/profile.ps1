@@ -2,7 +2,7 @@
     Justification = 'Apply the PowerShell initialization emitted by the installed mise executable.')]
 param()
 
-& {
+$ohMyDevenvMiseActivation = & {
     Set-StrictMode -Version Latest
     $ErrorActionPreference = 'Stop'
 
@@ -13,26 +13,14 @@ param()
         $env:GOBIN = Join-Path $env:GOPATH 'bin'
     }
 
-    $localData = [Environment]::GetFolderPath('LocalApplicationData')
-    if (-not $localData) {
-        throw 'Windows did not resolve the LocalApplicationData known folder.'
-    }
-    $managedPath = @(
-        (Join-Path $localData 'mise/shims')
-        (Join-Path $HOME '.local/bin')
-        $env:GOBIN
-    )
+    . (Join-Path $PSScriptRoot 'environment.ps1')
+    $managedPath = @(Get-ManagedProfilePathEntry)
     $seen = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
     $env:PATH = ($managedPath + ($env:PATH -split ';') |
         Where-Object { $_ -and $seen.Add($_) }) -join ';'
     $env:BAT_THEME = 'TwoDark'
-}
-
-$ohMyDevenvMiseActivation = & {
-    Set-StrictMode -Version Latest
-    $ErrorActionPreference = 'Stop'
     $PSNativeCommandUseErrorActionPreference = $false
-    $mise = Get-Command -Name mise -CommandType Application -ErrorAction SilentlyContinue
+    $mise = Get-PathApplication -Name mise -Optional
     if ($mise) {
         $activation = & $mise.Source activate pwsh
         if ($LASTEXITCODE -ne 0) {
@@ -51,3 +39,4 @@ if (Test-Path -LiteralPath $ohMyDevenvLocalProfile -PathType Leaf) {
     . $ohMyDevenvLocalProfile
 }
 Remove-Variable -Name ohMyDevenvLocalProfile
+$env:OH_MY_DEVENV_PROFILE_LOADED = '1'

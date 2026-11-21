@@ -5,7 +5,7 @@ $ErrorActionPreference = 'Stop'
 . {{ includeTemplate "powershell-literal" (joinPath .chezmoi.sourceDir "bootstrap/windows/backup.ps1") }}
 
 Update-HookPath
-$git = Get-Command -Name git -CommandType Application -ErrorAction Stop
+$git = Get-PathApplication -Name git
 $result = Invoke-NativeCommand -Executable $git.Source -Arguments @('--version')
 Write-Host $result.Stdout.Trim()
 

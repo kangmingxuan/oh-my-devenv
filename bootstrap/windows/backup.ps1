@@ -103,15 +103,19 @@ function Copy-VerifiedFile {
 }
 
 function Backup-ExistingFile {
-    param([string[]]$Paths, [string]$BackupRoot)
+    param([string[]]$Paths, [string]$BackupRoot, [switch]$BeforeUninstall)
 
+    $purpose = if ($BeforeUninstall) { 'Pre-uninstall backup' } else { 'First-run backup' }
     $runDirectory = $null
     foreach ($path in $Paths) {
         try {
             # Validate the local-drive path before touching it.
             $null = Get-BackupPath -Path $path -RunDirectory $BackupRoot
-            $file = Resolve-RegularFile -Path $path -SkipDangling
+            $file = Resolve-RegularFile -Path $path -SkipDangling:(-not $BeforeUninstall)
             if ($null -eq $file) {
+                if ($BeforeUninstall) {
+                    throw 'The uninstall candidate no longer exists.'
+                }
                 continue
             }
             if (-not $runDirectory) {
@@ -120,11 +124,11 @@ function Backup-ExistingFile {
             $destination = Get-BackupPath -Path $path -RunDirectory $runDirectory
             Copy-VerifiedFile -Source $file.FullName -Destination $destination
         } catch {
-            throw "First-run backup failed for '$path' under '$BackupRoot'. $_"
+            throw "$purpose failed for '$path' under '$BackupRoot'. $_"
         }
     }
     if ($runDirectory) {
-        Write-Host "First-run backup completed: $runDirectory"
+        Write-Host "${purpose} completed: $runDirectory"
     } else {
         Write-Host 'No pre-existing managed files to back up.'
     }

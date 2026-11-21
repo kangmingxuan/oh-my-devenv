@@ -804,7 +804,12 @@ for hook_platform in "${hook_platforms[@]}" "windows|$windows_chezmoi_data"; do
       || fail_test 'Windows and macOS mise configs differ'
     grep -Fxq '.config/oh-my-devenv/powershell/profile.ps1' <<<"$managed_platform" \
       || fail_test 'Windows does not manage the PowerShell profile body'
-    if grep -Eq '^([.]chezmoiscripts/.*[.]sh|[.](bash|zsh|profile|local)([._/]|$)|[.]config/(fontconfig|ghostty)(/|$))' <<<"$managed_platform"; then
+    for unix_startup in .bash_profile .bashrc .profile .zprofile .zshenv .zshrc; do
+      if grep -Fxq "$unix_startup" <<<"$managed_platform"; then
+        fail_test "Windows manages Unix startup file $unix_startup"
+      fi
+    done
+    if grep -Eq '^([.]chezmoiscripts/.*[.]sh$|[.](bash|zsh|local)(/|$)|[.]config/(fontconfig|ghostty)(/|$))' <<<"$managed_platform"; then
       fail_test 'Windows manages a Unix-only target'
     fi
     # Native syntax and lint checks of the rendered hooks run in Windows CI.

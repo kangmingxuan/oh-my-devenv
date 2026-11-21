@@ -154,6 +154,9 @@ hook 30 使用 winget，让 mise 与其他系统工具来自同一个包管理�
 
 `check.ps1` 还通过一个新启动、会加载 profile 的 PowerShell 检查命令解析。子进程会继承父进程的环境，所以检查从不含 hook 附加项的机器与用户环境构建子进程环境。在加载 profile 前，检查从合并后的子进程 `Path` 中移除受管目录的每一次出现，包括来自机器 `Path` 的条目。检查不修改持久化值。否则，hook 环境或已有条目可能掩盖 profile 没有把某个工具加入 `PATH` 的问题。一个负向测试从 fixture profile 中去掉一个必需路径，并期望检查失败。第二个负向测试通过 fixture 机器 `Path` 提供同一目录。
 
+在阶段 2，新进程检查受管 profile 主体是否运行完毕，以及它是否加入了受管目录。
+smoke fixture 要求两种情况报错：profile 在受管行之前返回，或者报告运行完毕却没有加入必需路径。
+
 ### 首次运行备份
 
 hook 10 在文件内容上沿用 Unix 的约定：首次 apply 覆盖目标之前，把每个已存在的受管文件和符号链接目标复制到带时间戳的备份目录；任何错误都要明确失败。Unix hook 还用 `cp -p` 保留文件模式和时间；在 Windows 上保留最后写入时间，但不声称保留 ACL。
@@ -338,6 +341,12 @@ hook 00 的 XDG 根目录检查仍只用于 Unix。Windows 不导出 `XDG_*` 变
 评审文件不属于本仓库。
 
 ## 17. 待决问题
+
+首轮托管 Windows smoke job 使用 PowerShell 7.6.10。实际生效的执行策略是
+`LocalMachine` 范围的 `RemoteSigned`。在该 runner 上，chezmoi 用正斜杠
+呈现 `.chezmoi.homeDir` 和 `.chezmoi.destDir`，用反斜杠呈现 `joinPath` 的结果。
+两个 Windows job 都未进入 apply。Git include 仍待原生 apply job 读回配置来源。
+[托管运行 44885242196](https://github.com/kangmingxuan/oh-my-devenv/actions/runs/44885242196)
 
 在依赖某一项的阶段开始前解决该项。
 

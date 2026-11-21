@@ -1,19 +1,24 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-function Update-HookPath {
-    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseShouldProcessForStateChangingFunctions', '',
-        Justification = 'Changes the current hook process environment.')]
-    param()
+. (Join-Path $PSScriptRoot '../../dot_config/oh-my-devenv/powershell/environment.ps1')
 
+function Get-HookPath {
     # Retain commands available to the caller, including CI tool paths.
     $parts = @(
         $env:PATH
         [Environment]::GetEnvironmentVariable('Path', 'Machine')
         [Environment]::GetEnvironmentVariable('Path', 'User')
     )
-    $env:PATH = ($parts -split [IO.Path]::PathSeparator |
-        Where-Object { $_ } | Select-Object -Unique) -join [IO.Path]::PathSeparator
+    $parts -split [IO.Path]::PathSeparator | Where-Object { $_ } | Select-Object -Unique
+}
+
+function Update-HookPath {
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseShouldProcessForStateChangingFunctions', '',
+        Justification = 'Changes the current hook process environment.')]
+    param()
+
+    $env:PATH = (Get-HookPath) -join [IO.Path]::PathSeparator
 }
 
 function Get-HookBackupRoot {
@@ -26,11 +31,17 @@ function Get-HookBackupRoot {
         throw 'Set OH_MY_DEVENV_WINDOWS_BACKUP_ROOT in chezmoi scriptEnv for an alternate destination.'
     }
 
+    Get-LocalBackupRoot -Name 'chezmoi-first-run-backup'
+}
+
+function Get-LocalBackupRoot {
+    param([string]$Name)
+
     $localData = [Environment]::GetFolderPath('LocalApplicationData')
     if (-not $localData) {
         throw 'Windows did not resolve the LocalApplicationData known folder.'
     }
-    Join-Path $localData 'oh-my-devenv/chezmoi-first-run-backup'
+    Join-Path $localData "oh-my-devenv/$Name"
 }
 
 function Get-HookProfilePath {
@@ -49,6 +60,7 @@ function Invoke-NativeCommand {
     param(
         [Parameter(Mandatory)][string]$Executable,
         [Parameter(Mandatory)][string[]]$Arguments,
+        [hashtable]$Environment = @{},
         [switch]$AllowFailure
     )
 
@@ -60,6 +72,13 @@ function Invoke-NativeCommand {
     $start.StandardErrorEncoding = [Text.Encoding]::UTF8
     foreach ($argument in $Arguments) {
         $start.ArgumentList.Add($argument)
+    }
+    foreach ($key in $Environment.Keys) {
+        if ($null -eq $Environment[$key]) {
+            [void]$start.Environment.Remove($key)
+        } else {
+            $start.Environment[$key] = $Environment[$key]
+        }
     }
 
     $process = [Diagnostics.Process]::Start($start)
@@ -102,4 +121,17 @@ function Get-ManagedFile {
     } finally {
         [IO.Directory]::Delete($stateDirectory, $true)
     }
+}
+
+function Test-SshConfigRead {
+    param([string]$Diagnostic, [string]$Path)
+
+    $expected = ConvertTo-PathKey -Path $Path
+    foreach ($line in ($Diagnostic -split '\r?\n')) {
+        if ($line -match '^debug1: Reading configuration data (.+)$' -and
+            (ConvertTo-PathKey -Path $Matches[1]) -ceq $expected) {
+            return $true
+        }
+    }
+    $false
 }

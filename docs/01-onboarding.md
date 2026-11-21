@@ -34,9 +34,10 @@ $source = chezmoi source-path
 & (Join-Path $source 'bootstrap/windows/uninstall.ps1') -Apply
 ```
 
-Uninstall removes the managed profile line and managed files. It keeps the
-user profile, its remaining contents, local overlays, and backups. Use
-`chezmoi apply` to restore the managed configuration.
+Uninstall backs up the files it will remove and the profile it will edit.
+Review the verified backup under `%LOCALAPPDATA%\oh-my-devenv\chezmoi-uninstall-backup`.
+If backup fails, uninstall stops before it changes the profile or removes
+files. Use `chezmoi apply` to restore the managed configuration.
 
 ## What you'll have in 5 minutes on macOS and Linux
 

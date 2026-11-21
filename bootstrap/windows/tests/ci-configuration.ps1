@@ -52,9 +52,23 @@ function Assert-UnsafeSshAcl {
         }
         Write-Host "SSH rejected the unsafe ACL on '$Path'."
         Write-Host $result.Stderr
+        Assert-FixtureCheckFailure -Pattern 'Bad owner or permissions'
     } finally {
         Set-Acl -LiteralPath $Path -AclObject $original
     }
+}
+
+function Assert-FixtureCheckFailure {
+    param([string]$Pattern)
+
+    $result = Invoke-NativeCommand -Executable $pwsh -Arguments @(
+        '-NoProfile', '-File', (Join-Path $helpers 'check.ps1')
+        '-Destination', $destination, '-ProfilePath', $profilePath
+    ) -AllowFailure
+    if ($result.ExitCode -eq 0 -or ($result.Stderr + $result.Stdout) -notmatch $Pattern) {
+        throw "Expected the checker to fail with '$Pattern'.`n$($result.Stderr)`n$($result.Stdout)"
+    }
+    Write-Host $result.Stderr
 }
 
 function Initialize-SmokeStub {
@@ -72,7 +86,10 @@ class Stub
     static int Main(string[] args)
     {
         Console.OutputEncoding = System.Text.Encoding.UTF8;
-        if (Path.GetFileNameWithoutExtension(Environment.GetCommandLineArgs()[0]) != "ssh")
+        string program = Path.GetFileNameWithoutExtension(Environment.GetCommandLineArgs()[0]);
+        if (program == "mise" && args.Length == 2 && args[0] == "activate" && args[1] == "pwsh")
+            return 0;
+        if (program != "ssh")
         {
             File.AppendAllText(Environment.GetEnvironmentVariable("OH_MY_DEVENV_TEST_INSTALLERS"), "unexpected installer");
             return 97;
@@ -84,8 +101,8 @@ class Stub
         }
         if (args.Length != 3 || args[0] != "-v" || args[1] != "-G" || !args[2].EndsWith(".invalid"))
             return 98;
-        Console.Error.WriteLine("debug1: Reading configuration data " +
-            Path.Combine(Environment.GetEnvironmentVariable("OH_MY_DEVENV_TEST_HOME"), ".ssh", "config"));
+        string config = Path.Combine(Environment.GetEnvironmentVariable("OH_MY_DEVENV_TEST_HOME"), ".ssh", "config");
+        Console.Error.WriteLine("debug1: Reading configuration data " + config.Replace("\\", "\\\\"));
         return 0;
     }
 }
@@ -100,10 +117,13 @@ class Stub
 }
 
 $source = [IO.Path]::GetFullPath((Join-Path $helpers '../..'))
-$chezmoi = Get-Command -Name chezmoi -CommandType Application -ErrorAction Stop
-$git = Get-Command -Name git -CommandType Application -ErrorAction Stop
+$pwsh = Join-Path $PSHOME 'pwsh.exe'
+$uninstall = Join-Path $helpers 'uninstall.ps1'
+$chezmoi = Get-PathApplication -Name chezmoi
+$git = Get-PathApplication -Name git
 $fixture = [IO.Directory]::CreateTempSubdirectory('oh-my-devenv-windows-').FullName
 $backupRoot = Join-Path $fixture 'backups'
+$uninstallBackupRoot = Join-Path $fixture 'uninstall-backups'
 $config = Join-Path $fixture 'chezmoi.json'
 $fixtureConfig = @{
     data = @{ name = 'Windows CI'; email = 'smoke@example.invalid'; desktopBaseline = $true }
@@ -121,7 +141,7 @@ try {
         $openSsh = Join-Path $env:WINDIR 'System32/OpenSSH'
         $env:PATH = "$openSsh;$env:PATH"
     }
-    $ssh = Get-Command -Name ssh -CommandType Application -ErrorAction Stop
+    $ssh = Get-PathApplication -Name ssh
     if ($Mode -eq 'apply' -and $ssh.Source -ne (Join-Path $openSsh 'ssh.exe')) {
         throw "Expected Windows OpenSSH at '$openSsh'. Resolved '$($ssh.Source)'."
     }
@@ -133,6 +153,7 @@ try {
     $gitOverlay = Join-Path $destination '.config/oh-my-devenv/git/config'
     $miseConfig = Join-Path $destination '.config/mise/config.toml'
     $profileBody = Join-Path $destination '.config/oh-my-devenv/powershell/profile.ps1'
+    $profileEnvironment = Join-Path $destination '.config/oh-my-devenv/powershell/environment.ps1'
     $profileOverlay = Join-Path $destination '.config/oh-my-devenv/powershell/profile.local.ps1'
     $sshConfig = Join-Path $destination '.ssh/config'
     $sshOverlay = Join-Path $destination '.ssh/config.d/oh-my-devenv-fixture.conf'
@@ -164,7 +185,7 @@ try {
         $findings = @(
             Invoke-ScriptAnalyzer -Settings $settings -Path $helpers -Recurse
             Invoke-ScriptAnalyzer -Settings $settings -Path $renderedRoot -Recurse
-            Invoke-ScriptAnalyzer -Settings $settings -Path (Join-Path $source 'dot_config/oh-my-devenv/powershell/profile.ps1')
+            Invoke-ScriptAnalyzer -Settings $settings -Path (Join-Path $source 'dot_config/oh-my-devenv/powershell') -Recurse
         )
         if ($findings.Count) {
             $findings | Format-List
@@ -172,20 +193,68 @@ try {
         }
         Invoke-Pester -Path $PSScriptRoot -Output Detailed -CI
 
-        $blockedRoot = Join-Path $fixture 'blocked-backup-root'
-        Set-FixtureText -Path $blockedRoot -Content 'regular file'
-        $fixtureConfig.scriptEnv.OH_MY_DEVENV_WINDOWS_BACKUP_ROOT = $blockedRoot
-        Set-FixtureText -Path $config -Content ($fixtureConfig | ConvertTo-Json -Depth 4)
-        $failed = Invoke-FixtureChezmoi -Arguments @('apply', '--force') -AllowFailure
-        if ($failed.ExitCode -eq 0 -or ($failed.Stderr + $failed.Stdout) -notmatch 'First-run backup failed') {
-            throw "Expected a first-run backup error.`n$($failed.Stderr)`n$($failed.Stdout)"
+        # The mise file sorts before Git and proves a partial backup cannot authorize deletions.
+        $oldGit = "# pre-existing Git fixture`n"
+        Set-FixtureText -Path $gitConfig -Content $oldGit
+        $originalAcl = Get-Acl -LiteralPath $gitConfig
+        $blockedAcl = Get-Acl -LiteralPath $gitConfig
+        $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+        try {
+            $rule = [Security.AccessControl.FileSystemAccessRule]::new($identity.User, 'ReadData', 'Deny')
+        } finally {
+            $identity.Dispose()
         }
-        if ([IO.File]::ReadAllText($miseConfig) -cne $oldMise -or [IO.File]::Exists($gitConfig)) {
-            throw 'The failed first-run backup allowed changes to the destination.'
+        $blockedAcl.AddAccessRule($rule)
+        $uninstallOptions = @{
+            Apply = $true; Config = $config; Destination = $destination
+            ProfilePath = $profilePath; BackupRoot = $uninstallBackupRoot
         }
-        Write-Host "First-run backup failure stopped apply with exit $($failed.ExitCode)."
-        $fixtureConfig.scriptEnv.OH_MY_DEVENV_WINDOWS_BACKUP_ROOT = $backupRoot
-        Set-FixtureText -Path $config -Content ($fixtureConfig | ConvertTo-Json -Depth 4)
+        Set-Acl -LiteralPath $gitConfig -AclObject $blockedAcl
+        try {
+            if ($null -eq (Get-FileAttribute -Path $gitConfig)) {
+                throw 'The denied-read fixture must still have readable metadata.'
+            }
+            try {
+                $null = [IO.File]::ReadAllBytes($gitConfig)
+                throw 'The fixture ACL did not deny content reads.'
+            } catch [UnauthorizedAccessException] {
+                Write-Host 'The fixture denies content reads and permits metadata reads.'
+            }
+            $failed = Invoke-FixtureChezmoi -Arguments @('apply', '--force') -AllowFailure
+            if ($failed.ExitCode -eq 0 -or ($failed.Stderr + $failed.Stdout) -notmatch 'Could not back up') {
+                throw "Expected a first-run copy error.`n$($failed.Stderr)`n$($failed.Stdout)"
+            }
+            Write-Host "First-run copy failure stopped apply with exit $($failed.ExitCode)."
+            Write-Host $failed.Stderr
+            try {
+                & $uninstall @uninstallOptions
+                throw 'Uninstall should fail when a pre-delete copy fails.'
+            } catch {
+                if ($_ -notlike '*Pre-uninstall backup failed*Could not back up*') {
+                    throw
+                }
+                Write-Host $_
+            }
+        } finally {
+            Set-Acl -LiteralPath $gitConfig -AclObject $originalAcl
+        }
+        if ([IO.File]::ReadAllText($miseConfig) -cne $oldMise -or
+            [IO.File]::ReadAllText($gitConfig) -cne $oldGit -or
+            [IO.File]::ReadAllText($profilePath) -cne $oldProfile -or [IO.File]::Exists($profileBody)) {
+            throw 'The failed backups allowed changes to the destination.'
+        }
+        [IO.Directory]::Move($uninstallBackupRoot, (Join-Path $fixture 'failed-uninstall-backup'))
+        & $uninstall @uninstallOptions
+        $run = Get-ChildItem -LiteralPath $uninstallBackupRoot -Directory
+        $miseCopy = Get-BackupPath -Path $miseConfig -RunDirectory $run.FullName
+        $gitCopy = Get-BackupPath -Path $gitConfig -RunDirectory $run.FullName
+        if ([IO.File]::ReadAllText($miseCopy) -cne $oldMise -or [IO.File]::ReadAllText($gitCopy) -cne $oldGit -or
+            [IO.File]::Exists($miseConfig) -or [IO.File]::Exists($gitConfig)) {
+            throw 'Uninstall did not verify a backup and remove the pre-existing configuration.'
+        }
+        # Re-seed old mise content for the successful first-run backup assertion.
+        Set-FixtureText -Path $miseConfig -Content $oldMise
+        [IO.Directory]::Move($backupRoot, (Join-Path $fixture 'failed-backup'))
     }
 
     Invoke-FixtureApply
@@ -209,6 +278,20 @@ try {
     }
 
     if ($Mode -eq 'smoke') {
+        $installedProfile = [IO.File]::ReadAllText($profilePath)
+        Set-FixtureText -Path $profilePath -Content "return`n$installedProfile"
+        Assert-FixtureCheckFailure -Pattern 'profile body did not run'
+        Set-FixtureText -Path $profilePath -Content $installedProfile
+        $installedBody = [IO.File]::ReadAllText($profileBody)
+        $originalPath = $env:PATH
+        try {
+            $env:PATH = (@(Get-ManagedProfilePathEntry) + $originalPath) -join [IO.Path]::PathSeparator
+            Set-FixtureText -Path $profileBody -Content '$env:OH_MY_DEVENV_PROFILE_LOADED = ''1'''
+            Assert-FixtureCheckFailure -Pattern 'did not add .+ to PATH'
+        } finally {
+            $env:PATH = $originalPath
+            Set-FixtureText -Path $profileBody -Content $installedBody
+        }
         Set-FixtureText -Path $profilePath -Content $oldProfile
         Invoke-FixtureApply
         if ([IO.File]::Exists($env:OH_MY_DEVENV_TEST_INSTALLERS)) {
@@ -218,7 +301,6 @@ try {
     }
 
     $baselineProfile = [IO.File]::ReadAllText($profilePath)
-    $pwsh = Join-Path $PSHOME 'pwsh.exe'
     $probe = Invoke-NativeCommand -Executable $pwsh -Arguments @(
         '-NoLogo', '-NonInteractive', '-Command', '[Console]::Write($env:OH_MY_DEVENV_PROFILE_FIXTURE)'
     )
@@ -239,13 +321,12 @@ try {
     Assert-UnsafeSshAcl -Path $sshConfig
     Assert-UnsafeSshAcl -Path $sshOverlay
 
-    $uninstall = Join-Path $helpers 'uninstall.ps1'
     & $uninstall -Config $config
     if ([IO.File]::ReadAllText($profilePath) -cne $baselineProfile -or -not [IO.File]::Exists($profileBody)) {
         throw 'The uninstall preview changed the destination.'
     }
-    & $uninstall -Apply -Config $config
-    foreach ($target in @($gitConfig, $miseConfig, $profileBody, $sshConfig)) {
+    & $uninstall -Apply -Config $config -BackupRoot $uninstallBackupRoot
+    foreach ($target in @($gitConfig, $miseConfig, $profileBody, $profileEnvironment, $sshConfig)) {
         if ([IO.File]::Exists($target)) {
             throw "Uninstall kept managed target '$target'."
         }

@@ -35,6 +35,7 @@ function Read-ProfileFile {
         throw "Invalid profile encoding in '$Path'. Use UTF-8 or BOM-marked UTF-16."
     }
     @{
+        Bytes = $bytes
         Content = $content
         Encoding = $encoding
     }
@@ -107,6 +108,77 @@ function Remove-ManagedProfileLine {
     $updated = [regex]::Replace($profileFile.Content, (Get-ManagedProfilePattern -Destination $Destination), '')
     if ($updated -cne $profileFile.Content -and $PSCmdlet.ShouldProcess($ProfilePath, 'Remove managed profile line')) {
         $bytes = $profileFile.Encoding.GetPreamble() + $profileFile.Encoding.GetBytes($updated)
-        [IO.File]::WriteAllBytes($file.FullName, $bytes)
+        Write-ProfileReplacement -Path $file.FullName -Original $profileFile.Bytes -Bytes $bytes
     }
+}
+
+function Write-ProfileReplacement {
+    param([string]$Path, [byte[]]$Original, [byte[]]$Bytes)
+
+    $temporary = Join-Path ([IO.Path]::GetDirectoryName($Path)) ".oh-my-devenv-$(New-Guid).tmp"
+    $created = $false
+    try {
+        $writer = [IO.File]::Open($temporary, 'CreateNew', 'Write', 'None')
+        $created = $true
+        try {
+            $writer.Write($Bytes, 0, $Bytes.Length)
+            $writer.Flush($true)
+        } finally {
+            $writer.Dispose()
+        }
+        if (-not [Linq.Enumerable]::SequenceEqual[byte]($Bytes, [IO.File]::ReadAllBytes($temporary))) {
+            throw 'Could not verify the staged profile.'
+        }
+
+        # Allow atomic replacement while excluding in-place writers.
+        $sharing = [IO.FileShare]::Read -bor [IO.FileShare]::Delete
+        $reader = [IO.File]::Open($Path, 'Open', 'Read', $sharing)
+        try {
+            $currentHash = [Security.Cryptography.SHA256]::HashData($reader)
+            $originalHash = [Security.Cryptography.SHA256]::HashData($Original)
+            if (-not [Linq.Enumerable]::SequenceEqual[byte]($currentHash, $originalHash)) {
+                throw 'The original profile changed after it was read.'
+            }
+            [IO.File]::Replace($temporary, $Path, [NullString]::Value)
+        } finally {
+            $reader.Dispose()
+        }
+    } catch {
+        throw "Could not replace PowerShell profile '$Path'. $_"
+    } finally {
+        if ($created) {
+            [IO.File]::Delete($temporary)
+        }
+    }
+}
+
+function Get-ProfileProbePath {
+    $managed = @(Get-ManagedProfilePathEntry | ForEach-Object { ConvertTo-PathKey -Path $_ })
+    (Get-HookPath | Where-Object { (ConvertTo-PathKey -Path $_) -cnotin $managed }) -join [IO.Path]::PathSeparator
+}
+
+function Confirm-ManagedProfile {
+    param([string]$ProfilePath)
+
+    $arguments = @('-NoLogo', '-NonInteractive')
+    $fixtureProfile = (ConvertTo-PathKey -Path $ProfilePath) -cne
+        (ConvertTo-PathKey -Path $PROFILE.CurrentUserAllHosts)
+    if ($fixtureProfile) {
+        $arguments += '-NoProfile'
+    }
+    $arguments += @('-File', (Join-Path $PSScriptRoot 'profile-probe.ps1'))
+    if ($fixtureProfile) {
+        $arguments += @('-FixtureProfilePath', $ProfilePath)
+    }
+    $probeEnvironment = @{
+        PATH = Get-ProfileProbePath
+        OH_MY_DEVENV_PROFILE_LOADED = $null
+    }
+    $pwsh = Join-Path $PSHOME $(if ($IsWindows) { 'pwsh.exe' } else { 'pwsh' })
+    try {
+        $null = Invoke-NativeCommand -Executable $pwsh -Arguments $arguments -Environment $probeEnvironment
+    } catch {
+        throw "PowerShell profile check failed for '$ProfilePath'. $_"
+    }
+    Write-Host "PowerShell loaded the managed profile and restored its PATH entries."
 }

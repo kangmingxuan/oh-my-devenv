@@ -3,11 +3,16 @@ param(
     [switch]$Apply,
     [string]$Config,
     [string]$Destination = $HOME,
-    [string]$ProfilePath = $PROFILE.CurrentUserAllHosts
+    [string]$ProfilePath = $PROFILE.CurrentUserAllHosts,
+    [string]$BackupRoot
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+
+if (-not $IsWindows) {
+    throw 'The Windows uninstaller requires a Windows host.'
+}
 
 . (Join-Path $PSScriptRoot 'common.ps1')
 . (Join-Path $PSScriptRoot 'backup.ps1')
@@ -17,12 +22,13 @@ $ErrorActionPreference = 'Stop'
 if ($PSVersionTable.PSVersion -lt [version]'7.6') {
     throw "PowerShell 7.6 or later is required. Running $($PSVersionTable.PSVersion)."
 }
-if ([IO.Path]::GetFullPath($Destination) -ne [IO.Path]::GetFullPath($HOME) -and
-    -not $PSBoundParameters.ContainsKey('ProfilePath')) {
-    throw 'Specify -ProfilePath when using an alternate destination.'
+if ([IO.Path]::GetFullPath($Destination) -ne [IO.Path]::GetFullPath($HOME)) {
+    if (-not $PSBoundParameters.ContainsKey('ProfilePath') -or ($Apply -and -not $BackupRoot)) {
+        throw 'For alternate destinations, specify -ProfilePath and pass -BackupRoot with -Apply.'
+    }
 }
 
-$chezmoi = Get-Command -Name chezmoi -CommandType Application -ErrorAction Stop
+$chezmoi = Get-PathApplication -Name chezmoi
 $source = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
 $manifest = Join-Path $source 'bootstrap/manifests/local-overlays.tsv'
 $overlays = @(Read-LocalOverlay -Manifest $manifest)
@@ -61,10 +67,24 @@ if (-not $Apply) {
     }
     return
 }
-Remove-ManagedProfileLine -ProfilePath $ProfilePath -Destination $root
+$profileFile = Resolve-RegularFile -Path $ProfilePath
+$removeProfileLine = $null -ne $profileFile -and
+    (Read-ProfileFile -Path $profileFile.FullName).Content -cmatch (Get-ManagedProfilePattern -Destination $root)
+$backupCandidates = @($candidates | Where-Object { $_ })
+if ($removeProfileLine) {
+    $backupCandidates += $ProfilePath
+}
+if (-not $backupCandidates.Count -or -not $PSCmdlet.ShouldProcess($root, 'Back up and remove Windows configuration')) {
+    return
+}
+if (-not $BackupRoot) {
+    $BackupRoot = Get-LocalBackupRoot -Name 'chezmoi-uninstall-backup'
+}
+Backup-ExistingFile -Paths $backupCandidates -BackupRoot $BackupRoot -BeforeUninstall
+if ($removeProfileLine) {
+    Remove-ManagedProfileLine -ProfilePath $ProfilePath -Destination $root -Confirm:$false
+}
 foreach ($path in $candidates) {
-    if ($PSCmdlet.ShouldProcess($path, 'Remove managed file')) {
-        [IO.File]::Delete($path)
-        Write-Host "Removed '$path'."
-    }
+    [IO.File]::Delete($path)
+    Write-Host "Removed '$path'."
 }

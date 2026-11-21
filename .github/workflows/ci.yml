@@ -209,17 +209,21 @@ jobs:
           if ($PSVersionTable.PSVersion -lt [version]'7.6') {
             throw "The runner needs PowerShell 7.6 or later. Found $($PSVersionTable.PSVersion)."
           }
-          if (-not (Get-Command chezmoi -CommandType Application -ErrorAction SilentlyContinue)) {
+          . ./dot_config/oh-my-devenv/powershell/environment.ps1
+          if (-not (Get-PathApplication -Name chezmoi -Optional)) {
             choco install chezmoi --yes --no-progress
             if ($LASTEXITCODE -ne 0) { throw "Chocolatey exited with code $LASTEXITCODE." }
           }
-      - name: Prepare PowerShell validation modules
-        if: matrix.mode == 'smoke'
-        run: |
-          Install-Module PSScriptAnalyzer -Scope CurrentUser -Force
-          Install-Module Pester -MinimumVersion 5.7 -Scope CurrentUser -Force
       - name: Validate the Windows configuration
-        run: ./bootstrap/windows/tests/ci-configuration.ps1 -Mode '${{ matrix.mode }}'
+        run: |
+          if ('${{ matrix.mode }}' -eq 'smoke') {
+            $modules = @{ PSScriptAnalyzer = '1.24.0'; Pester = '5.7.1' }
+            foreach ($name in $modules.Keys) {
+              Install-Module -Name $name -RequiredVersion $modules[$name] -Scope CurrentUser -Force
+              Import-Module -Name $name -RequiredVersion $modules[$name]
+            }
+          }
+          ./bootstrap/windows/tests/ci-configuration.ps1 -Mode '${{ matrix.mode }}'
 
   # The one required status check on main. A job skipped by a condition reports
   # success, and a skipped matrix job reports its unexpanded name, so branch

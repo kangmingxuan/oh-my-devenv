@@ -86,15 +86,22 @@ Describe 'First-run backup' {
         [IO.File]::WriteAllText($real, 'target')
         $null = [IO.File]::CreateSymbolicLink($link, $real)
         $null = [IO.File]::CreateSymbolicLink($dangling, (Join-Path $TestDrive 'missing'))
-        $null = [IO.Directory]::CreateSymbolicLink($directoryLink, $TestDrive)
-
-        Backup-ExistingFile -Paths @($link, $dangling) -BackupRoot $root
-        $run = Get-ChildItem -LiteralPath $root -Directory
-        $copy = Get-BackupPath -Path $link -RunDirectory $run.FullName
-        [IO.File]::ReadAllText($copy) | Should -BeExactly 'target'
-        [IO.FileInfo]::new($copy).LinkTarget | Should -BeNullOrEmpty
-        (Get-BackupPath -Path $dangling -RunDirectory $run.FullName) | Should -Not -Exist
-        { Backup-ExistingFile -Paths @($directoryLink) -BackupRoot $root } | Should -Throw '*found a directory*'
+        $empty = [IO.Directory]::CreateTempSubdirectory('oh-my-devenv-link-target-').FullName
+        try {
+            $null = [IO.Directory]::CreateSymbolicLink($directoryLink, $empty)
+            Backup-ExistingFile -Paths @($link, $dangling) -BackupRoot $root
+            $run = Get-ChildItem -LiteralPath $root -Directory
+            $copy = Get-BackupPath -Path $link -RunDirectory $run.FullName
+            [IO.File]::ReadAllText($copy) | Should -BeExactly 'target'
+            [IO.FileInfo]::new($copy).LinkTarget | Should -BeNullOrEmpty
+            (Get-BackupPath -Path $dangling -RunDirectory $run.FullName) | Should -Not -Exist
+            { Backup-ExistingFile -Paths @($directoryLink) -BackupRoot $root } | Should -Throw '*found a directory*'
+        } finally {
+            if ([IO.Directory]::Exists($directoryLink)) {
+                [IO.Directory]::Delete($directoryLink)
+            }
+            [IO.Directory]::Delete($empty)
+        }
     }
 
     It 'does not create a run directory without existing files' -Skip:(-not $IsWindows) {
@@ -102,6 +109,98 @@ Describe 'First-run backup' {
         Backup-ExistingFile -Paths @() -BackupRoot $root
         Backup-ExistingFile -Paths @((Join-Path $TestDrive 'missing')) -BackupRoot $root
         $root | Should -Not -Exist
+    }
+}
+
+Describe 'Application and SSH diagnostics' {
+    It 'uses the first application on PATH and executes it' {
+        $first = [IO.Directory]::CreateDirectory((Join-Path $TestDrive 'first')).FullName
+        $second = [IO.Directory]::CreateDirectory((Join-Path $TestDrive 'second')).FullName
+        $name = 'oh-my-devenv-test-command'
+        if ($IsWindows) {
+            $firstFile = Join-Path $first "$name.exe"
+            $secondFile = Join-Path $second "$name.exe"
+            $system = Join-Path $env:WINDIR 'System32'
+            [IO.File]::Copy((Join-Path $system 'cmd.exe'), $firstFile)
+            [IO.File]::Copy((Join-Path $system 'whoami.exe'), $secondFile)
+            $arguments = @('/d', '/c', 'echo first')
+        } else {
+            $firstFile = Join-Path $first $name
+            $secondFile = Join-Path $second $name
+            [IO.File]::WriteAllText($firstFile, "#!/bin/sh`necho first`n")
+            [IO.File]::WriteAllText($secondFile, "#!/bin/sh`necho second`n")
+            $mode = [IO.UnixFileMode]::UserRead -bor [IO.UnixFileMode]::UserExecute
+            [IO.File]::SetUnixFileMode($firstFile, $mode)
+            [IO.File]::SetUnixFileMode($secondFile, $mode)
+            $arguments = @('test')
+        }
+        $originalPath = $env:PATH
+        try {
+            $env:PATH = ($first, $second, $originalPath) -join [IO.Path]::PathSeparator
+            (Get-PathApplication -Name $name).Source | Should -BeExactly $firstFile
+            $result = Invoke-NativeCommand -Executable (Get-PathApplication -Name $name).Source -Arguments $arguments
+            $result.Stdout.Trim() | Should -BeExactly 'first'
+            $env:PATH = ($second, $first, $originalPath) -join [IO.Path]::PathSeparator
+            (Get-PathApplication -Name $name).Source | Should -BeExactly $secondFile
+        } finally {
+            $env:PATH = $originalPath
+        }
+    }
+
+    It 'matches the doubled-backslash diagnostic and rejects another user path' {
+        $diagnostic = 'debug1: Reading configuration data c:\\USERS\\Alice/.ssh/config'
+        Test-SshConfigRead -Diagnostic $diagnostic -Path 'C:/Users/alice/.ssh/config' | Should -BeTrue
+        Test-SshConfigRead -Diagnostic $diagnostic -Path 'C:/Users/other/.ssh/config' | Should -BeFalse
+    }
+}
+
+Describe 'Uninstall platform boundary' {
+    It 'rejects Unix before trying to list targets' -Skip:$IsWindows {
+        $uninstall = Join-Path $helpers 'uninstall.ps1'
+        { & $uninstall -Apply -Destination $TestDrive } | Should -Throw '*requires a Windows host*'
+    }
+}
+
+Describe 'Verified profile replacement' {
+    It 'preserves an edit made after the profile was read' {
+        $path = Join-Path $TestDrive 'edited.ps1'
+        [IO.File]::WriteAllText($path, 'concurrent edit')
+        $original = [Text.Encoding]::UTF8.GetBytes('original')
+        $replacement = [Text.Encoding]::UTF8.GetBytes('replacement')
+        { Write-ProfileReplacement -Path $path -Original $original -Bytes $replacement } |
+            Should -Throw '*original profile changed*'
+        [IO.File]::ReadAllText($path) | Should -BeExactly 'concurrent edit'
+        @(Get-ChildItem -LiteralPath $TestDrive -Filter '.oh-my-devenv-*.tmp' -Force).Count | Should -Be 0
+    }
+
+    It 'leaves the profile intact when staging cannot create the sibling file' {
+        $path = Join-Path $TestDrive 'locked.ps1'
+        [IO.File]::WriteAllText($path, 'original')
+        $original = [IO.File]::ReadAllBytes($path)
+        $replacement = [Text.Encoding]::UTF8.GetBytes('replacement')
+        $guid = New-Guid
+        Mock New-Guid { $guid }
+        $stagingPath = Join-Path $TestDrive ".oh-my-devenv-$guid.tmp"
+        [IO.File]::WriteAllText($stagingPath, 'occupied')
+        { Write-ProfileReplacement -Path $path -Original $original -Bytes $replacement } | Should -Throw
+        [IO.File]::ReadAllText($path) | Should -BeExactly 'original'
+        [IO.File]::ReadAllText($stagingPath) | Should -BeExactly 'occupied'
+    }
+}
+
+Describe 'Fresh profile probe' {
+    It 'rejects a profile that returns before reaching its managed line' {
+        Mock Get-ProfileProbePath { $env:PATH }
+        $profilePath = Join-Path $TestDrive 'return-early.ps1'
+        $line = Get-ManagedProfileLine -Destination $TestDrive
+        [IO.File]::WriteAllText($profilePath, "return`n$line`n")
+        { Confirm-ManagedProfile -ProfilePath $profilePath } | Should -Throw '*did not run to completion*'
+    }
+
+    It 'strips every equivalent managed entry from the merged process and machine PATH' {
+        Mock Get-ManagedProfilePathEntry { 'C:/Users/Example/.local/bin' }
+        Mock Get-HookPath { @('C:/Users/Example/.local/bin', 'C:/Windows', 'c:\USERS\EXAMPLE\.local\bin\') }
+        Get-ProfileProbePath | Should -BeExactly 'C:/Windows'
     }
 }
 
