@@ -2611,11 +2611,14 @@ chezmoi execute-template --init \
 assert_toml_section_contains "$tmp_chezmoi_toml" "data" 'name = "Smoke Tests"'
 assert_toml_section_contains "$tmp_chezmoi_toml" "data" 'email = "smoke@example.com"'
 assert_toml_section_contains "$tmp_chezmoi_toml" "data" 'desktopBaseline = true'
+assert_file_not_contains "$tmp_chezmoi_toml" '[interpreters.ps1]'
 
 windows_init_override="{\"name\":\"Smoke Tests\",\"email\":\"smoke@example.com\",\"chezmoi\":$windows_chezmoi_data}"
 chezmoi --source="$repo_root" --override-data "$windows_init_override" \
   execute-template --init --file "$repo_root/.chezmoi.toml.tmpl" >"$tmp_dir/windows-init.toml"
 assert_toml_section_contains "$tmp_dir/windows-init.toml" "data" 'desktopBaseline = true'
+assert_toml_section_contains "$tmp_dir/windows-init.toml" "interpreters.ps1" 'command = "pwsh"'
+assert_toml_section_contains "$tmp_dir/windows-init.toml" "interpreters.ps1" 'args = ["-NoLogo", "-NoProfile", "-File"]'
 chezmoi --source="$repo_root" --override-data "$windows_init_override" \
   execute-template --init --file "$repo_root/.chezmoi.toml.tmpl" \
   --promptBool 'Install Windows desktop baseline (PowerToys + Windows Terminal settings + Maple Mono NF CN)=false' >"$tmp_dir/windows-init.toml"

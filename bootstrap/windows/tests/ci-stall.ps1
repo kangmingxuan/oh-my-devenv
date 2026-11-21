@@ -38,13 +38,25 @@ function Invoke-StallProbe {
             $exitCode = $process.ExitCode
         }
         Write-Host "END $Name exit=$exitCode elapsed=$($timer.Elapsed.TotalSeconds.ToString('F2'))s"
-        foreach ($stream in @($stdout, $stderr)) {
-            if ($stream.Wait(2000) -and $stream.Result) { Write-Host $stream.Result }
-        }
-        $exitCode
+        $output = if ($stdout.Wait(2000)) { $stdout.Result }
+        if ($output) { Write-Host $output }
+        if ($stderr.Wait(2000) -and $stderr.Result) { Write-Host $stderr.Result }
+        @{ ExitCode = $exitCode; Stdout = $output }
     } finally {
         $process.Dispose()
     }
+}
+
+function Invoke-WrappedStallProbe {
+    param([string]$Name, [string]$Executable, [string[]]$Arguments, [switch]$CloseInput)
+
+    $literals = @(foreach ($value in @($Executable) + $Arguments) {
+        "'" + [Management.Automation.Language.CodeGeneration]::EscapeSingleQuotedStringContent($value) + "'"
+    })
+    $command = '& ' + ($literals -join ' ') + '; exit $LASTEXITCODE'
+    Invoke-StallProbe -Name $Name -Executable $pwsh -Arguments @(
+        '-NoLogo', '-NoProfile', '-NonInteractive', '-Command', $command
+    ) -CloseInput:$CloseInput
 }
 
 $root = [IO.Path]::GetFullPath((Join-Path $helpers '../..'))
@@ -69,17 +81,28 @@ try {
     Write-Host "Resolved Oh My Posh executable: $($posh.Source)"
     $null = Invoke-StallProbe -Name 'pwsh with profile' -Executable $pwsh -Arguments @('-NoLogo', '-Command', 'exit 0')
     $null = Invoke-StallProbe -Name 'pwsh without profile' -Executable $pwsh -Arguments @('-NoLogo', '-NoProfile', '-Command', 'exit 0')
-    $null = Invoke-StallProbe -Name 'Oh My Posh init' -Executable $posh.Source -Arguments @('init', 'pwsh', '--config', $theme)
-    $null = Invoke-StallProbe -Name 'Oh My Posh version' -Executable $posh.Source -Arguments @('--version')
-    $null = Invoke-StallProbe -Name 'Oh My Posh init with closed stdin' -Executable $posh.Source -Arguments @('init', 'pwsh', '--config', $theme) -CloseInput
-    $trace = 'Set-PSDebug -Trace 1; ' + (Get-ManagedProfileLine -Destination $fixture.FullName)
-    $null = Invoke-StallProbe -Name 'trace managed profile' -Executable $pwsh -Arguments @('-NoLogo', '-NoProfile', '-Command', $trace)
     $desktop = Join-Path $root 'bootstrap/manifests/desktop/winget-packages.json'
     $null = Read-WinGetPackageManifest -Path $desktop
-    $null = Invoke-StallProbe -Name 'PowerToys import' -Executable $winget.Source -Arguments @(
+    $null = Invoke-WrappedStallProbe -Name 'PowerToys import' -Executable $winget.Source -Arguments @(
         'import', '--import-file', $desktop, '--no-upgrade', '--accept-package-agreements',
         '--accept-source-agreements', '--disable-interactivity'
     )
+    $null = Invoke-WrappedStallProbe -Name 'Oh My Posh version' -Executable $posh.Source -Arguments @('--version')
+    $null = Invoke-WrappedStallProbe -Name 'Oh My Posh init' -Executable $posh.Source -Arguments @('init', 'pwsh', '--config', $theme)
+    $null = Invoke-WrappedStallProbe -Name 'Oh My Posh init with closed stdin' -Executable $posh.Source -Arguments @(
+        'init', 'pwsh', '--config', $theme
+    ) -CloseInput
+    $trace = 'Set-PSDebug -Trace 1; ' + (Get-ManagedProfileLine -Destination $fixture.FullName)
+    $null = Invoke-StallProbe -Name 'trace managed profile' -Executable $pwsh -Arguments @('-NoLogo', '-NoProfile', '-Command', $trace)
+    $windowsPowerShell = Join-Path $env:WINDIR 'System32/WindowsPowerShell/v1.0/powershell.exe'
+    $package = Invoke-StallProbe -Name 'Oh My Posh package location' -Executable $windowsPowerShell -Arguments @(
+        '-NoProfile', '-NonInteractive', '-Command', "(Get-AppxPackage -Name 'ohmyposh.cli').InstallLocation"
+    )
+    if ($package.ExitCode -eq 0 -and $package.Stdout.Trim()) {
+        $binary = Join-Path $package.Stdout.Trim() 'oh-my-posh.exe'
+        $null = Invoke-WrappedStallProbe -Name 'Oh My Posh package binary version' -Executable $binary -Arguments @('--version')
+        $null = Invoke-WrappedStallProbe -Name 'Oh My Posh package binary init' -Executable $binary -Arguments @('init', 'pwsh', '--config', $theme)
+    }
 } finally {
     if ($profileExisted) {
         [IO.File]::WriteAllBytes($profilePath, $profileBytes)

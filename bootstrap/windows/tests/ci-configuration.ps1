@@ -21,17 +21,6 @@ function Invoke-FixtureChezmoi {
 }
 
 function Invoke-FixtureApply {
-    if ($Mode -eq 'apply') {
-        $text = & $chezmoi.Source @chezmoiArgs apply --force --verbose | ForEach-Object {
-            Write-Host $_
-            $_
-        }
-        if ($LASTEXITCODE -ne 0 -or ($text -join "`n") -notmatch 'All checks passed\.') {
-            throw "The hosted Windows apply did not pass (exit $LASTEXITCODE)."
-        }
-        return
-    }
-
     $result = Invoke-FixtureChezmoi -Arguments @('apply', '--force')
     Write-Host $result.Stdout
     Write-Host $result.Stderr
@@ -276,6 +265,16 @@ try {
     $chezmoiArgs = @(
         "--source=$source", "--config=$config", "--destination=$destination"
     )
+    $renderedConfig = Join-Path $fixture 'rendered-config.toml'
+    $renderConfig = Invoke-FixtureChezmoi -Arguments @(
+        '--override-data', ($fixtureConfig.data | ConvertTo-Json -Compress), 'execute-template',
+        '--init', '--file', (Join-Path $source '.chezmoi.toml.tmpl')
+    )
+    Set-FixtureText -Path $renderedConfig -Content $renderConfig.Stdout
+    $effectiveConfig = Invoke-NativeCommand -Executable $chezmoi.Source -Arguments @(
+        "--source=$source", "--config=$renderedConfig", 'dump-config', '--format=json'
+    )
+    $fixtureConfig.interpreters = (ConvertFrom-Json -InputObject $effectiveConfig.Stdout -AsHashtable).interpreters
     $gitConfig = Join-Path $destination '.gitconfig'
     if ($Mode -eq 'smoke') {
         $env:GIT_CONFIG_GLOBAL = $gitConfig

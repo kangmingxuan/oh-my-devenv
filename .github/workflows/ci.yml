@@ -230,6 +230,11 @@ jobs:
         if: matrix.mode == 'apply'
         shell: pwsh -NoLogo -NoProfile -NonInteractive -Command ". '{0}'"
         run: ./bootstrap/windows/tests/ci-stall.ps1
+      - name: Verify the Windows hook interpreter
+        if: matrix.mode == 'apply'
+        timeout-minutes: 4
+        shell: pwsh -NoLogo -NoProfile -NonInteractive -Command ". '{0}'"
+        run: ./bootstrap/windows/tests/ci-configuration.ps1 -Mode apply
       - name: Report the Windows installer diagnostics
         if: failure() && matrix.mode == 'apply'
         shell: pwsh -NoLogo -NoProfile -NonInteractive -Command ". '{0}'"

@@ -15,6 +15,10 @@ PowerShell must be 7.6 or later. Check the effective execution policy with
 `Get-ExecutionPolicy` inside `pwsh`. If policy blocks the hooks, the source,
 or an installer, stop and contact the device administrator.
 
+If you already have a chezmoi configuration, run `chezmoi init` before the
+next apply to pick up the Windows hook interpreter settings. Windows hooks use
+`pwsh -NoProfile`. The environment check starts a separate shell to verify the profile.
+
 The system baseline installs Oh My Posh. A new PowerShell session loads its
 managed robbyrussell theme from disk. The local PowerShell overlay runs after
 initialization and can override the prompt.

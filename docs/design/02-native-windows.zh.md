@@ -125,7 +125,8 @@ hook 30 使用 winget，让 mise 与其他系统工具来自同一个包管理�
 - 在第一次 `chezmoi init --apply` 之前，要求 PowerShell 7.6 或更高版本与 `git`、`chezmoi` 一起作为前置条件。7.6 是当前的 LTS 分支。PowerShell 支持生命周期表给出的支持结束日期是 2028-11-14，7.4 和 7.5 是 2026-11-10。Microsoft Lifecycle 目录显示的日期各晚一天；本设计采用较早的日期。本设计用到的所有 PowerShell 功能在 7.6 中都有。
 - 快速开始用 `winget install --id Microsoft.PowerShell --exact --source winget` 安装 PowerShell。在使用不受限 winget 源的全新客户端上，省略 `--version` 会选择最高的适用版本，它可能是非 LTS 版本。已有安装和源策略可能改变结果或导致安装失败。检查过的 winget 目录中没有单独的 LTS 包 ID。
 - Windows hook 和辅助脚本只面向 PowerShell 7.6 或更高版本编写。
-- 理由：chezmoi 用 `pwsh` 运行 `.ps1` 脚本，`pwsh` 不可用时回退到 Windows PowerShell。在首次 apply 中安装 `pwsh` 的 hook 帮不了同一次 apply 中后续的 hook，因为正在运行的 chezmoi 进程保留原来的 `PATH`。设一个前置条件，比让每个 hook 都兼容 5.1 更简单。
+- 在 Windows 上，`.chezmoi.toml.tmpl` 将 `[interpreters.ps1]` 设为 `pwsh -NoLogo -NoProfile -File`。hook 独立于用户的 PowerShell profile 运行。hook 15 维护 profile 的受管行，hook 60 在单独的 shell 中验证启动。已有配置时，在 apply 前运行 `chezmoi init` 刷新配置。[chezmoi 解释器配置](https://www.chezmoi.io/reference/configuration-file/interpreters/)。
+- 在启动 chezmoi 前安装 `pwsh`，让每个 hook 都能从初始 `PATH` 找到解释器。
 - 正在运行的 PowerShell 版本低于 7.6 时，hook 00 失败。这只是兼容性下限；hook 00 不检查支持状态。与其他前置条件一样，由用户让 PowerShell 保持在受支持的版本并装上最新的服务更新。把最低版本写进 `AGENTS.md`，与 Bash 3.2 规则并列。
 - 每个脚本以 `Set-StrictMode -Version Latest` 和 `$ErrorActionPreference = 'Stop'` 开头。
 - 检查每个原生命令的退出码。默认情况下，原生命令失败时 `$ErrorActionPreference` 不会中止执行。

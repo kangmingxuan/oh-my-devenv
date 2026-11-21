@@ -28,6 +28,11 @@
     # Match status output: routine run_* hooks are reviewed through git,
     # not as destination-file drift.
     exclude = ["scripts"]
+{{ if eq .chezmoi.os "windows" }}
+[interpreters.ps1]
+    command = "pwsh"
+    args = ["-NoLogo", "-NoProfile", "-File"]
+{{- end }}
 
 [data]
     name = {{ $gitName | quote }}
