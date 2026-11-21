@@ -52,6 +52,9 @@ bootstrap/**
 .config/oh-my-devenv
 .config/oh-my-devenv/powershell
 .config/oh-my-devenv/powershell/**
-AppData/Local/Microsoft/Windows Terminal/Fragments/oh-my-devenv
-AppData/Local/Microsoft/Windows Terminal/Fragments/oh-my-devenv/**
+{{ end -}}
+{{ if not (and (eq .chezmoi.os "windows") (.desktopBaseline | default false)) -}}
+.chezmoiscripts/22-install-desktop-assets.ps1
+AppData
+AppData/**
 {{ end -}}

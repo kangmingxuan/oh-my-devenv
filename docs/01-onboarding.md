@@ -8,10 +8,19 @@ This page goes deeper on the first install after you finish the [Quick Start](..
 
 Follow the [Windows quick start](../README.md#native-windows-quick-start). A
 successful apply configures Git, OpenSSH, and mise under your home directory
-and deploys the PowerShell profile body. It prints `All checks passed.` after
-checking the managed files and confirming that Git and OpenSSH use the managed
-user configuration. PowerShell must be 7.6 or later. Check the effective execution
-policy with `Get-ExecutionPolicy` inside `pwsh`. Stop if policy blocks the hooks.
+and deploys the PowerShell profile body. It imports the user-scope packages in
+`bootstrap/manifests/system/winget-packages.json` from the built-in `winget`
+source. Run `winget upgrade` separately when you want to upgrade packages.
+PowerShell must be 7.6 or later. Check the effective execution policy with
+`Get-ExecutionPolicy` inside `pwsh`. If policy blocks the hooks, the source,
+or an installer, stop and contact the device administrator.
+
+The desktop option requires Windows Terminal on `PATH` and the default
+LocalAppData location under your home directory. It installs the Maple Mono NF CN
+faces for the current user and deploys a Windows Terminal fragment for the
+PowerShell profile. Sign out and back in if Windows Terminal cannot find the new
+font. Apply prints `All checks passed.` after the configuration, system packages,
+and any enabled desktop assets pass inspection.
 
 On the first apply, review any backup under
 `%LOCALAPPDATA%\oh-my-devenv\chezmoi-first-run-backup`. The path follows the
@@ -40,8 +49,10 @@ because the pre-delete backup holds the content seen when it ran.
 Uninstall backs up the files it will remove and the profile it will edit.
 Review the verified backup under `%LOCALAPPDATA%\oh-my-devenv\chezmoi-uninstall-backup`.
 If backup fails, uninstall stops before it changes the profile or removes
-files. After removal, uninstall resets chezmoi's script and entry state so that
-the next `chezmoi apply` backs up any files that already exist at managed targets.
+files. The phase-3 uninstall removes the managed Terminal fragment and leaves the
+installed system packages and fonts in place. After removal, uninstall resets
+chezmoi's script and entry state so that the next `chezmoi apply` backs up any
+files that already exist at managed targets.
 If apply used a custom configuration file, pass the same file to uninstall with
 `-Config`.
 

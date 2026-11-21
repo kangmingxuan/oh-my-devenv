@@ -1,6 +1,6 @@
 # Technical Design: Native Windows Platform
 
-Status: accepted. Phase 2 (configuration only) is implemented. Phases 3–5 have not started.
+Status: accepted. Phase 3 (system packages and desktop baseline) is implemented. Hosted Windows validation is pending. Phases 4–5 have not started.
 
 ## 1. Summary
 
@@ -30,7 +30,7 @@ The user made these decisions on 2026-11-20, except where another date is stated
 | Ask for design reviews from Gemini 4 Argon and Kimi K3.1 Pro | The user asked Claude to weigh these reviews together with the Codex fact-checks. |
 | Persist the managed directories in the user `Path` | The user decided this on 2026-11-21, so that applications started outside PowerShell find the managed tools. Claude designed the mechanism in section 7. |
 
-Claude proposed every other decision in this document within the scope above. Section 16 lists which review findings Claude adopted. Each decision is open for user review before implementation.
+Claude proposed every other decision in this document within the scope above. Section 16 lists which review findings Claude adopted. The user approved phase 3 on 2026-11-21 and deferred the first live Windows apply until after all planned phases. Claude decided the phase-3 package inventory, scope, installer and checker behavior, device-policy handling, desktop installation and validation, and the phase-3 uninstall boundary within that approval.
 
 ## 3. Goals and Non-Goals
 
@@ -134,6 +134,15 @@ Every hook that runs in the chezmoi process inherits the `PATH` that chezmoi sta
 1. Read the current machine and user `Path` values.
 2. Prepend the managed directories: the mise shims directory under `%LOCALAPPDATA%\mise`, `~/.local/bin`, and `$GOBIN`.
 3. Set `GOPATH` and `GOBIN` to the same defaults that the Unix env templates use (`~/go` and `$GOPATH/bin`).
+
+In phase 3, the hook helper merges the process, machine, and current user
+`Path` values. WinGet writes user-scope portable paths to
+`HKCU\Environment\Path`. With symlink support, it uses
+`%LOCALAPPDATA%\Microsoft\WinGet\Links`. Without it, WinGet can
+add the package directory. The checker reads those values again after
+hook 20. The phase-4 steps above add the managed mise and tool directories.
+[WinGet portable installer](https://github.com/microsoft/winget-cli/blob/master/src/AppInstallerCLICore/PortableInstaller.cpp),
+[WinGet Path registry implementation](https://github.com/microsoft/winget-cli/blob/master/src/AppInstallerCommonCore/PathVariable.cpp).
 
 ### Persistent user Path
 
@@ -239,7 +248,7 @@ The baseline does not own Windows Terminal's `settings.json`, so the settings th
 - Location: `%LOCALAPPDATA%\Microsoft\Windows Terminal\Fragments\oh-my-devenv\`. This is the documented per-user fragment location. The folder is outside Documents, so Documents redirection does not move it.
 - The source path `AppData/Local/...` maps to the default LocalAppData location under the home directory. LocalAppData is a known folder and can have a different location. Hook 22 and `check.ps1` compare the effective LocalAppData path with the default, and fail with a clear unsupported-state message when they differ.
 - A fragment can add profiles and color schemes, and it can update the built-in and dynamic profiles. It cannot change global settings.
-- The fragment sets the font face from the `desktop-font-family` partial on the PowerShell 7 profile.
+- The fragment uses `profiles[].updates` with the preferred dynamic PowerShell profile GUID `{574e775e-4f2a-5b96-ac1e-a2962a402336}`. It sets `font.face` from the `desktop-font-family` partial. [Fragment format](https://learn.microsoft.com/en-us/windows/terminal/json-fragment-extensions), [PowerShell profile generator](https://github.com/microsoft/terminal/blob/main/src/cascadia/TerminalSettingsModel/PowershellCoreProfileGenerator.cpp), [Font settings](https://learn.microsoft.com/en-us/windows/terminal/customize-settings/profile-appearance#font-face).
 - Deploy the fragment only when `desktopBaseline` is true.
 
 ### XDG
@@ -256,36 +265,41 @@ The file is required, not optional. The Git for Windows installer sets `core.aut
 
 Use `winget import` with a JSON file in the format that `winget export` produces.
 
-- Leave the `Version` field out of each entry. The Unix system manifests do not pin versions either.
+- Use the [WinGet 2.0 export schema](https://github.com/microsoft/winget-cli/blob/master/schemas/JSON/packages/packages.schema.2.0.json) with the built-in `winget` source. Set `Scope` to `user` on each entry and omit `Version`.
 - Run the import without interactive prompts and accept the agreements on the command line.
 - Pass `--no-upgrade`. Hook 20 ensures that each package is present; upgrades stay a separate user action (`winget upgrade`). An installer upgrade can need elevation or a restart, which a hook must not trigger. The Arch Linux path also leaves a full upgrade to the user.
-- Hook 20 fails with a clear error when `winget` is not available or when an entry does not install. Do not pass `--ignore-unavailable`.
+- Hook 20 fails when WinGet is missing, the source cannot be opened, or an install fails. The error identifies the source and manifest entries and includes the WinGet diagnostic. Device policy can block the source or installation. Use the existing source and contact the device administrator if policy blocks it.
+- `check.ps1` reads IDs from the manifest and runs `winget list --id <id> --exact --source winget` for each. It reports all absent IDs and identifies source or other command failures. [WinGet list](https://learn.microsoft.com/en-us/windows/package-manager/winget/list).
 
-Starting inventory, derived from the Unix system manifests. Verify each package ID with `winget show` in phase 3.
+Claude chose the starting inventory from the Unix baseline while the user
+inventory is pending. The [Microsoft catalog](https://github.com/microsoft/winget-pkgs/tree/master/manifests)
+confirms the package IDs and installer types. Actual installation without
+elevation still needs Windows evidence.
 
 | Unix entry | Windows decision |
 | --- | --- |
-| `git` | Include |
+| `git` | Include `Git.Git`. WinGet has a user-scope Inno installer. |
 | `curl` | Skip; Windows ships `curl.exe` |
 | `wget` | Skip; use `curl.exe` |
 | `ca-certificates`, `bash-completion`, `zsh` | Not applicable |
 | `build-essential`, `pkg-config` | Skip; decide on a native toolchain after the inventory |
 | `tmux` | Skip; decide on a native terminal multiplexer after the inventory |
-| `jq`, `yq`, `ripgrep`, `fzf`, `fd`, `bat` | Include |
-| `direnv` | Include only after its PowerShell hook is verified |
+| `jq`, `yq`, `ripgrep`, `fzf`, `fd`, `bat` | Include `jqlang.jq`, `MikeFarah.yq`, `BurntSushi.ripgrep.MSVC`, `junegunn.fzf`, `sharkdp.fd`, and `sharkdp.bat`. WinGet has portable installers. The fzf MSI is machine scope. |
+| `direnv` | Skip. The [upstream implementation](https://github.com/direnv/direnv#how-it-works) evaluates `.envrc` in Bash. |
 | `tree`, `zip`, `unzip` | Skip; Windows has built-in equivalents |
-| `shellcheck`, `shfmt` | Include, so this repository can be edited on Windows |
+| `shellcheck`, `shfmt` | Include the portable `koalaman.shellcheck` and `mvdan.shfmt` for source editing. The inspected installers offer x64 for both and x86 for shfmt. Native arm64 installers were absent. |
 | `gnupg`, `pinentry-mac` | Decide after the inventory |
-| `gh` | Include |
+| `gh` | Include `GitHub.cli`. Use its portable installer. Its MSI is machine scope. |
 
 ## 11. Desktop Baseline
 
 On Windows, the desktop baseline is the Maple Mono NF CN font and the Windows Terminal fragment.
 
-- Install the font per user, without elevation. Read the URL, digest, and required faces from `maple-mono-nf-cn.env`.
-- Verify the digest before installation, as the Linux installer does.
-- Windows Terminal ships with Windows 11, so the baseline does not install it. It can still be missing, for example after removal by policy. Hook 22 and `check.ps1` check that Windows Terminal is installed when `desktopBaseline` is true, and fail with a clear unsupported-state message when it is not.
-- Check the installed faces in `check.ps1`.
+- Hook 22 reads the URL, digest, family, and required faces from `maple-mono-nf-cn.env`. It validates the archive digest before extracting the required TrueType files and keeps files whose bytes already match.
+- Copy the files to `%LOCALAPPDATA%\Microsoft\Windows\Fonts`. Register each full file path as a string value under `HKCU\Software\Microsoft\Windows NT\CurrentVersion\Fonts`. This persists the fonts for the current user. If the fonts are unavailable in the current session, sign out and back in. [Microsoft's font installer implementation](https://github.com/microsoft/winget-cli/blob/master/src/AppInstallerCommonCore/Fonts.cpp), [FontLab's per-user registry implementation](https://github.com/fontlaborg/fontlift-win-cli/blob/main/src/sys_utils.cpp).
+- With `desktopBaseline` enabled, hook 22 and the checker require the default LocalAppData and Windows Terminal discoverable as `wt.exe` or `WindowsTerminal.exe` on `PATH`. Windows 11 normally provides Terminal. An installation with its alias disabled must also expose its executable on `PATH`.
+- The checker requires every face's file and registration and the managed fragment file.
+- Phase-3 uninstall removes the fragment while the selected configuration manages it. Package and font removal belong to phase 5.
 
 ## 12. Local Overlays
 
@@ -299,12 +313,13 @@ Add one Windows overlay, `profile.local.ps1` (section 9), in phase 2 together wi
 
 - Unix smoke tests:
   - Render the ignore rules with Windows chezmoi data and assert that no `.sh` hook and no Unix-only target is managed. Render with macOS and Linux data and assert that no `.ps1` hook and no Windows-only target is managed.
-  - Render `dot_gitconfig.tmpl` and `private_dot_ssh/private_config.tmpl` for every platform, including Windows, in the existing multi-platform render loop. Today the suite renders them only for the host platform.
+  - Render the shared Git and SSH targets across platforms. Check the fragment target and the desktop hook gate with `desktopBaseline` on and off.
 - Windows smoke job on a hosted Windows runner:
   - Lint the PowerShell code with PSScriptAnalyzer.
   - Run the Pester tests for the helpers, including the shared-manifest test cases.
-  - Apply the main source into a temporary home with stubbed installers, in the style of the Unix smoke suite. Pass a fixture profile path to the profile helper (section 9).
-- Windows apply job: a real round trip on a hosted Windows runner (apply, reapply, uninstall, and restore), like the Unix apply jobs. Phase 2 covers the configuration; phases 3 and 4 extend it to real package, runtime, and tool installs. If a hosted runner cannot run a real install, record that coverage gap and require a live signoff on a real machine before merge.
+  - Apply and reapply the main source in a temporary home with a WinGet stub. Use a fixture profile path. Test the desktop installer separately with stubbed downloads and isolated font and registry targets.
+- The hosted Windows apply job logs WinGet and Terminal availability before the round trip. If WinGet is present, run the real import and checker. If WinGet is absent, log a coverage gap and use a stub only in the CI fixture. If Terminal is unavailable, log a coverage gap and install the real font archive into isolated file and registry targets. With Terminal available, run the desktop hook and checker and restore the font files and registry values after testing.
+- A coverage gap in real installation requires live signoff before merge. The user scheduled the first live apply after all planned phases. Hosted coverage or live signoff is still pending.
 - Run both Windows jobs under the same `needs-checks` condition as the Unix jobs, and feed them into the existing single required check. This avoids a second path classifier that could skip Windows CI after a change to a shared file.
 - Live installs on a real Windows machine follow the same local validation policy as the Unix platforms.
 
@@ -327,7 +342,7 @@ Add one Windows overlay, `profile.local.ps1` (section 9), in phase 2 together wi
 | Separate repository | Rejected (user decision) | The shared data would exist twice and drift. |
 | Reuse the Bash scripts through Git Bash or MSYS2 | Rejected | Paths, permissions, and package management differ. The result is fragile and still needs a Windows package layer. |
 | Gate hooks with an OS condition inside each template | Rejected | It edits every Unix hook template. `.chezmoiignore` gates hooks in one place. |
-| Scoop instead of winget | Kept as a fallback | winget is part of Windows 11. Scoop installs per user without elevation. It may help when device policy blocks winget, but only if the same policy allows Scoop and its downloads. |
+| Scoop instead of winget | Rejected for the baseline | The package layer uses the built-in winget source and stops when device policy blocks it. |
 | `winget configure` with a DSC file | Rejected for now | It adds a second configuration system. `winget import` covers the need. |
 | Move cross-platform CLIs from the system layer to mise on every platform | Deferred | It would improve consistency, but it changes the Unix design. Evaluate it separately. |
 | Copy the Windows Terminal fragment from hook 22 instead of deploying it as a target | Rejected | chezmoi then no longer tracks or removes the file, and the check and uninstall need their own logic for it. Allowing one exception in the dot-path assertion is smaller. |
@@ -359,15 +374,19 @@ default configuration and rejected unsafe ACLs on the top-level configuration
 and a local drop-in. These results apply to the tools on that runner.
 [Hosted apply job 136793367571](https://github.com/kangmingxuan/oh-my-devenv/actions/runs/44886671628/job/136793367571)
 
-Resolve each item before the phase that depends on it.
+Phase-3 decisions by Claude are recorded in sections 10 and 11. The checker
+queries exact package IDs. The inventory uses the built-in source and user
+scope. Font registration uses current-user file and registry targets. A blocked
+source or installer stops apply with a diagnostic.
+
+Hosted phase-3 smoke evidence: **pending link**. Hosted phase-3 apply evidence
+and any coverage gaps: **pending link**.
+
+Resolve each remaining item before the phase that depends on it.
 
 | Item | Phase |
 | --- | --- |
 | Whether the effective script execution policy lets chezmoi run the `.ps1` hooks, and the stop condition when it does not. Do not work around device policy. PowerShell 7 stores execution-policy settings separately from Windows PowerShell 5.1. Group Policy can make it use the Windows PowerShell policy settings, so check the effective policy under `pwsh`. | 2 |
-| How `check.ps1` checks the winget manifest: by package ID through winget, or by command presence | 3 |
-| The winget package ID for each included tool, and whether each one installs without elevation | 3 |
-| The per-user font installation method on Windows | 3 |
-| Behavior on devices where policy restricts winget sources | 3 |
 | Whether every tool in the mise config installs on Windows | 4 |
 | Whether runtime and tool installs hit the Windows path-length limit. Do not assume that Windows long-path support (`LongPathsEnabled`) is on; turning it on needs elevation. That setting alone does not guarantee long-path support in each installer or tool; verify their actual behavior. Git has a separate `core.longpaths` setting. | 4 |
 

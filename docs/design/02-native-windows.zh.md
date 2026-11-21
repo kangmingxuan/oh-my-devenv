@@ -1,6 +1,6 @@
 # 技术设计：原生 Windows 平台
 
-状态：已接受。阶段 2（仅配置）已实现，阶段 3–5 尚未开始。
+状态：已接受。阶段 3（系统包和桌面基线）已实现，待托管 Windows 验证。阶段 4–5 尚未开始。
 
 ## 1. 概要
 
@@ -30,7 +30,7 @@ WSL 不属于本设计。WSL 是 Linux 环境，继续走现有的 Linux 路径�
 | 请 Gemini 4 Argon 和 Kimi K3.1 Pro 做设计评审 | 用户要求 Claude 把这两份评审与 Codex 的事实核查一起权衡。 |
 | 把受管目录持久化写入用户 `Path` | 用户于 2026-11-21 做出这一决定，让 PowerShell 之外启动的应用也能找到受管工具。Claude 在第 7 节设计了具体机制。 |
 
-本文其余决策均由 Claude 在上述范围内提出。第 16 节列出 Claude 采纳了哪些评审意见。每一项决策在实现前都等待用户审阅。
+本文其余决策均由 Claude 在上述范围内提出。第 16 节列出 Claude 采纳了哪些评审意见。用户于 2026-11-21 批准阶段 3，并将首次 Windows 实机 apply 安排在所有计划阶段完成后。Claude 在授权范围内确定了阶段 3 的包清单、安装范围、安装与检查行为、设备策略处理、桌面安装与验证，以及卸载边界。
 
 ## 3. 目标与非目标
 
@@ -135,6 +135,13 @@ hook 30 使用 winget，让 mise 与其他系统工具来自同一个包管理�
 2. 把受管目录放到最前面：`%LOCALAPPDATA%\mise` 下的 mise shims 目录、`~/.local/bin` 和 `$GOBIN`。
 3. 把 `GOPATH` 和 `GOBIN` 设为与 Unix env 模板相同的默认值（`~/go` 和 `$GOPATH/bin`）。
 
+阶段 3 的 hook 辅助函数合并进程、机器和当前用户的 `Path`。WinGet 把用户级便携包路径写入
+`HKCU\Environment\Path`。支持符号链接时，使用
+`%LOCALAPPDATA%\Microsoft\WinGet\Links`。否则 WinGet 可以加入包目录。
+检查器在 hook 20 之后重读这些值。上面的阶段 4 步骤添加受管的 mise 和工具目录。
+[WinGet 便携包安装器](https://github.com/microsoft/winget-cli/blob/master/src/AppInstallerCLICore/PortableInstaller.cpp)、
+[WinGet Path 注册表实现](https://github.com/microsoft/winget-cli/blob/master/src/AppInstallerCommonCore/PathVariable.cpp)。
+
 ### 持久化用户 Path
 
 用户决定把受管目录加入持久化的用户 `Path`（第 2 节）。从 Windows shell 启动的应用（例如从开始菜单启动的 IDE）不会加载 PowerShell profile。持久化条目让这些应用也能找到受管工具。
@@ -237,7 +244,7 @@ profile 只影响 PowerShell 会话。从 Windows shell 启动的应用（例如
 - 位置：`%LOCALAPPDATA%\Microsoft\Windows Terminal\Fragments\oh-my-devenv\`。这是文档给出的用户级 fragment 位置。该文件夹不在 Documents 下，Documents 重定向不会移动它。
 - source 路径 `AppData/Local/...` 映射到 home 目录下默认的 LocalAppData 位置。LocalAppData 是已知文件夹，可能位于别处。hook 22 和 `check.ps1` 比较实际生效的 LocalAppData 路径与默认路径，不一致时带着清晰的"不受支持状态"信息失败。
 - fragment 可以添加 profile 和配色方案，也可以更新内置 profile 和动态 profile，但不能修改全局设置。
-- fragment 在 PowerShell 7 profile 上设置字体，字体名取自 `desktop-font-family` 局部模板。
+- fragment 用 `profiles[].updates` 指向首选的动态 PowerShell profile，其 GUID 为 `{574e775e-4f2a-5b96-ac1e-a2962a402336}`。它从 `desktop-font-family` 局部模板读取 `font.face`。[Fragment 格式](https://learn.microsoft.com/en-us/windows/terminal/json-fragment-extensions)、[PowerShell profile 生成器](https://github.com/microsoft/terminal/blob/main/src/cascadia/TerminalSettingsModel/PowershellCoreProfileGenerator.cpp)、[字体设置](https://learn.microsoft.com/en-us/windows/terminal/customize-settings/profile-appearance#font-face)。
 - 仅在 `desktopBaseline` 为 true 时部署该 fragment。
 
 ### XDG
@@ -254,36 +261,40 @@ hook 00 的 XDG 根目录检查仍只用于 Unix。Windows 不导出 `XDG_*` 变
 
 使用 `winget import`，输入文件采用 `winget export` 产生的 JSON 格式。
 
-- 每个条目都不写 `Version` 字段。Unix 系统 manifest 同样不钉版本。
+- 使用 [WinGet 2.0 导出 schema](https://github.com/microsoft/winget-cli/blob/master/schemas/JSON/packages/packages.schema.2.0.json) 和内置 `winget` 源。每个条目设置 `Scope` 为 `user`，省略 `Version`。
 - 导入时不出现交互提示，在命令行上接受各项协议。
 - 传入 `--no-upgrade`。hook 20 只确保每个包存在；升级仍是用户单独执行的操作（`winget upgrade`）。安装器升级可能需要提权或重启，hook 不能触发这些。Arch Linux 路径同样把完整升级留给用户。
-- `winget` 不可用或某个条目安装失败时，hook 20 带着清晰的错误失败。不传 `--ignore-unavailable`。
+- WinGet 缺失、源打不开或安装失败时，hook 20 失败。错误指出源和清单条目，并保留 WinGet 诊断。设备策略可能限制源或安装。使用现有源。遇到策略限制时联系设备管理员。
+- `check.ps1` 从清单读取 ID，逐个运行 `winget list --id <id> --exact --source winget`。检查器列出全部缺失 ID，并标明源错误或其他命令错误。[WinGet list](https://learn.microsoft.com/en-us/windows/package-manager/winget/list)。
 
-起始清单，从 Unix 系统 manifest 推导而来。阶段 3 中用 `winget show` 逐个核实包 ID。
+用户盘点前，Claude 从 Unix 基线选定起始清单。
+[Microsoft 目录](https://github.com/microsoft/winget-pkgs/tree/master/manifests)确认了包 ID 和安装器类型。
+无需提权的实际安装仍待 Windows 验证。
 
 | Unix 条目 | Windows 决定 |
 | --- | --- |
-| `git` | 纳入 |
+| `git` | 纳入 `Git.Git`。WinGet 提供用户范围的 Inno 安装器。 |
 | `curl` | 跳过；Windows 自带 `curl.exe` |
 | `wget` | 跳过；使用 `curl.exe` |
 | `ca-certificates`、`bash-completion`、`zsh` | 不适用 |
 | `build-essential`、`pkg-config` | 跳过；盘点后再决定原生工具链 |
 | `tmux` | 跳过；盘点后再决定原生终端复用器 |
-| `jq`、`yq`、`ripgrep`、`fzf`、`fd`、`bat` | 纳入 |
-| `direnv` | 核实其 PowerShell hook 后才纳入 |
+| `jq`、`yq`、`ripgrep`、`fzf`、`fd`、`bat` | 纳入 `jqlang.jq`、`MikeFarah.yq`、`BurntSushi.ripgrep.MSVC`、`junegunn.fzf`、`sharkdp.fd` 和 `sharkdp.bat`。WinGet 提供便携安装器。fzf 的 MSI 为机器范围。 |
+| `direnv` | 跳过。[上游实现](https://github.com/direnv/direnv#how-it-works)用 Bash 执行 `.envrc`。 |
 | `tree`、`zip`、`unzip` | 跳过；Windows 有内置的对应功能 |
-| `shellcheck`、`shfmt` | 纳入，以便在 Windows 上编辑本仓库 |
+| `shellcheck`、`shfmt` | 纳入便携版 `koalaman.shellcheck` 和 `mvdan.shfmt`，供编辑源码时使用。已核实的安装器均提供 x64，shfmt 也提供 x86。目录中缺少两者的原生 arm64 安装器。 |
 | `gnupg`、`pinentry-mac` | 盘点后再决定 |
-| `gh` | 纳入 |
+| `gh` | 纳入 `GitHub.cli` 并使用便携安装器。其 MSI 为机器范围。 |
 
 ## 11. 桌面基线
 
 在 Windows 上，桌面基线是 Maple Mono NF CN 字体和 Windows Terminal fragment。
 
-- 按用户安装字体，不提权。从 `maple-mono-nf-cn.env` 读取 URL、摘要和必需字面。
-- 安装前校验摘要，与 Linux 安装器一致。
-- Windows Terminal 随 Windows 11 提供，所以基线不安装它。但它仍可能缺失，例如被策略移除。`desktopBaseline` 为 true 时，hook 22 和 `check.ps1` 检查 Windows Terminal 是否已安装；未安装时带着清晰的"不受支持状态"信息失败。
-- 在 `check.ps1` 中检查已安装的字面。
+- hook 22 从 `maple-mono-nf-cn.env` 读取 URL、摘要、字族和必需字面。先校验归档摘要，再提取必需的 TrueType 文件。已有文件的字节一致时保留原文件。
+- 将字体复制到 `%LOCALAPPDATA%\Microsoft\Windows\Fonts`。在 `HKCU\Software\Microsoft\Windows NT\CurrentVersion\Fonts` 下为每个字面写入完整文件路径，值类型为字符串。字体为当前用户持久注册。如果当前会话无法使用字体，注销并重新登录。[Microsoft 字体安装器实现](https://github.com/microsoft/winget-cli/blob/master/src/AppInstallerCommonCore/Fonts.cpp)、[FontLab 用户级注册表实现](https://github.com/fontlaborg/fontlift-win-cli/blob/main/src/sys_utils.cpp)。
+- 启用 `desktopBaseline` 时，hook 22 和检查器要求使用默认 LocalAppData，并能从 `PATH` 找到 `wt.exe` 或 `WindowsTerminal.exe`。Windows 11 通常自带 Terminal。禁用别名时，需在 `PATH` 上提供可执行文件。
+- 检查器要求每个字面的文件和注册项都存在，并检查受管 fragment。
+- 阶段 3 卸载移除所选配置中的受管 fragment。包和字体卸载属于阶段 5。
 
 ## 12. 本地 Overlay
 
@@ -297,12 +308,13 @@ hook 00 的 XDG 根目录检查仍只用于 Unix。Windows 不导出 `XDG_*` 变
 
 - Unix smoke tests：
   - 用 Windows 的 chezmoi 数据渲染 ignore 规则，断言没有任何 `.sh` hook 和 Unix 专属目标受管；用 macOS 和 Linux 数据渲染，断言没有任何 `.ps1` hook 和 Windows 专属目标受管。
-  - 在现有的多平台渲染循环中，为每个平台（包括 Windows）渲染 `dot_gitconfig.tmpl` 和 `private_dot_ssh/private_config.tmpl`。目前 suite 只为宿主平台渲染它们。
+  - 为各平台渲染共享的 Git 与 SSH 目标。开启和关闭 `desktopBaseline` 时均检查 fragment 目标和桌面 hook 的部署条件。
 - 在托管 Windows runner 上运行 Windows smoke job：
   - 用 PSScriptAnalyzer 检查 PowerShell 代码。
   - 为辅助脚本运行 Pester 测试，包括共享 manifest 的测试用例。
-  - 仿照 Unix smoke suite，用 stub 安装器把主 source apply 到临时 home。向 profile 辅助函数传入 fixture 中的 profile 路径（第 9 节）。
-- Windows apply job：在托管 Windows runner 上做一次真实的往返（apply、reapply、uninstall、restore），与 Unix apply job 相同。阶段 2 覆盖配置；阶段 3 和 4 把它扩展到真实的包、运行时和工具安装。如果托管 runner 无法完成真实安装，记录这个覆盖缺口，并要求合并前在真实机器上完成实机签核。
+  - 在临时 home 中，用 WinGet stub 执行 apply 和 reapply。使用 fixture 中的 profile 路径。用模拟下载以及隔离的字体目录和注册表位置单独测试桌面安装器。
+- 托管 Windows apply job 在执行往返验证前记录 WinGet 和 Terminal 的可用性。WinGet 可用时运行真实导入和检查器。缺失时记录覆盖缺口，并仅在 CI fixture 中使用 stub。Terminal 缺失时记录覆盖缺口，并把真实字体归档安装到隔离的文件和注册表位置。Terminal 可用时运行桌面 hook 和检查器，测试后恢复字体文件和注册表值。
+- 真实安装的覆盖缺口要求在合并前完成实机签核。用户将首次实机 apply 安排在所有计划阶段完成后。托管覆盖和实机签核仍待确认。
 - 两个 Windows job 都在与 Unix job 相同的 `needs-checks` 条件下运行，并汇入现有的单一 required check。这样不需要第二个路径分类器，避免共享文件改动后 Windows CI 被跳过。
 - 在真实 Windows 机器上的实际安装，遵循与 Unix 平台相同的本地验证策略。
 
@@ -325,7 +337,7 @@ hook 00 的 XDG 根目录检查仍只用于 Unix。Windows 不导出 `XDG_*` 变
 | 单独的仓库 | 否决（用户决策） | 共享数据会存在两份并逐渐偏离。 |
 | 通过 Git Bash 或 MSYS2 复用 Bash 脚本 | 否决 | 路径、权限和包管理都不同，结果脆弱，而且仍需要一个 Windows 包管理层。 |
 | 在每个模板内用 OS 条件门控 hook | 否决 | 它要修改每个 Unix hook 模板。`.chezmoiignore` 在一处完成 hook 门控。 |
-| 用 Scoop 代替 winget | 保留为后备 | winget 是 Windows 11 的一部分。Scoop 按用户安装、无需提权。设备策略阻止 winget 时它可能有用，前提是同一策略允许 Scoop 及其下载。 |
+| Scoop 代替 winget | 基线不采用 | 包层使用内置 winget 源，设备策略阻止时停止。 |
 | 用 `winget configure` 和 DSC 文件 | 暂时否决 | 它引入第二套配置系统。`winget import` 已能满足需求。 |
 | 在所有平台上把跨平台 CLI 从系统层移到 mise | 延后 | 能提升一致性，但会改变 Unix 设计。单独评估。 |
 | 由 hook 22 复制 Windows Terminal fragment，而不是作为目标部署 | 否决 | 那样 chezmoi 不再跟踪或删除该文件，检查和卸载都要为它单独写逻辑。在 dot 路径断言中放行一个例外更小。 |
@@ -356,15 +368,17 @@ Windows OpenSSH 9.5p2 读取了受管的默认配置，并拒绝了顶层配置�
 上的不安全 ACL。这些结果适用于该 runner 上的工具。
 [托管 apply job 136793367571](https://github.com/kangmingxuan/oh-my-devenv/actions/runs/44886671628/job/136793367571)
 
-在依赖某一项的阶段开始前解决该项。
+第 10 节和第 11 节记录了 Claude 的阶段 3 决策。检查器按精确包 ID 查询。
+包清单使用内置源和用户范围。字体使用当前用户的目录和注册表。源或安装器受限时，
+apply 会停止并输出诊断。
+
+阶段 3 托管 smoke 证据：**待补链接**。阶段 3 托管 apply 证据和覆盖缺口：**待补链接**。
+
+在依赖某一项的阶段开始前解决其余事项。
 
 | 事项 | 阶段 |
 | --- | --- |
 | 实际生效的脚本执行策略是否允许 chezmoi 运行 `.ps1` hook，以及不允许时的停止条件。不绕过设备策略。PowerShell 7 与 Windows PowerShell 5.1 分开存储执行策略设置。组策略可以让它使用 Windows PowerShell 的策略设置，所以要在 `pwsh` 下检查实际生效的策略。 | 2 |
-| `check.ps1` 如何检查 winget manifest：通过 winget 按包 ID 检查，还是按命令是否存在检查 | 3 |
-| 每个纳入工具的 winget 包 ID，以及能否不提权安装 | 3 |
-| Windows 上按用户安装字体的方法 | 3 |
-| 设备策略限制 winget 源时的行为 | 3 |
 | mise 配置中的每个工具能否在 Windows 上安装 | 4 |
 | 运行时和工具安装是否会碰到 Windows 路径长度限制。不要假定 Windows 长路径支持（`LongPathsEnabled`）已开启；开启需要提权。仅有这个设置不能保证每个安装器或工具都支持长路径；要验证它们的实际行为。Git 另有独立的 `core.longpaths` 设置。 | 4 |
 

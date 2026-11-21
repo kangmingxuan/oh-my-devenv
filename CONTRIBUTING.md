@@ -103,6 +103,7 @@ The installer scripts and `bootstrap/scripts/check.sh` consume the following sou
 - `bootstrap/manifests/system/apt-packages.txt`
 - `bootstrap/manifests/system/pacman-packages.txt`
 - `bootstrap/manifests/system/Brewfile`
+- `bootstrap/manifests/system/winget-packages.json` (Windows installer and checker)
 - `bootstrap/manifests/desktop/apt-packages.txt`
 - `bootstrap/manifests/desktop/pacman-packages.txt`
 - `bootstrap/manifests/desktop/Brewfile`

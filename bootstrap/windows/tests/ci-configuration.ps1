@@ -11,6 +11,8 @@ $helpers = Split-Path -Parent $PSScriptRoot
 . (Join-Path $helpers 'common.ps1')
 . (Join-Path $helpers 'backup.ps1')
 . (Join-Path $helpers 'profile.ps1')
+. (Join-Path $helpers 'system-packages.ps1')
+. (Join-Path $helpers 'desktop.ps1')
 
 function Invoke-FixtureChezmoi {
     param([string[]]$Arguments, [switch]$AllowFailure)
@@ -62,7 +64,8 @@ function Assert-FixtureCheckFailure {
     param([string]$Pattern)
 
     try {
-        & (Join-Path $helpers 'check.ps1') -Destination $destination -ProfilePath $profilePath
+        & (Join-Path $helpers 'check.ps1') -Destination $destination -ProfilePath $profilePath `
+            -DesktopBaseline:$fixtureConfig.data.desktopBaseline
     } catch {
         # Native stderr is part of the exception message before PowerShell formats it.
         $diagnostic = $_.Exception.Message
@@ -75,12 +78,14 @@ function Assert-FixtureCheckFailure {
     throw "Expected the checker to fail with '$Pattern', but it succeeded."
 }
 
-function Initialize-SmokeStub {
+function Initialize-FixtureStub {
+    param([switch]$StubWinGet, [switch]$StubConfiguration)
+
     $compiler = Join-Path $env:WINDIR 'Microsoft.NET/Framework64/v4.0.30319/csc.exe'
     $stubSource = Join-Path $fixture 'stub.cs'
     $shimDirectory = Join-Path $fixture 'stub-bin'
     [void][IO.Directory]::CreateDirectory($shimDirectory)
-    $shim = Join-Path $shimDirectory 'ssh.exe'
+    $shim = Join-Path $fixture 'stub.exe'
     Set-FixtureText -Path $stubSource -Content @'
 using System;
 using System.IO;
@@ -91,6 +96,23 @@ class Stub
     {
         Console.OutputEncoding = System.Text.Encoding.UTF8;
         string program = Path.GetFileNameWithoutExtension(Environment.GetCommandLineArgs()[0]);
+        if (program == "winget")
+        {
+            string action = null;
+            if (args.Length == 7 && args[0] == "import" && args[1] == "--import-file" &&
+                File.Exists(args[2]) && args[3] == "--no-upgrade" && args[4] == "--accept-package-agreements" &&
+                args[5] == "--accept-source-agreements" && args[6] == "--disable-interactivity")
+                action = "import";
+            if (args.Length == 8 && args[0] == "list" && args[1] == "--id" && args[3] == "--exact" &&
+                args[4] == "--source" && args[5] == "winget" && args[6] == "--accept-source-agreements" &&
+                args[7] == "--disable-interactivity")
+                action = "list " + args[2];
+            if (action == null)
+                return 96;
+            File.AppendAllText(Environment.GetEnvironmentVariable("OH_MY_DEVENV_TEST_WINGET_LOG"), action + "\n");
+            Console.WriteLine("WinGet fixture: " + action);
+            return 0;
+        }
         if (program == "mise" && args.Length == 2 && args[0] == "activate" && args[1] == "pwsh")
             return 0;
         if (program != "ssh")
@@ -112,12 +134,80 @@ class Stub
 }
 '@
     $null = Invoke-NativeCommand -Executable $compiler -Arguments @('/nologo', "/out:$shim", $stubSource)
-    foreach ($tool in @('winget', 'mise', 'uv')) {
-        Copy-Item -LiteralPath $shim -Destination (Join-Path $shimDirectory "$tool.exe")
+    if ($StubConfiguration) {
+        foreach ($tool in @('ssh', 'mise', 'uv')) {
+            Copy-Item -LiteralPath $shim -Destination (Join-Path $shimDirectory "$tool.exe")
+        }
+        $env:OH_MY_DEVENV_TEST_INSTALLERS = Join-Path $fixture 'unexpected-installers'
+        $env:OH_MY_DEVENV_TEST_HOME = $destination
+    }
+    if ($StubWinGet) {
+        Copy-Item -LiteralPath $shim -Destination (Join-Path $shimDirectory 'winget.exe')
+        $env:OH_MY_DEVENV_TEST_WINGET_LOG = Join-Path $fixture 'winget.log'
     }
     $env:PATH = "$shimDirectory;$env:PATH"
-    $env:OH_MY_DEVENV_TEST_INSTALLERS = Join-Path $fixture 'unexpected-installers'
-    $env:OH_MY_DEVENV_TEST_HOME = $destination
+}
+
+function Assert-FixtureWinGet {
+    $calls = Get-Content -LiteralPath $env:OH_MY_DEVENV_TEST_WINGET_LOG
+    if (@($calls -ceq 'import').Count -ne 1) {
+        throw 'Expected one WinGet import across the first apply and reapply.'
+    }
+    foreach ($id in Read-WinGetPackageManifest -Path $packageManifestPath) {
+        if (@($calls -ceq "list $id").Count -ne 2) {
+            throw "Expected WinGet checks for '$id' during both applies."
+        }
+    }
+}
+
+function Get-FixtureFontState {
+    param([hashtable]$Manifest, [string]$FontDirectory, [string]$RegistryPath)
+
+    $registry = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($RegistryPath)
+    try {
+        $valueNames = if ($null -ne $registry) { $registry.GetValueNames() }
+        foreach ($face in $Manifest.Faces) {
+            $file = Join-Path $FontDirectory "$face.ttf"
+            $copy = $null
+            if ([IO.File]::Exists($file)) {
+                $copy = Join-Path $fixture "$face.previous.ttf"
+                [IO.File]::Copy($file, $copy)
+            }
+            $name = "$face (TrueType)"
+            $value = $kind = $null
+            if ($name -in $valueNames) {
+                $value = $registry.GetValue($name, $null, 'DoNotExpandEnvironmentNames')
+                $kind = $registry.GetValueKind($name)
+            }
+            @{ File = $file; Copy = $copy; Name = $name; Value = $value; Kind = $kind }
+        }
+    } finally {
+        if ($null -ne $registry) { $registry.Dispose() }
+    }
+}
+
+function Restore-FixtureFontState {
+    param([hashtable[]]$State, [string]$RegistryPath)
+
+    $registry = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($RegistryPath, $true)
+    try {
+        foreach ($face in $State) {
+            if ($face.Copy) {
+                [IO.File]::Copy($face.Copy, $face.File, $true)
+            } elseif ([IO.File]::Exists($face.File)) {
+                [IO.File]::Delete($face.File)
+            }
+            if ($null -ne $registry) {
+                if ($null -eq $face.Kind) {
+                    $registry.DeleteValue($face.Name, $false)
+                } else {
+                    $registry.SetValue($face.Name, $face.Value, $face.Kind)
+                }
+            }
+        }
+    } finally {
+        if ($null -ne $registry) { $registry.Dispose() }
+    }
 }
 
 $source = [IO.Path]::GetFullPath((Join-Path $helpers '../..'))
@@ -129,23 +219,49 @@ $fixture = [IO.Directory]::CreateTempSubdirectory('oh-my-devenv-windows-').FullN
 $backupRoot = Join-Path $fixture 'backups'
 $uninstallBackupRoot = Join-Path $fixture 'uninstall-backups'
 $config = Join-Path $fixture 'chezmoi.json'
+$packageManifestPath = Join-Path $source 'bootstrap/manifests/system/winget-packages.json'
+$fontManifestPath = Join-Path $source 'bootstrap/manifests/desktop/maple-mono-nf-cn.env'
 $fixtureConfig = @{
-    data = @{ name = 'Windows CI'; email = 'smoke@example.invalid'; desktopBaseline = $true }
+    data = @{ name = 'Windows CI'; email = 'smoke@example.invalid'; desktopBaseline = $false }
     persistentState = Join-Path $fixture 'state.boltdb'
     scriptEnv = @{ OH_MY_DEVENV_WINDOWS_BACKUP_ROOT = $backupRoot }
 }
 $originalGitGlobal = $env:GIT_CONFIG_GLOBAL
+$originalPath = $env:PATH
+$fontState = $null
+$fixtureRegistry = $null
 try {
+    Update-HookPath
     if ($Mode -eq 'smoke') {
         $destination = Join-Path $fixture "home with spaces [test] and 'quote’"
         $profilePath = Join-Path $fixture 'redirected Documents/PowerShell/profile.ps1'
         $fixtureConfig.scriptEnv.OH_MY_DEVENV_WINDOWS_PROFILE_PATH = $profilePath
-        Initialize-SmokeStub
+        Initialize-FixtureStub -StubWinGet -StubConfiguration
     } else {
+        $winget = Get-PathApplication -Name winget.exe -Optional
+        $terminal = Test-WindowsTerminal
+        Write-Host "Hosted image Windows Terminal discoverable: $terminal"
+        if ($null -eq $winget) {
+            Write-Warning 'Coverage gap: the hosted image has no winget.exe on PATH. This job will exercise the WinGet calls with a fixture.'
+            Initialize-FixtureStub -StubWinGet
+        } else {
+            Write-Host "Hosted image WinGet path: $($winget.Source)"
+            Write-Host (Invoke-NativeCommand -Executable $winget.Source -Arguments @('--version')).Stdout.Trim()
+        }
         $destination = $HOME
         $profilePath = $PROFILE.CurrentUserAllHosts
         $openSsh = Join-Path $env:WINDIR 'System32/OpenSSH'
         $env:PATH = "$openSsh;$env:PATH"
+        $fixtureConfig.data.desktopBaseline = $terminal
+        $fontManifest = Read-DesktopFontManifest -Path $fontManifestPath
+        if (-not $terminal) {
+            Write-Warning 'Coverage gap: Windows Terminal is unavailable. Test the real font archive in isolated file and registry targets.'
+            $fixtureRegistry = "Software\oh-my-devenv-tests\$([guid]::NewGuid().ToString('N'))"
+            Install-DesktopFont -Manifest $fontManifest -FontDirectory (Join-Path $fixture 'fonts') -RegistryPath $fixtureRegistry
+        } else {
+            $fontTarget = Get-DesktopFontTarget -LocalData (Get-DesktopLocalData)
+            $fontState = Get-FixtureFontState -Manifest $fontManifest @fontTarget
+        }
     }
     $ssh = Get-PathApplication -Name ssh
     if ($Mode -eq 'apply' -and $ssh.Source -ne (Join-Path $openSsh 'ssh.exe')) {
@@ -165,6 +281,7 @@ try {
     $profileOverlay = Join-Path $destination '.config/oh-my-devenv/powershell/profile.local.ps1'
     $sshConfig = Join-Path $destination '.ssh/config'
     $sshOverlay = Join-Path $destination '.ssh/config.d/oh-my-devenv-fixture.conf'
+    $terminalFragment = Join-Path $destination 'AppData/Local/Microsoft/Windows Terminal/Fragments/oh-my-devenv/desktop.json'
     $oldMise = "# pre-existing mise fixture`n"
     $oldProfile = "# pre-existing profile fixture`n"
     $overlayGoBin = [IO.Directory]::CreateDirectory((Join-Path $fixture 'overlay-go-bin')).FullName
@@ -315,7 +432,7 @@ $env:PATH = '{1};' + $env:PATH
         Assert-FixtureCheckFailure -Pattern 'profile body did not run'
         Set-FixtureText -Path $profilePath -Content $installedProfile
         $installedBody = [IO.File]::ReadAllText($profileBody)
-        $originalPath = $env:PATH
+        $originalProbePath = $env:PATH
         $originalGoBin = $env:GOBIN
         try {
             $env:GOBIN = Join-Path $fixture 'profile-go-bin'
@@ -324,7 +441,7 @@ $env:PATH = '{1};' + $env:PATH
                 (Join-Path $HOME '.local/bin')
                 $env:GOBIN
             )
-            $env:PATH = ($probeEntries + $originalPath) -join ';'
+            $env:PATH = ($probeEntries + $originalProbePath) -join ';'
             foreach ($missingEntry in $probeEntries) {
                 $keptEntries = ($probeEntries | Where-Object { $_ -ne $missingEntry }) -join ';'
                 $keptEntries = [Management.Automation.Language.CodeGeneration]::EscapeSingleQuotedStringContent($keptEntries)
@@ -337,14 +454,15 @@ $env:OH_MY_DEVENV_PROFILE_LOADED = '1'
                 Assert-FixtureCheckFailure -Pattern "(?s)The managed profile did not add.*?[\\/]$missingName'"
             }
         } finally {
-            $env:PATH = $originalPath
+            $env:PATH = $originalProbePath
             $env:GOBIN = $originalGoBin
             Set-FixtureText -Path $profileBody -Content $installedBody
         }
         Set-FixtureText -Path $profilePath -Content $oldProfile
         Invoke-FixtureApply
+        Assert-FixtureWinGet
         if ([IO.File]::Exists($env:OH_MY_DEVENV_TEST_INSTALLERS)) {
-            throw 'A phase-2 hook attempted to install tools.'
+            throw 'A hook attempted to install mise or ecosystem tools.'
         }
         return
     }
@@ -373,6 +491,15 @@ $env:OH_MY_DEVENV_PROFILE_LOADED = '1'
 
     Assert-UnsafeSshAcl -Path $sshConfig
     Assert-UnsafeSshAcl -Path $sshOverlay
+    if ($fixtureConfig.data.desktopBaseline) {
+        $fragmentBytes = [IO.File]::ReadAllBytes($terminalFragment)
+        [IO.File]::Delete($terminalFragment)
+        try {
+            Assert-FixtureCheckFailure -Pattern 'Missing Windows Terminal fragment'
+        } finally {
+            [IO.File]::WriteAllBytes($terminalFragment, $fragmentBytes)
+        }
+    }
 
     $beforePreview = (Invoke-FixtureChezmoi -Arguments @('state', 'dump')).Stdout
     & $uninstall -Config $config
@@ -391,6 +518,12 @@ $env:OH_MY_DEVENV_PROFILE_LOADED = '1'
         if ([IO.File]::Exists($target)) {
             throw "Uninstall kept managed target '$target'."
         }
+    }
+    if ($fixtureConfig.data.desktopBaseline) {
+        if ([IO.File]::Exists($terminalFragment)) {
+            throw 'Uninstall kept the Terminal fragment.'
+        }
+        Confirm-DesktopFont -Manifest $fontManifest @fontTarget
     }
     if ([IO.File]::ReadAllText($profilePath) -cne $oldProfile -or
         [IO.File]::ReadAllText($profileOverlay) -cne $overlayContent -or
@@ -417,6 +550,16 @@ $env:OH_MY_DEVENV_PROFILE_LOADED = '1'
         throw "Restored destination has drift.`n$($status.Stdout)"
     }
 } finally {
-    $env:GIT_CONFIG_GLOBAL = $originalGitGlobal
-    [IO.Directory]::Delete($fixture, $true)
+    try {
+        if ($null -ne $fontState) {
+            Restore-FixtureFontState -State $fontState -RegistryPath $fontTarget.RegistryPath
+        }
+        if ($fixtureRegistry) {
+            [Microsoft.Win32.Registry]::CurrentUser.DeleteSubKeyTree($fixtureRegistry, $false)
+        }
+    } finally {
+        $env:GIT_CONFIG_GLOBAL = $originalGitGlobal
+        $env:PATH = $originalPath
+        [IO.Directory]::Delete($fixture, $true)
+    }
 }

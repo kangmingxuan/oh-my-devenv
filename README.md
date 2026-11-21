@@ -10,7 +10,7 @@
 
 oh-my-devenv is an opinionated, declarative development environment. It publishes one maintainer's current choices as a coherent baseline: use it when those choices fit, and do not use it when they do not. Point `chezmoi` at it on a fresh machine and minutes later you have managed shells, language runtimes, and a curated CLI toolchain — all from a single source of truth. Secrets and private machine facts stay in local overlays so the public baseline remains safe to clone.
 
-Native Windows has a [configuration-only quick start](#native-windows-quick-start) for PowerShell, Git, OpenSSH, and mise.
+Native Windows has a [quick start](#native-windows-quick-start) for the configuration, WinGet system packages, and optional Windows Terminal desktop baseline.
 
 ## What you get
 
@@ -57,7 +57,7 @@ Install the prerequisites from a terminal with winget.
 
 ```powershell
 winget install --id Microsoft.PowerShell --exact --source winget
-winget install --id Git.Git --exact --source winget
+winget install --id Git.Git --exact --source winget --scope user
 winget install --id twpayne.chezmoi --exact --source winget
 ```
 
@@ -67,9 +67,12 @@ the Windows OpenSSH Client optional feature or use an available OpenSSH client.
 
 ```powershell
 $PSVersionTable.PSVersion
-Get-Command git, ssh, chezmoi -CommandType Application
+Get-Command git, ssh, chezmoi, winget -CommandType Application
 Get-ExecutionPolicy
 ```
+
+For the desktop baseline, make sure Windows Terminal is available on `PATH`
+and LocalAppData is under your home directory at `AppData\Local`.
 
 After you verify the prerequisites, apply the configuration.
 
@@ -77,11 +80,11 @@ After you verify the prerequisites, apply the configuration.
 chezmoi init --apply https://github.com/kangmingxuan/oh-my-devenv.git
 ```
 
-If policy prevents PowerShell from running the hooks, stop and contact the
-device administrator. When apply succeeds, open a new `pwsh` session to load the
-profile. Windows currently deploys configuration only. The desktop prompt
-records your choice for when Windows Terminal settings and Maple Mono NF CN
-become available. See the [Windows onboarding notes](docs/01-onboarding.md#native-windows) for backups, overlays, checks, and uninstall.
+If device policy blocks PowerShell hooks, the `winget` source, or an installer,
+stop and contact the device administrator. The desktop prompt enables
+Maple Mono NF CN and the Windows Terminal fragment. After apply succeeds,
+open a new `pwsh` session to load the profile. See the
+[Windows onboarding notes](docs/01-onboarding.md#native-windows) for backups, overlays, checks, and uninstall.
 
 ### macOS and Linux
 

@@ -812,6 +812,27 @@ for hook_platform in "${hook_platforms[@]}" "windows|$windows_chezmoi_data"; do
     if grep -Eq '^([.]chezmoiscripts/.*[.]sh$|[.](bash|zsh|local)(/|$)|[.]config/(fontconfig|ghostty)(/|$))' <<<"$managed_platform"; then
       fail_test 'Windows manages a Unix-only target'
     fi
+    terminal_fragment_dir='AppData/Local/Microsoft/Windows Terminal/Fragments/oh-my-devenv'
+    terminal_fragment="$terminal_fragment_dir/desktop.json"
+    grep -Fxq "$terminal_fragment" <<<"$managed_platform" \
+      || fail_test 'Windows desktop baseline does not manage the Terminal fragment'
+    while IFS= read -r managed_path; do
+      case "$managed_path" in
+        .*|"$terminal_fragment_dir"|"$terminal_fragment_dir/"*) ;;
+        *) [[ "$terminal_fragment_dir" == "$managed_path/"* ]] \
+             || fail_test "Windows manages an unexpected non-dotfile target: $managed_path" ;;
+      esac
+    done <<<"$managed_platform"
+    chezmoi --source="$repo_root" --destination="$HOME" --override-data "$platform_override" \
+      cat "$HOME/$terminal_fragment" >"$tmp_dir/windows-desktop.json"
+    assert_file_contains "$tmp_dir/windows-desktop.json" "\"face\": \"$MAPLE_MONO_FAMILY\""
+    managed_windows_minimal="$(chezmoi --source="$repo_root" --destination="$HOME" \
+      --override-data "{\"desktopBaseline\":false,\"chezmoi\":$windows_chezmoi_data}" managed --format=)"
+    if grep -Eq '^([.]chezmoiscripts/22-install-desktop-assets[.]ps1$|AppData(/|$))' <<<"$managed_windows_minimal"; then
+      fail_test 'Windows manages desktop assets with desktopBaseline disabled'
+    fi
+    grep -Fxq '.chezmoiscripts/20-install-system-packages.ps1' <<<"$managed_windows_minimal" \
+      || fail_test 'Windows disables system packages with the desktop baseline'
     # Native syntax and lint checks of the rendered hooks run in Windows CI.
     for hook_template in "$repo_root"/.chezmoiscripts/*.ps1.tmpl; do
       rendered_hook="$tmp_dir/hook-windows-$(basename "$hook_template" .tmpl)"
@@ -824,7 +845,7 @@ for hook_platform in "${hook_platforms[@]}" "windows|$windows_chezmoi_data"; do
     done
     continue
   fi
-  if grep -Eq '^([.]chezmoiscripts/.*[.]ps1|[.]config/oh-my-devenv(/|$)|AppData/)' <<<"$managed_platform"; then
+  if grep -Eq '^([.]chezmoiscripts/.*[.]ps1|[.]config/oh-my-devenv(/|$)|AppData(/|$))' <<<"$managed_platform"; then
     fail_test "$hook_platform_name manages a Windows-only target"
   fi
   for hook_template in "$repo_root"/.chezmoiscripts/*.sh.tmpl; do

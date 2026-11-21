@@ -10,6 +10,8 @@
 
 oh-my-devenv 是一套主观鲜明、声明式的开发环境。它公开的是维护者当前认可的一整套选择：认同这些选择就使用，不认同就不使用。在一台全新机器上让 `chezmoi` 指向它，几分钟后你就拥有受管的 shell、语言运行时和精选 CLI 工具链，全部来自同一份事实来源。密钥与机器私有事实留在本地 overlay 中，使公开基线可以安全检出。
 
+原生 Windows 提供[快速开始](#原生-windows-快速开始)，覆盖配置、WinGet 系统包和可选的 Windows Terminal 桌面基线。
+
 ## 功能亮点
 
 - **一份来源，跨平台通用** —— macOS（Intel + Apple Silicon）、Ubuntu / Debian 与 Arch Linux 共用同一套模板化基线。
@@ -53,7 +55,7 @@ chezmoi 是唯一入口：它先渲染你的 dotfiles，再运行有序的引导
 
 ```powershell
 winget install --id Microsoft.PowerShell --exact --source winget
-winget install --id Git.Git --exact --source winget
+winget install --id Git.Git --exact --source winget --scope user
 winget install --id twpayne.chezmoi --exact --source winget
 ```
 
@@ -63,9 +65,12 @@ Git、OpenSSH 和 chezmoi。如果找不到 `ssh`，启用 Windows 的 OpenSSH �
 
 ```powershell
 $PSVersionTable.PSVersion
-Get-Command git, ssh, chezmoi -CommandType Application
+Get-Command git, ssh, chezmoi, winget -CommandType Application
 Get-ExecutionPolicy
 ```
+
+要启用桌面基线，确认 `PATH` 上有 Windows Terminal，且 LocalAppData
+位于 home 下的 `AppData\Local`。
 
 确认前置条件后，应用配置。
 
@@ -73,10 +78,9 @@ Get-ExecutionPolicy
 chezmoi init --apply https://github.com/kangmingxuan/oh-my-devenv.git
 ```
 
-如果执行策略阻止 hook 运行，停止并联系设备管理员。apply 成功后，打开新的
-`pwsh` 会话加载 profile。当前 Windows 阶段只部署 PowerShell、Git、OpenSSH
-和 mise 配置。桌面提示会保存选择，供以后部署 Windows Terminal 设置和
-Maple Mono NF CN 时使用。备份、overlay、校验和卸载见
+如果设备策略阻止 PowerShell hook、`winget` 源或安装器，停止并联系设备管理员。
+通过桌面提示启用 Maple Mono NF CN 和 Windows Terminal fragment。
+apply 成功后，打开新的 `pwsh` 会话加载 profile。备份、overlay、校验和卸载见
 [Windows 上手说明](docs/01-onboarding.md#native-windows)。
 
 ### macOS 和 Linux
