@@ -236,8 +236,8 @@ chezmoi 可以通过 `.chezmoiexternal` 用配置数据计算目标路径。Clau
 - 把 `BAT_THEME` 设为与 Unix env 模板相同的值。
 - 仅在 `mise` 位于 `PATH` 上时，用 `(&mise activate pwsh) | Out-String | Invoke-Expression` 激活 mise。Unix rc 文件也用同样方式保护激活。
 - 激活 mise 后，查找 `PATH` 上第一个 `oh-my-posh` 应用程序。找到时，使用受管文件 `~/.config/oh-my-devenv/powershell/robbyrussell.omp.json` 初始化。这个本地主题沿用 Unix 的 `robbyrussell` 提示符。主题和 MIT 许可证声明来自 [Oh My Posh v33.0.0](https://github.com/JanDeDobbeleer/oh-my-posh/tree/v33.0.0)。
-- 主题关闭自动升级和升级通知。它启用 `async`，因此即使设备缓存打开了升级功能，Oh My Posh 也会禁用它们。profile 通过 `init pwsh --print` 获取完整的初始化脚本并立即执行。主题从磁盘加载，路径和 Git 段读取本地状态。[功能选择](https://github.com/JanDeDobbeleer/oh-my-posh/blob/v33.0.0/src/config/config.go#L144-L191)、[PowerShell 初始化脚本生成器](https://github.com/JanDeDobbeleer/oh-my-posh/blob/v33.0.0/src/shell/init.go#L47-L76)。
-- 初始化脚本导出解析后的 `POSH_CONFIG` 和 `POSH_SESSION_ID`。提示符模块加载后，profile 在运行 overlay 前记录该配置路径。检查器在新 PowerShell 进程中清除继承值，并要求记录的路径与已部署主题一致。[会话变量](https://github.com/JanDeDobbeleer/oh-my-posh/blob/v33.0.0/src/shell/init.go#L315-L326)。
+- 主题关闭自动升级和升级通知。它启用 `async`，因此即使设备缓存打开了升级功能，Oh My Posh 也会禁用它们。profile 使用 `init pwsh`。Oh My Posh 在 PowerShell 启动时注册提示符，在首次显示提示符时加载渲染模块。主题从磁盘加载，路径和 Git 段读取本地状态。[功能选择](https://github.com/JanDeDobbeleer/oh-my-posh/blob/v33.0.0/src/config/config.go#L144-L191)、[PowerShell 初始化脚本生成器](https://github.com/JanDeDobbeleer/oh-my-posh/blob/v33.0.0/src/shell/init.go#L47-L76)。
+- 初始化脚本导出解析后的 `POSH_CONFIG` 和 `POSH_SESSION_ID`。生成的脚本注册提示符函数后，profile 在运行 overlay 前记录该配置路径。检查器在新 PowerShell 进程中清除继承值，并要求记录的路径与已部署主题一致。[会话变量](https://github.com/JanDeDobbeleer/oh-my-posh/blob/v33.0.0/src/shell/init.go#L315-L326)、[延迟渲染提示符](https://github.com/JanDeDobbeleer/oh-my-posh/blob/v33.0.0/src/shell/init.go#L270-L290)。
 - 本地 overlay `~/.config/oh-my-devenv/powershell/profile.local.ps1` 存在时加载它。overlay 可以覆盖提示符。
 - 运行 overlay 后，把缺失的受管目录放到 `PATH` 最前面，包括实际生效的 `GOBIN`。保留 overlay 中已有的 `PATH` 条目及其顺序。
 

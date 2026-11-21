@@ -129,13 +129,13 @@ class Stub
             return 0;
         if (program == "oh-my-posh")
         {
-            if (args.Length != 5 || args[0] != "init" || args[1] != "pwsh" ||
-                args[2] != "--config" || !File.Exists(args[3]) || args[4] != "--print")
+            if (args.Length != 4 || args[0] != "init" || args[1] != "pwsh" ||
+                args[2] != "--config" || !File.Exists(args[3]))
                 return 95;
             string configPath = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(args[3]));
             Console.WriteLine("$env:POSH_CONFIG = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('" + configPath + "'))");
             Console.WriteLine("$env:POSH_SESSION_ID = 'fixture'");
-            Console.WriteLine("New-Module -Name oh-my-posh-core -ScriptBlock {} | Import-Module");
+            Console.WriteLine("function prompt { 'Oh My Posh fixture> ' }");
             return 0;
         }
         if (program != "ssh")

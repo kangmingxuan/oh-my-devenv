@@ -47,8 +47,7 @@ $ohMyDevenvPoshActivation = & {
             throw "Oh My Posh theme '$theme' is missing. Run chezmoi apply."
         }
         $PSNativeCommandUseErrorActionPreference = $false
-        # --print emits the full script for immediate initialization, even with async set in the theme.
-        $activation = & $posh.Source init pwsh --config $theme --print
+        $activation = & $posh.Source init pwsh --config $theme
         if ($LASTEXITCODE -ne 0) {
             throw "Oh My Posh init pwsh exited with code $LASTEXITCODE."
         }
@@ -56,11 +55,13 @@ $ohMyDevenvPoshActivation = & {
     }
 }
 if ($ohMyDevenvPoshActivation) {
+    $ohMyDevenvPreviousPrompt = $Function:prompt
     Invoke-Expression -Command $ohMyDevenvPoshActivation
     # Capture the init script's resolved config before the local overlay can replace the prompt.
-    if ($env:POSH_SESSION_ID -and (Get-Module -Name oh-my-posh-core)) {
+    if ($env:POSH_SESSION_ID -and $Function:prompt -ne $ohMyDevenvPreviousPrompt) {
         $env:OH_MY_DEVENV_POSH_CONFIG = $env:POSH_CONFIG
     }
+    Remove-Variable -Name ohMyDevenvPreviousPrompt
 }
 Remove-Variable -Name ohMyDevenvPoshActivation
 
