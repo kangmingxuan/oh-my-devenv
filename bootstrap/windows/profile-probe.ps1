@@ -23,6 +23,6 @@ foreach ($entry in Get-ManagedProfilePathEntry) {
 }
 if (-not $env:OH_MY_DEVENV_POSH_CONFIG -or
     (ConvertTo-PathKey -Path $env:OH_MY_DEVENV_POSH_CONFIG) -cne (ConvertTo-PathKey -Path $ExpectedPoshConfig)) {
-    throw "The managed profile did not initialize Oh My Posh with '$ExpectedPoshConfig'. Check that oh-my-posh is on PATH and run chezmoi apply."
+    throw "Oh My Posh did not load the managed theme.`nExpected '$ExpectedPoshConfig'. Check that oh-my-posh is on PATH and run chezmoi apply."
 }
 [Console]::WriteLine("`n$SuccessMarker")

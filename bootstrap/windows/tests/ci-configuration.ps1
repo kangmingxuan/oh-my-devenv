@@ -476,7 +476,7 @@ $env:OH_MY_DEVENV_PROFILE_LOADED = '1'
         Copy-Item -LiteralPath $poshTheme -Destination $alternateTheme
         try {
             Set-FixtureText -Path $profileBody -Content ($installedBody.Replace('robbyrussell.omp.json', 'fixture.omp.json'))
-            Assert-FixtureCheckFailure -Pattern 'managed profile did not initialize Oh My Posh with .*robbyrussell\.omp\.json'
+            Assert-FixtureCheckFailure -Pattern '(?s)Oh My Posh did not load the managed theme\..*robbyrussell\.omp\.json'
         } finally {
             Set-FixtureText -Path $profileBody -Content $installedBody
             [IO.File]::Delete($alternateTheme)
