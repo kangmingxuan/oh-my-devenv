@@ -215,6 +215,7 @@ jobs:
             if ($LASTEXITCODE -ne 0) { throw "Chocolatey exited with code $LASTEXITCODE." }
           }
       - name: Validate the Windows configuration
+        if: matrix.mode == 'smoke'
         timeout-minutes: 6
         run: |
           if ('${{ matrix.mode }}' -eq 'smoke') {
@@ -225,6 +226,10 @@ jobs:
             }
           }
           ./bootstrap/windows/tests/ci-configuration.ps1 -Mode '${{ matrix.mode }}'
+      - name: Isolate the Windows apply stall
+        if: matrix.mode == 'apply'
+        shell: pwsh -NoLogo -NoProfile -NonInteractive -Command ". '{0}'"
+        run: ./bootstrap/windows/tests/ci-stall.ps1
       - name: Report the Windows installer diagnostics
         if: failure() && matrix.mode == 'apply'
         shell: pwsh -NoLogo -NoProfile -NonInteractive -Command ". '{0}'"
