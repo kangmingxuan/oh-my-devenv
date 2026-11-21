@@ -20,7 +20,7 @@ Native Windows has a [quick start](#native-windows-quick-start) for the configur
 - **Managed shells** — first-class completion for Zsh everywhere and Bash on Linux, with intentionally limited Bash support on macOS.
 - **Pinned runtimes** — Go, Node, Python, and golangci-lint via mise, plus ecosystem tools such as `gopls`, `dlv`, `ruff`, `basedpyright`, and `pre-commit`. System packages, mise itself, and oh-my-zsh with its plugins track their upstream releases.
 - **Modern CLI toolkit** — ripgrep, fd, bat, fzf, jq, direnv, tmux, shellcheck, shfmt, and more.
-- **Opt-in desktop baseline** — one all-or-nothing platform bundle: Ghostty and Maple Mono NF CN on supported workstations, OrbStack on macOS, and a Ghostty-specific Fontconfig workaround on Ubuntu 26.04+.
+- **Opt-in desktop baseline** — Maple Mono NF CN on supported workstations, Windows Terminal settings on native Windows, and Ghostty on macOS and supported Linux workstations. macOS also gets OrbStack. Ubuntu 26.04+ includes a Ghostty-specific Fontconfig workaround.
 - **Safe first run** — backs up any existing managed dotfiles and prompts once for your Git identity and desktop-baseline choice.
 - **Local overlays for private facts** — keep credentials, private hosts, and machine-only values in the documented user-owned config slots. The project-owned slots use `~/.config/oh-my-devenv/` under the fixed config root `~/.config`.
 - **Opinionated by design** — the repository carries one current design, not compatibility profiles or neutral-by-committee defaults.
@@ -181,7 +181,7 @@ For prompts, hook order, success signals, and troubleshooting, see [docs/01-onbo
 
 ## Scope and expectations
 
-This repository is maintained on a **best-effort** basis by a single maintainer. Treat it as that maintainer's public, opinionated baseline for laptops, VMs, and disposable notebook environments: it gets a clean machine to a working shell, runtime, and CLI toolchain quickly, but it is not a platform-grade product or a promise to fit every workflow. Public defaults are deliberate; credentials, private infrastructure, and machine-only facts belong in local overlays. The desktop baseline is an explicit, all-or-nothing machine choice and currently installs only on macOS and on Arch Linux and Ubuntu 26.04+ outside WSL; its contents are platform-specific, with OrbStack included on macOS.
+This repository is maintained on a **best-effort** basis by a single maintainer. Treat it as that maintainer's public, opinionated baseline for laptops, VMs, and disposable notebook environments: it gets a clean machine to a working shell, runtime, and CLI toolchain quickly, but it is not a platform-grade product or a promise to fit every workflow. Public defaults are deliberate; credentials, private infrastructure, and machine-only facts belong in local overlays. The desktop baseline is an explicit, all-or-nothing machine choice. It supports macOS, native Windows, and Arch Linux and Ubuntu 26.04+ outside WSL.
 
 ## Documentation
 

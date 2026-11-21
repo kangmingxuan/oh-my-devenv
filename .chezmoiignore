@@ -47,14 +47,14 @@ bootstrap/**
 .config/fontconfig/**
 .config/ghostty
 .config/ghostty/**
+{{ if not (index . "desktopBaseline") -}}
+.chezmoiscripts/22-install-desktop-assets.ps1
+{{ end -}}
 {{ else -}}
 .chezmoiscripts/*.ps1
 .config/oh-my-devenv
 .config/oh-my-devenv/powershell
 .config/oh-my-devenv/powershell/**
-{{ end -}}
-{{ if not (and (eq .chezmoi.os "windows") (.desktopBaseline | default false)) -}}
-.chezmoiscripts/22-install-desktop-assets.ps1
 AppData
 AppData/**
 {{ end -}}

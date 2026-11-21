@@ -242,7 +242,7 @@ profile 只影响 PowerShell 会话。从 Windows shell 启动的应用（例如
 基线不管理 Windows Terminal 的 `settings.json`，使用户在 Terminal 界面中修改的设置仍由用户掌控。基线改为部署一个 JSON fragment。
 
 - 位置：`%LOCALAPPDATA%\Microsoft\Windows Terminal\Fragments\oh-my-devenv\`。这是文档给出的用户级 fragment 位置。该文件夹不在 Documents 下，Documents 重定向不会移动它。
-- source 路径 `AppData/Local/...` 映射到 home 目录下默认的 LocalAppData 位置。LocalAppData 是已知文件夹，可能位于别处。hook 22 和 `check.ps1` 比较实际生效的 LocalAppData 路径与默认路径，不一致时带着清晰的"不受支持状态"信息失败。
+- 源路径 `AppData/Local/...` 映射到 chezmoi 的目标目录。启用桌面基线时，hook 00 在 chezmoi 写入 fragment 前，将该路径与实际生效的 LocalAppData 已知文件夹比较。hook 22 和 `check.ps1` 使用同一检查。
 - fragment 可以添加 profile 和配色方案，也可以更新内置 profile 和动态 profile，但不能修改全局设置。
 - fragment 用 `profiles[].updates` 指向首选的动态 PowerShell profile，其 GUID 为 `{574e775e-4f2a-5b96-ac1e-a2962a402336}`。它从 `desktop-font-family` 局部模板读取 `font.face`。[Fragment 格式](https://learn.microsoft.com/en-us/windows/terminal/json-fragment-extensions)、[PowerShell profile 生成器](https://github.com/microsoft/terminal/blob/main/src/cascadia/TerminalSettingsModel/PowershellCoreProfileGenerator.cpp)、[字体设置](https://learn.microsoft.com/en-us/windows/terminal/customize-settings/profile-appearance#font-face)。
 - 仅在 `desktopBaseline` 为 true 时部署该 fragment。
@@ -261,11 +261,12 @@ hook 00 的 XDG 根目录检查仍只用于 Unix。Windows 不导出 `XDG_*` 变
 
 使用 `winget import`，输入文件采用 `winget export` 产生的 JSON 格式。
 
-- 使用 [WinGet 2.0 导出 schema](https://github.com/microsoft/winget-cli/blob/master/schemas/JSON/packages/packages.schema.2.0.json) 和内置 `winget` 源。每个条目设置 `Scope` 为 `user`，省略 `Version`。
+- 使用 [WinGet 2.0 导出 schema](https://github.com/microsoft/winget-cli/blob/master/schemas/JSON/packages/packages.schema.2.0.json) 和内置 `winget` 源。验证源的名称、类型和标识符。每个条目设置 `Scope` 为 `user`，省略 `Version`。
 - 导入时不出现交互提示，在命令行上接受各项协议。
 - 传入 `--no-upgrade`。hook 20 只确保每个包存在；升级仍是用户单独执行的操作（`winget upgrade`）。安装器升级可能需要提权或重启，hook 不能触发这些。Arch Linux 路径同样把完整升级留给用户。
 - WinGet 缺失、源打不开或安装失败时，hook 20 失败。错误指出源和清单条目，并保留 WinGet 诊断。设备策略可能限制源或安装。使用现有源。遇到策略限制时联系设备管理员。
-- `check.ps1` 从清单读取 ID，逐个运行 `winget list --id <id> --exact --source winget`。检查器列出全部缺失 ID，并标明源错误或其他命令错误。[WinGet list](https://learn.microsoft.com/en-us/windows/package-manager/winget/list)。
+- `check.ps1` 通过 `winget export --source winget` 导出已安装清单。它使用 JSON 中归属内置源的完整包 ID 与清单比较。它列出全部缺失 ID，并在导出失败时保留 WinGet 诊断。[WinGet export](https://learn.microsoft.com/en-us/windows/package-manager/winget/export)。
+- `sharkdp.fd` 和 `sharkdp.bat` 声明依赖 Visual C++ 2015+ 运行库。WinGet 1.11 的 import 会跳过包依赖。检查器要求 PowerShell 进程可见的 Windows 系统目录中存在 `vcruntime140.dll`。缺失时，请管理员安装匹配架构的运行库。x64 的命令为 `winget install --id Microsoft.VCRedist.2015+.x64 --exact`。hook 仅执行用户范围的安装。[WinGet import 实现](https://github.com/microsoft/winget-cli/blob/v1.11.510/src/AppInstallerCLICore/Workflows/ImportExportFlow.cpp#L309-L322)。[Microsoft 运行库下载](https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist/)。
 
 用户盘点前，Claude 从 Unix 基线选定起始清单。
 [Microsoft 目录](https://github.com/microsoft/winget-pkgs/tree/master/manifests)确认了包 ID 和安装器类型。
@@ -292,9 +293,9 @@ hook 00 的 XDG 根目录检查仍只用于 Unix。Windows 不导出 `XDG_*` 变
 
 - hook 22 从 `maple-mono-nf-cn.env` 读取 URL、摘要、字族和必需字面。先校验归档摘要，再提取必需的 TrueType 文件。已有文件的字节一致时保留原文件。
 - 将字体复制到 `%LOCALAPPDATA%\Microsoft\Windows\Fonts`。在 `HKCU\Software\Microsoft\Windows NT\CurrentVersion\Fonts` 下为每个字面写入完整文件路径，值类型为字符串。字体为当前用户持久注册。如果当前会话无法使用字体，注销并重新登录。[Microsoft 字体安装器实现](https://github.com/microsoft/winget-cli/blob/master/src/AppInstallerCommonCore/Fonts.cpp)、[FontLab 用户级注册表实现](https://github.com/fontlaborg/fontlift-win-cli/blob/main/src/sys_utils.cpp)。
-- 启用 `desktopBaseline` 时，hook 22 和检查器要求使用默认 LocalAppData，并能从 `PATH` 找到 `wt.exe` 或 `WindowsTerminal.exe`。Windows 11 通常自带 Terminal。禁用别名时，需在 `PATH` 上提供可执行文件。
-- 检查器要求每个字面的文件和注册项都存在，并检查受管 fragment。
-- 阶段 3 卸载移除所选配置中的受管 fragment。包和字体卸载属于阶段 5。
+- 启用 `desktopBaseline` 时，hook 00、hook 22 和检查器要求目标目录的 `AppData/Local` 与实际生效的 LocalAppData 一致。它们还要求在 `PATH` 上找到 `wt.exe` 或 `WindowsTerminal.exe`。Windows 11 通常自带 Terminal。禁用别名时，需在 `PATH` 上提供可执行文件。
+- 检查器要求每个字面的文件和注册项都存在。它解析已部署的 JSON，并验证 fragment 为 PowerShell 7 配置清单中的字体族。
+- `desktopBaseline` 为 false 或缺省时，fragment 模板渲染为空，chezmoi 在 apply 时删除该文件。阶段 3 的卸载也会移除受管 fragment。包和字体卸载属于阶段 5。[Chezmoi 模板行为](https://www.chezmoi.io/reference/templates/)。
 
 ## 12. 本地 Overlay
 
@@ -308,12 +309,12 @@ hook 00 的 XDG 根目录检查仍只用于 Unix。Windows 不导出 `XDG_*` 变
 
 - Unix smoke tests：
   - 用 Windows 的 chezmoi 数据渲染 ignore 规则，断言没有任何 `.sh` hook 和 Unix 专属目标受管；用 macOS 和 Linux 数据渲染，断言没有任何 `.ps1` hook 和 Windows 专属目标受管。
-  - 为各平台渲染共享的 Git 与 SSH 目标。开启和关闭 `desktopBaseline` 时均检查 fragment 目标和桌面 hook 的部署条件。
+  - 为各平台渲染共享的 Git 与 SSH 目标。解析渲染后的 Terminal fragment。验证关闭或省略桌面选项时，桌面 hook 被停用且 fragment 被删除。
 - 在托管 Windows runner 上运行 Windows smoke job：
   - 用 PSScriptAnalyzer 检查 PowerShell 代码。
   - 为辅助脚本运行 Pester 测试，包括共享 manifest 的测试用例。
   - 在临时 home 中，用 WinGet stub 执行 apply 和 reapply。使用 fixture 中的 profile 路径。用模拟下载以及隔离的字体目录和注册表位置单独测试桌面安装器。
-- 托管 Windows apply job 在执行往返验证前记录 WinGet 和 Terminal 的可用性。WinGet 可用时运行真实导入和检查器。缺失时记录覆盖缺口，并仅在 CI fixture 中使用 stub。Terminal 缺失时记录覆盖缺口，并把真实字体归档安装到隔离的文件和注册表位置。Terminal 可用时运行桌面 hook 和检查器，测试后恢复字体文件和注册表值。
+- 托管 Windows apply job 要求 WinGet 和 Terminal 可用。它执行真实 WinGet 导入、桌面 hook 和检查器。测试后恢复字体文件和注册表值。
 - 真实安装的覆盖缺口要求在合并前完成实机签核。用户将首次实机 apply 安排在所有计划阶段完成后。托管覆盖和实机签核仍待确认。
 - 两个 Windows job 都在与 Unix job 相同的 `needs-checks` 条件下运行，并汇入现有的单一 required check。这样不需要第二个路径分类器，避免共享文件改动后 Windows CI 被跳过。
 - 在真实 Windows 机器上的实际安装，遵循与 Unix 平台相同的本地验证策略。

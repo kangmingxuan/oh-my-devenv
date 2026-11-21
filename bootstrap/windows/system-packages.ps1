@@ -1,12 +1,23 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+function Test-BuiltInWinGetSource {
+    param($Details)
+
+    $Details -is [Collections.IDictionary] -and $Details['Name'] -ceq 'winget' -and
+        $Details['Type'] -ceq 'Microsoft.PreIndexed.Package' -and
+        $Details['Identifier'] -ceq 'Microsoft.Winget.Source_8wekyb3d8bbwe'
+}
+
 function Read-WinGetPackageManifest {
     param([Parameter(Mandatory)][string]$Path)
 
     $manifest = Get-Content -LiteralPath $Path -Raw | ConvertFrom-Json -AsHashtable
     $sources = $manifest['Sources']
-    if ($sources -isnot [array] -or $sources.Count -ne 1 -or $sources[0].SourceDetails.Name -cne 'winget') {
+    $details = if ($sources -is [array] -and $sources.Count -eq 1 -and $sources[0] -is [Collections.IDictionary]) {
+        $sources[0]['SourceDetails']
+    }
+    if (-not (Test-BuiltInWinGetSource -Details $details)) {
         throw "The WinGet manifest '$Path' must use only the winget source."
     }
     $packages = $sources[0].Packages
@@ -27,6 +38,17 @@ function Read-WinGetPackageManifest {
         }
     }
     $packages.PackageIdentifier
+}
+
+function Confirm-VisualCppRuntime {
+    param([Parameter(Mandatory)][string[]]$PackageIds)
+
+    $architecture = [Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture.ToString().ToLowerInvariant()
+    $runtimePath = Join-Path ([Environment]::SystemDirectory) 'vcruntime140.dll'
+    if (-not (Test-Path -LiteralPath $runtimePath -PathType Leaf)) {
+        throw "The Visual C++ 2015+ runtime ($architecture) is missing at '$runtimePath'. These WinGet packages declare it: $($PackageIds -join ', '). Ask an administrator to run: winget install --id Microsoft.VCRedist.2015+.$architecture --exact"
+    }
+    Write-Host "Visual C++ 2015+ runtime ($architecture): $runtimePath"
 }
 
 function Get-WinGetApplication {
@@ -60,17 +82,36 @@ function Confirm-SystemPackage {
 
     $ids = @(Read-WinGetPackageManifest -Path $ManifestPath)
     $winget = Get-WinGetApplication
-    $missing = foreach ($id in $ids) {
+    # WinGet 1.11 can enumerate an installed package that its exact-ID list filter misses.
+    # Export enumerates installed registrations and supplies the catalog IDs as JSON.
+    $temp = [IO.Directory]::CreateTempSubdirectory('oh-my-devenv-winget-')
+    try {
+        $inventoryPath = Join-Path $temp.FullName 'installed.json'
         $result = Invoke-NativeCommand -Executable $winget.Source -Arguments @(
-            'list', '--id', $id, '--exact', '--source', 'winget', '--accept-source-agreements', '--disable-interactivity'
+            'export', '--output', $inventoryPath, '--source', 'winget', '--accept-source-agreements', '--disable-interactivity'
         ) -AllowFailure
-        # APPINSTALLER_CLI_ERROR_NO_APPLICATIONS_FOUND is independent of the client locale.
         if ($result.ExitCode -eq 0x8A150014) {
-            $id
+            # APPINSTALLER_CLI_ERROR_NO_APPLICATIONS_FOUND means there is nothing to export.
+            $installedIds = @()
         } elseif ($result.ExitCode -ne 0) {
-            throw "WinGet could not check '$id' in source 'winget' (exit $($result.ExitCode)). Device policy may block this source.`n$($result.Stderr)`n$($result.Stdout)"
+            throw "WinGet could not export installed packages from source 'winget' (exit $($result.ExitCode)). Device policy may block this source.`n$($result.Stderr)`n$($result.Stdout)"
+        } else {
+            $inventory = Get-Content -LiteralPath $inventoryPath -Raw | ConvertFrom-Json -AsHashtable
+            $installedIds = @(
+                foreach ($source in $inventory['Sources']) {
+                    if (Test-BuiltInWinGetSource -Details $source['SourceDetails']) {
+                        foreach ($package in $source['Packages']) {
+                            $package['PackageIdentifier']
+                        }
+                    }
+                }
+            )
         }
+    } finally {
+        $temp.Delete($true)
     }
+
+    $missing = @($ids | Where-Object { $_ -cnotin $installedIds })
     if ($missing) {
         throw "Missing WinGet packages: $($missing -join ', '). Install them from the winget source using user scope."
     }

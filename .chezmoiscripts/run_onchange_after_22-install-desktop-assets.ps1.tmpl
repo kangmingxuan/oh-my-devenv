@@ -14,7 +14,7 @@ if (-not $IsWindows) {
 . {{ includeTemplate "powershell-literal" (joinPath .chezmoi.sourceDir "bootstrap/windows/desktop.ps1") }}
 
 Update-HookPath
-$localData = Get-DesktopLocalData
+$localData = Get-DesktopLocalData -Destination {{ includeTemplate "powershell-literal" .chezmoi.destDir }}
 $target = Get-DesktopFontTarget -LocalData $localData
 $manifest = Read-DesktopFontManifest -Path {{ includeTemplate "powershell-literal" (joinPath .chezmoi.sourceDir "bootstrap/manifests/desktop/maple-mono-nf-cn.env") }}
 Install-DesktopFont -Manifest $manifest @target

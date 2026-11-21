@@ -15,12 +15,21 @@ PowerShell must be 7.6 or later. Check the effective execution policy with
 `Get-ExecutionPolicy` inside `pwsh`. If policy blocks the hooks, the source,
 or an installer, stop and contact the device administrator.
 
+The `sharkdp.fd` and `sharkdp.bat` packages declare the Microsoft Visual C++
+2015+ Redistributable. The checker verifies that the runtime is present for
+the current PowerShell process architecture. If it is missing, ask an
+administrator to run the command that the checker prints. For x64, use
+`winget install --id Microsoft.VCRedist.2015+.x64 --exact`. The hooks only
+install user-scope packages.
+
 The desktop option requires Windows Terminal on `PATH` and the default
 LocalAppData location under your home directory. It installs the Maple Mono NF CN
 faces for the current user and deploys a Windows Terminal fragment for the
 PowerShell profile. Sign out and back in if Windows Terminal cannot find the new
-font. Apply prints `All checks passed.` after the configuration, system packages,
-and any enabled desktop assets pass inspection.
+font. To disable the desktop option, set `desktopBaseline = false` in your
+chezmoi configuration and apply again. This removes the project's Terminal
+fragment and keeps the installed fonts. Apply prints `All checks passed.` after
+the configuration, system packages, and any enabled desktop assets pass inspection.
 
 On the first apply, review any backup under
 `%LOCALAPPDATA%\oh-my-devenv\chezmoi-first-run-backup`. The path follows the

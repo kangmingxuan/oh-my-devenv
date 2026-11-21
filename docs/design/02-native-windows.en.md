@@ -246,7 +246,7 @@ The profile affects PowerShell sessions only. Applications started from the Wind
 The baseline does not own Windows Terminal's `settings.json`, so the settings that the user changes in the Terminal UI stay under user control. The baseline deploys a JSON fragment instead.
 
 - Location: `%LOCALAPPDATA%\Microsoft\Windows Terminal\Fragments\oh-my-devenv\`. This is the documented per-user fragment location. The folder is outside Documents, so Documents redirection does not move it.
-- The source path `AppData/Local/...` maps to the default LocalAppData location under the home directory. LocalAppData is a known folder and can have a different location. Hook 22 and `check.ps1` compare the effective LocalAppData path with the default, and fail with a clear unsupported-state message when they differ.
+- The source path `AppData/Local/...` maps to the chezmoi destination. With the desktop baseline enabled, hook 00 compares that path with the effective LocalAppData known folder before chezmoi writes the fragment. Hook 22 and `check.ps1` use the same check.
 - A fragment can add profiles and color schemes, and it can update the built-in and dynamic profiles. It cannot change global settings.
 - The fragment uses `profiles[].updates` with the preferred dynamic PowerShell profile GUID `{574e775e-4f2a-5b96-ac1e-a2962a402336}`. It sets `font.face` from the `desktop-font-family` partial. [Fragment format](https://learn.microsoft.com/en-us/windows/terminal/json-fragment-extensions), [PowerShell profile generator](https://github.com/microsoft/terminal/blob/main/src/cascadia/TerminalSettingsModel/PowershellCoreProfileGenerator.cpp), [Font settings](https://learn.microsoft.com/en-us/windows/terminal/customize-settings/profile-appearance#font-face).
 - Deploy the fragment only when `desktopBaseline` is true.
@@ -265,11 +265,12 @@ The file is required, not optional. The Git for Windows installer sets `core.aut
 
 Use `winget import` with a JSON file in the format that `winget export` produces.
 
-- Use the [WinGet 2.0 export schema](https://github.com/microsoft/winget-cli/blob/master/schemas/JSON/packages/packages.schema.2.0.json) with the built-in `winget` source. Set `Scope` to `user` on each entry and omit `Version`.
+- Use the [WinGet 2.0 export schema](https://github.com/microsoft/winget-cli/blob/master/schemas/JSON/packages/packages.schema.2.0.json) with the built-in `winget` source. Validate its name, type, and identifier. Set `Scope` to `user` on each entry and omit `Version`.
 - Run the import without interactive prompts and accept the agreements on the command line.
 - Pass `--no-upgrade`. Hook 20 ensures that each package is present; upgrades stay a separate user action (`winget upgrade`). An installer upgrade can need elevation or a restart, which a hook must not trigger. The Arch Linux path also leaves a full upgrade to the user.
 - Hook 20 fails when WinGet is missing, the source cannot be opened, or an install fails. The error identifies the source and manifest entries and includes the WinGet diagnostic. Device policy can block the source or installation. Use the existing source and contact the device administrator if policy blocks it.
-- `check.ps1` reads IDs from the manifest and runs `winget list --id <id> --exact --source winget` for each. It reports all absent IDs and identifies source or other command failures. [WinGet list](https://learn.microsoft.com/en-us/windows/package-manager/winget/list).
+- `check.ps1` exports the installed inventory with `winget export --source winget`. It compares complete package IDs in the JSON from the built-in source against the manifest. It reports all absent IDs and includes the native diagnostic if export fails. [WinGet export](https://learn.microsoft.com/en-us/windows/package-manager/winget/export).
+- `sharkdp.fd` and `sharkdp.bat` declare the Visual C++ 2015+ runtime. WinGet 1.11 import skips package dependencies. The checker requires `vcruntime140.dll` in the Windows system directory seen by the PowerShell process. If it is missing, ask an administrator to install the matching architecture. For x64, run `winget install --id Microsoft.VCRedist.2015+.x64 --exact`. The hooks run only user-scope installs. [WinGet import implementation](https://github.com/microsoft/winget-cli/blob/v1.11.510/src/AppInstallerCLICore/Workflows/ImportExportFlow.cpp#L309-L322). [Microsoft runtime downloads](https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist/).
 
 Claude chose the starting inventory from the Unix baseline while the user
 inventory is pending. The [Microsoft catalog](https://github.com/microsoft/winget-pkgs/tree/master/manifests)
@@ -297,9 +298,9 @@ On Windows, the desktop baseline is the Maple Mono NF CN font and the Windows Te
 
 - Hook 22 reads the URL, digest, family, and required faces from `maple-mono-nf-cn.env`. It validates the archive digest before extracting the required TrueType files and keeps files whose bytes already match.
 - Copy the files to `%LOCALAPPDATA%\Microsoft\Windows\Fonts`. Register each full file path as a string value under `HKCU\Software\Microsoft\Windows NT\CurrentVersion\Fonts`. This persists the fonts for the current user. If the fonts are unavailable in the current session, sign out and back in. [Microsoft's font installer implementation](https://github.com/microsoft/winget-cli/blob/master/src/AppInstallerCommonCore/Fonts.cpp), [FontLab's per-user registry implementation](https://github.com/fontlaborg/fontlift-win-cli/blob/main/src/sys_utils.cpp).
-- With `desktopBaseline` enabled, hook 22 and the checker require the default LocalAppData and Windows Terminal discoverable as `wt.exe` or `WindowsTerminal.exe` on `PATH`. Windows 11 normally provides Terminal. An installation with its alias disabled must also expose its executable on `PATH`.
-- The checker requires every face's file and registration and the managed fragment file.
-- Phase-3 uninstall removes the fragment while the selected configuration manages it. Package and font removal belong to phase 5.
+- With `desktopBaseline` enabled, hooks 00 and 22 and the checker require the destination's `AppData/Local` to match the effective LocalAppData. They also require Windows Terminal discoverable as `wt.exe` or `WindowsTerminal.exe` on `PATH`. Windows 11 normally provides Terminal. An installation with its alias disabled must expose its executable on `PATH`.
+- The checker requires every face's file and registration. It parses the deployed JSON and verifies that the fragment sets the manifest family on the PowerShell 7 profile.
+- When `desktopBaseline` is false or omitted, the fragment template renders empty and chezmoi removes that file on apply. Phase-3 uninstall also removes the managed fragment. Package and font removal belong to phase 5. [Chezmoi template behavior](https://www.chezmoi.io/reference/templates/).
 
 ## 12. Local Overlays
 
@@ -313,12 +314,12 @@ Add one Windows overlay, `profile.local.ps1` (section 9), in phase 2 together wi
 
 - Unix smoke tests:
   - Render the ignore rules with Windows chezmoi data and assert that no `.sh` hook and no Unix-only target is managed. Render with macOS and Linux data and assert that no `.ps1` hook and no Windows-only target is managed.
-  - Render the shared Git and SSH targets across platforms. Check the fragment target and the desktop hook gate with `desktopBaseline` on and off.
+  - Render the shared Git and SSH targets across platforms. Parse the rendered Terminal fragment. Check the desktop hook gate and fragment removal when the desktop option is disabled or omitted.
 - Windows smoke job on a hosted Windows runner:
   - Lint the PowerShell code with PSScriptAnalyzer.
   - Run the Pester tests for the helpers, including the shared-manifest test cases.
   - Apply and reapply the main source in a temporary home with a WinGet stub. Use a fixture profile path. Test the desktop installer separately with stubbed downloads and isolated font and registry targets.
-- The hosted Windows apply job logs WinGet and Terminal availability before the round trip. If WinGet is present, run the real import and checker. If WinGet is absent, log a coverage gap and use a stub only in the CI fixture. If Terminal is unavailable, log a coverage gap and install the real font archive into isolated file and registry targets. With Terminal available, run the desktop hook and checker and restore the font files and registry values after testing.
+- The hosted Windows apply job requires WinGet and Terminal. It runs the real WinGet import, desktop hook, and checker. It restores the font files and registry values after testing.
 - A coverage gap in real installation requires live signoff before merge. The user scheduled the first live apply after all planned phases. Hosted coverage or live signoff is still pending.
 - Run both Windows jobs under the same `needs-checks` condition as the Unix jobs, and feed them into the existing single required check. This avoids a second path classifier that could skip Windows CI after a change to a shared file.
 - Live installs on a real Windows machine follow the same local validation policy as the Unix platforms.

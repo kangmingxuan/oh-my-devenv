@@ -104,6 +104,7 @@ The installer scripts and `bootstrap/scripts/check.sh` consume the following sou
 - `bootstrap/manifests/system/pacman-packages.txt`
 - `bootstrap/manifests/system/Brewfile`
 - `bootstrap/manifests/system/winget-packages.json` (Windows installer and checker)
+- `bootstrap/manifests/system/winget-vc-runtime-packages.txt` (WinGet package IDs that declare the Visual C++ runtime prerequisite)
 - `bootstrap/manifests/desktop/apt-packages.txt`
 - `bootstrap/manifests/desktop/pacman-packages.txt`
 - `bootstrap/manifests/desktop/Brewfile`

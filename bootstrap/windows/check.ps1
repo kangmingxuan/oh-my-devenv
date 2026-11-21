@@ -68,6 +68,7 @@ Write-Host "SSH read managed config: $sshConfig"
 
 $manifestRoot = Join-Path $PSScriptRoot '../manifests'
 Confirm-SystemPackage -ManifestPath (Join-Path $manifestRoot 'system/winget-packages.json')
+Confirm-VisualCppRuntime -PackageIds (Get-Content -LiteralPath (Join-Path $manifestRoot 'system/winget-vc-runtime-packages.txt'))
 
 if (-not $PSBoundParameters.ContainsKey('DesktopBaseline')) {
     $chezmoi = Get-PathApplication -Name chezmoi
@@ -75,7 +76,7 @@ if (-not $PSBoundParameters.ContainsKey('DesktopBaseline')) {
     $DesktopBaseline = [bool](ConvertFrom-Json -InputObject $data.Stdout -AsHashtable)['desktopBaseline']
 }
 if ($DesktopBaseline) {
-    $localData = Get-DesktopLocalData
+    $localData = Get-DesktopLocalData -Destination $Destination
     $target = Get-DesktopFontTarget -LocalData $localData
     $manifest = Read-DesktopFontManifest -Path (Join-Path $manifestRoot 'desktop/maple-mono-nf-cn.env')
     Confirm-DesktopFont -Manifest $manifest @target
@@ -83,5 +84,6 @@ if ($DesktopBaseline) {
     if ($null -eq (Resolve-RegularFile -Path $fragment)) {
         throw "Missing Windows Terminal fragment '$fragment'. Run chezmoi apply."
     }
+    Confirm-TerminalFragment -Path $fragment -Family $manifest.Family
 }
 Write-Host 'All checks passed.'

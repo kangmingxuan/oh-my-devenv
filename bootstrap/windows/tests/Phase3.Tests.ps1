@@ -20,7 +20,7 @@ Describe 'The WinGet layer' {
         $packagePath = Join-Path $TestDrive 'package manifest.json'
         $manifest = @{
             Sources = @(@{
-                SourceDetails = @{ Name = 'winget' }
+                SourceDetails = (Get-Content -LiteralPath $packageManifestPath -Raw | ConvertFrom-Json -AsHashtable).Sources[0].SourceDetails
                 Packages = @(
                     @{ PackageIdentifier = 'Example.First'; Scope = 'user' }
                     @{ PackageIdentifier = 'Example.Second'; Scope = 'user' }
@@ -36,6 +36,15 @@ Describe 'The WinGet layer' {
 
     It 'rejects an alternate source' {
         $manifest.Sources[0].SourceDetails.Name = 'other'
+        $manifest | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $packagePath
+        { Read-WinGetPackageManifest -Path $packagePath } | Should -Throw '*must use only the winget source*'
+    }
+
+    It 'rejects a winget source with a mismatched <Field>' -ForEach @(
+        @{ Field = 'Type' }
+        @{ Field = 'Identifier' }
+    ) {
+        $manifest.Sources[0].SourceDetails[$Field] = 'Example.Other'
         $manifest | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $packagePath
         { Read-WinGetPackageManifest -Path $packagePath } | Should -Throw '*must use only the winget source*'
     }
@@ -65,16 +74,49 @@ Describe 'The WinGet layer' {
         Mock Get-PathApplication { @{ Source = 'winget fixture' } }
         Mock Invoke-NativeCommand { @{ ExitCode = 0x8A150014; Stdout = ''; Stderr = '' } }
         { Confirm-SystemPackage -ManifestPath $packagePath } | Should -Throw '*Missing WinGet packages: Example.First, Example.Second*'
-        Should -Invoke Invoke-NativeCommand -Times 2 -Exactly -ParameterFilter {
-            $Arguments[0] -eq 'list' -and '--exact' -in $Arguments -and 'winget' -in $Arguments
+        Should -Invoke Invoke-NativeCommand -Times 1 -Exactly -ParameterFilter {
+            $Arguments[0] -eq 'export' -and $Arguments[3] -eq '--source' -and $Arguments[4] -eq 'winget'
         }
     }
 
-    It 'reports a source failure with its exit code and package ID' {
+    It 'compares complete installed IDs only from the built-in source' {
+        $inventory = @{
+            Sources = @(
+                @{
+                    SourceDetails = $manifest.Sources[0].SourceDetails
+                    Packages = @(@{ PackageIdentifier = 'Example.First' }, @{ PackageIdentifier = 'Example.SecondPreview' })
+                }
+                @{
+                    SourceDetails = @{ Name = 'winget'; Type = 'Microsoft.PreIndexed.Package'; Identifier = 'Example.Other' }
+                    Packages = @(@{ PackageIdentifier = 'Example.Second' })
+                }
+            )
+        }
+        Mock Get-PathApplication { @{ Source = 'winget fixture' } }
+        Mock Invoke-NativeCommand {
+            $inventory | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $Arguments[2]
+            @{ ExitCode = 0; Stdout = ''; Stderr = '' }
+        } -ParameterFilter { $Arguments[0] -eq 'export' }
+        { Confirm-SystemPackage -ManifestPath $packagePath } | Should -Throw '*Missing WinGet packages: Example.Second. Install*'
+        $inventory.Sources[0].Packages += @{ PackageIdentifier = 'Example.Second' }
+        { Confirm-SystemPackage -ManifestPath $packagePath } | Should -Not -Throw
+    }
+
+    It 'reports a source failure with its exit code and diagnostic' {
         Mock Get-PathApplication { @{ Source = 'winget fixture' } }
         Mock Invoke-NativeCommand { @{ ExitCode = 0x8A150012; Stdout = ''; Stderr = 'Fixture source disabled' } }
         { Confirm-SystemPackage -ManifestPath $packagePath } |
-            Should -Throw "*could not check 'Example.First' in source 'winget'*Fixture source disabled*"
+            Should -Throw "*could not export installed packages from source 'winget'*Fixture source disabled*"
+    }
+
+    It 'reports a missing Visual C++ runtime without attempting installation' {
+        Mock Test-Path { $false } -ParameterFilter { $LiteralPath -like '*vcruntime140.dll' -and $PathType -eq 'Leaf' }
+        Mock Invoke-NativeCommand { throw 'Unexpected native call' }
+        $architecture = [Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture.ToString().ToLowerInvariant()
+        { Confirm-VisualCppRuntime -PackageIds @('Example.First', 'Example.Second') } |
+            Should -Throw "*Example.First, Example.Second*administrator*winget install --id Microsoft.VCRedist.2015+.$architecture --exact*"
+        Should -Invoke Test-Path -Times 1 -Exactly -ParameterFilter { $LiteralPath -like '*vcruntime140.dll' }
+        Should -Invoke Invoke-NativeCommand -Times 0 -Exactly
     }
 }
 
@@ -140,15 +182,15 @@ Describe 'The Windows desktop layer' {
 
     It 'stops on redirected LocalAppData before checking Windows Terminal' {
         Mock Test-WindowsTerminal { throw 'Unexpected Terminal check' }
-        { Get-DesktopLocalData -HomeDirectory $TestDrive } | Should -Throw '*Unsupported*LocalAppData resolves to*'
+        { Get-DesktopLocalData -Destination $TestDrive } | Should -Throw '*Unsupported*LocalAppData resolves to*'
         Should -Invoke Test-WindowsTerminal -Times 0 -Exactly
     }
 
     It 'reports an unavailable Windows Terminal at the standard LocalAppData path' -Skip:(-not $IsWindows) {
         $localData = [Environment]::GetFolderPath('LocalApplicationData')
-        $homeDirectory = Split-Path -Parent (Split-Path -Parent $localData)
+        $destination = Split-Path -Parent (Split-Path -Parent $localData)
         Mock Test-WindowsTerminal { $false }
-        { Get-DesktopLocalData -HomeDirectory $homeDirectory } | Should -Throw '*Unsupported*Windows Terminal is required*'
+        { Get-DesktopLocalData -Destination $destination } | Should -Throw '*Unsupported*Windows Terminal is required*'
     }
 
     It 'rejects a digest mismatch before opening the archive or writing any destination' {
@@ -188,5 +230,33 @@ Describe 'The Windows desktop layer' {
         }
         Install-DesktopFont @options
         [IO.File]::GetLastWriteTimeUtc($installed) | Should -Be $time
+    }
+}
+
+Describe 'The deployed Windows Terminal fragment' {
+    BeforeEach {
+        $fragment = Join-Path $TestDrive 'desktop.json'
+        $profiles = @(@{ updates = '{574e775e-4f2a-5b96-ac1e-a2962a402336}'; font = @{ face = 'Example Font' } })
+    }
+
+    It 'accepts the PowerShell profile update with the manifest family' {
+        @{ profiles = $profiles } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $fragment
+        { Confirm-TerminalFragment -Path $fragment -Family 'Example Font' } | Should -Not -Throw
+    }
+
+    It 'rejects a fragment with invalid JSON that still contains the family' {
+        '{ "profiles": [ { "font": { "face": "Example Font" } }' | Set-Content -LiteralPath $fragment
+        { Confirm-TerminalFragment -Path $fragment -Family 'Example Font' } | Should -Throw '*Invalid JSON*Windows Terminal fragment*'
+    }
+
+    It 'rejects a profile without an update target' {
+        $profiles[0].Remove('updates')
+        @{ profiles = $profiles } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $fragment
+        { Confirm-TerminalFragment -Path $fragment -Family 'Example Font' } | Should -Throw '*must update the PowerShell 7 profile*'
+    }
+
+    It 'rejects a different font family' {
+        @{ profiles = $profiles } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $fragment
+        { Confirm-TerminalFragment -Path $fragment -Family 'Different Font' } | Should -Throw '*must set*Different Font*'
     }
 }

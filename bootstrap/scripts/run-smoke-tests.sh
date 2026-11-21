@@ -825,14 +825,41 @@ for hook_platform in "${hook_platforms[@]}" "windows|$windows_chezmoi_data"; do
     done <<<"$managed_platform"
     chezmoi --source="$repo_root" --destination="$HOME" --override-data "$platform_override" \
       cat "$HOME/$terminal_fragment" >"$tmp_dir/windows-desktop.json"
-    assert_file_contains "$tmp_dir/windows-desktop.json" "\"face\": \"$MAPLE_MONO_FAMILY\""
-    managed_windows_minimal="$(chezmoi --source="$repo_root" --destination="$HOME" \
-      --override-data "{\"desktopBaseline\":false,\"chezmoi\":$windows_chezmoi_data}" managed --format=)"
-    if grep -Eq '^([.]chezmoiscripts/22-install-desktop-assets[.]ps1$|AppData(/|$))' <<<"$managed_windows_minimal"; then
-      fail_test 'Windows manages desktop assets with desktopBaseline disabled'
-    fi
-    grep -Fxq '.chezmoiscripts/20-install-system-packages.ps1' <<<"$managed_windows_minimal" \
-      || fail_test 'Windows disables system packages with the desktop baseline'
+    # shellcheck disable=SC2016
+    rendered_family="$(chezmoi --source="$tmp_dir" execute-template '
+      {{- $fragment := include "windows-desktop.json" | mustFromJson -}}
+      {{- if ne (len $fragment.profiles) 1 }}{{ fail "expected one Terminal profile update" }}{{ end -}}
+      {{- $profile := index $fragment.profiles 0 -}}
+      {{- if ne $profile.updates "{574e775e-4f2a-5b96-ac1e-a2962a402336}" }}{{ fail "expected a PowerShell 7 profile update" }}{{ end -}}
+      {{- $profile.font.face -}}')"
+    [[ "$rendered_family" == "$MAPLE_MONO_FAMILY" ]] \
+      || fail_test "unexpected Windows Terminal font family: $rendered_family"
+    windows_desktop_home="$tmp_dir/windows-desktop-home"
+    windows_desktop_target="$windows_desktop_home/$terminal_fragment"
+    windows_desktop_neighbor="$(dirname "$windows_desktop_target")/other.json"
+    mkdir -p "$(dirname "$windows_desktop_target")"
+    printf 'keep\n' >"$windows_desktop_neighbor"
+    for windows_desktop_setting in '"desktopBaseline":false,' ''; do
+      chezmoi --source="$repo_root" --destination="$windows_desktop_home" \
+        --override-data "$platform_override" apply --exclude=scripts "$windows_desktop_home/AppData"
+      [[ -s "$windows_desktop_target" ]] || fail_test 'Windows desktop apply did not write its Terminal fragment'
+      windows_minimal_override="{$windows_desktop_setting\"chezmoi\":$windows_chezmoi_data}"
+      managed_windows_minimal="$(chezmoi --source="$repo_root" --destination="$windows_desktop_home" \
+        --override-data "$windows_minimal_override" managed --format=)"
+      if grep -Fxq '.chezmoiscripts/22-install-desktop-assets.ps1' <<<"$managed_windows_minimal"; then
+        fail_test 'Windows manages the desktop installer with the baseline disabled or omitted'
+      fi
+      grep -Fxq '.chezmoiscripts/20-install-system-packages.ps1' <<<"$managed_windows_minimal" \
+        || fail_test 'Windows disables system packages with the desktop baseline'
+      chezmoi --source="$repo_root" --destination="$windows_desktop_home" \
+        --override-data "$windows_minimal_override" apply --exclude=scripts "$windows_desktop_home/AppData"
+      [[ ! -e "$windows_desktop_target" ]] || fail_test 'Windows desktop opt-out left the Terminal fragment in place'
+      [[ "$(cat "$windows_desktop_neighbor")" == keep ]] || fail_test 'Windows desktop opt-out changed another Terminal fragment'
+      chezmoi --source="$repo_root" --destination="$windows_desktop_home" --override-data "$windows_minimal_override" \
+        execute-template --file "$repo_root/.chezmoiscripts/run_after_60-check.ps1.tmpl" >"$tmp_dir/windows-check-disabled.ps1"
+      # shellcheck disable=SC2016
+      assert_file_contains "$tmp_dir/windows-check-disabled.ps1" '-DesktopBaseline:$false'
+    done
     # Native syntax and lint checks of the rendered hooks run in Windows CI.
     for hook_template in "$repo_root"/.chezmoiscripts/*.ps1.tmpl; do
       rendered_hook="$tmp_dir/hook-windows-$(basename "$hook_template" .tmpl)"

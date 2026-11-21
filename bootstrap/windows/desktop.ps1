@@ -54,10 +54,10 @@ function Test-WindowsTerminal {
 }
 
 function Get-DesktopLocalData {
-    param([string]$HomeDirectory = $HOME)
+    param([Parameter(Mandatory)][string]$Destination)
 
     $localData = [Environment]::GetFolderPath('LocalApplicationData')
-    $expected = Join-Path $HomeDirectory 'AppData/Local'
+    $expected = Join-Path $Destination 'AppData/Local'
     if (-not $localData -or (ConvertTo-PathKey -Path $localData) -cne (ConvertTo-PathKey -Path $expected)) {
         throw "Unsupported Windows desktop baseline: LocalAppData resolves to '$localData'. Expected '$expected'."
     }
@@ -65,6 +65,27 @@ function Get-DesktopLocalData {
         throw 'Unsupported Windows desktop baseline: Windows Terminal is required. Install it or make wt.exe (or WindowsTerminal.exe) available on PATH.'
     }
     $localData
+}
+
+function Confirm-TerminalFragment {
+    param([Parameter(Mandatory)][string]$Path, [Parameter(Mandatory)][string]$Family)
+
+    $content = Get-Content -LiteralPath $Path -Raw
+    try {
+        $fragment = ConvertFrom-Json -InputObject $content -AsHashtable -NoEnumerate
+    } catch {
+        throw "Invalid JSON in Windows Terminal fragment '$Path'. $($_.Exception.Message)"
+    }
+    if ($fragment -isnot [Collections.IDictionary] -or $fragment['profiles'] -isnot [array] -or
+        $fragment['profiles'].Count -ne 1 -or $fragment['profiles'][0] -isnot [Collections.IDictionary] -or
+        $fragment['profiles'][0]['updates'] -isnot [string] -or
+        $fragment['profiles'][0]['updates'] -ne '{574e775e-4f2a-5b96-ac1e-a2962a402336}') {
+        throw "The Windows Terminal fragment '$Path' must update the PowerShell 7 profile. Run chezmoi apply."
+    }
+    $font = $fragment['profiles'][0]['font']
+    if ($font -isnot [Collections.IDictionary] -or $font['face'] -isnot [string] -or $font['face'] -cne $Family) {
+        throw "The Windows Terminal fragment '$Path' must set the font face to '$Family'. Run chezmoi apply."
+    }
 }
 
 function Get-DesktopFontTarget {
