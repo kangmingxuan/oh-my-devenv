@@ -61,14 +61,18 @@ function Assert-UnsafeSshAcl {
 function Assert-FixtureCheckFailure {
     param([string]$Pattern)
 
-    $result = Invoke-NativeCommand -Executable $pwsh -Arguments @(
-        '-NoProfile', '-File', (Join-Path $helpers 'check.ps1')
-        '-Destination', $destination, '-ProfilePath', $profilePath
-    ) -AllowFailure
-    if ($result.ExitCode -eq 0 -or ($result.Stderr + $result.Stdout) -notmatch $Pattern) {
-        throw "Expected the checker to fail with '$Pattern'.`n$($result.Stderr)`n$($result.Stdout)"
+    try {
+        & (Join-Path $helpers 'check.ps1') -Destination $destination -ProfilePath $profilePath
+    } catch {
+        # Native stderr is part of the exception message before PowerShell formats it.
+        $diagnostic = $_.Exception.Message
+        if ($diagnostic -notmatch $Pattern) {
+            throw "Expected the checker to fail with '$Pattern'.`n$diagnostic"
+        }
+        Write-Host $diagnostic
+        return
     }
-    Write-Host $result.Stderr
+    throw "Expected the checker to fail with '$Pattern', but it succeeded."
 }
 
 function Initialize-SmokeStub {

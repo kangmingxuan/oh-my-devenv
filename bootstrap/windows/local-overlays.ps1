@@ -8,7 +8,8 @@ function Read-LocalOverlay {
     $examples = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
     $locations = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
     $lineNumber = 0
-    foreach ($line in [IO.File]::ReadLines($Manifest)) {
+    # Close the file before validation can throw.
+    foreach ($line in [IO.File]::ReadAllLines($Manifest)) {
         $lineNumber++
         if ($line -match '^#|^\s*$') {
             continue

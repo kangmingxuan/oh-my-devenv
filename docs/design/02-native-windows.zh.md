@@ -345,15 +345,20 @@ hook 00 的 XDG 根目录检查仍只用于 Unix。Windows 不导出 `XDG_*` 变
 首轮托管 Windows smoke job 使用 PowerShell 7.6.10。实际生效的执行策略是
 `LocalMachine` 范围的 `RemoteSigned`。在该 runner 上，chezmoi 用正斜杠
 呈现 `.chezmoi.homeDir` 和 `.chezmoi.destDir`，用反斜杠呈现 `joinPath` 的结果。
-两个 Windows job 都未进入 apply。Git include 仍待原生 apply job 读回配置来源。
+该轮的两个 Windows job 都未进入 apply。
 [托管运行 44885242196](https://github.com/kangmingxuan/oh-my-devenv/actions/runs/44885242196)
+
+第二轮托管 Windows apply job 确认了 Git include。原生 Git 读回的配置来源为
+`C:\Users\runneradmin\.config\oh-my-devenv\git\config`，fixture 值为 `loaded`。
+Windows OpenSSH 9.5p2 读取了受管的默认配置，并拒绝了顶层配置和本地 drop-in
+上的不安全 ACL。这些结果适用于该 runner 上的工具。
+[托管 apply job 136793367571](https://github.com/kangmingxuan/oh-my-devenv/actions/runs/44886671628/job/136793367571)
 
 在依赖某一项的阶段开始前解决该项。
 
 | 事项 | 阶段 |
 | --- | --- |
 | 实际生效的脚本执行策略是否允许 chezmoi 运行 `.ps1` hook，以及不允许时的停止条件。不绕过设备策略。PowerShell 7 与 Windows PowerShell 5.1 分开存储执行策略设置。组策略可以让它使用 Windows PowerShell 的策略设置，所以要在 `pwsh` 下检查实际生效的策略。 | 2 |
-| chezmoi 在 Windows 上如何呈现 `.chezmoi.homeDir` 和拼接后的路径，`dot_gitconfig.tmpl` 中的 Git include 路径能否正确解析 | 2 |
 | `check.ps1` 如何检查 winget manifest：通过 winget 按包 ID 检查，还是按命令是否存在检查 | 3 |
 | 每个纳入工具的 winget 包 ID，以及能否不提权安装 | 3 |
 | Windows 上按用户安装字体的方法 | 3 |

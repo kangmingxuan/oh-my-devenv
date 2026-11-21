@@ -373,4 +373,18 @@ Describe 'Shared local overlay manifest' {
         [IO.File]::WriteAllLines($manifest, @($first, ($row -join "`t")))
         { Read-LocalOverlay -Manifest $manifest } | Should -Throw '*Duplicate overlay*'
     }
+
+    It 'releases the manifest for immediate rewrite after successful and failed parsing' {
+        $row = 'first', 'first.example', '$HOME/.first', 'exact' -join "`t"
+        [IO.File]::WriteAllLines($manifest, @($row))
+        @(Read-LocalOverlay -Manifest $manifest).Count | Should -Be 1
+        [IO.File]::WriteAllLines($manifest, @($row, $row))
+        { Read-LocalOverlay -Manifest $manifest } | Should -Throw '*Duplicate overlay*'
+
+        # Request exclusive access so a leaked reader also fails this test on Unix.
+        $writer = [IO.File]::Open($manifest, 'Open', 'Write', 'None')
+        $writer.Dispose()
+        [IO.File]::WriteAllLines($manifest, @($row))
+        @(Read-LocalOverlay -Manifest $manifest).Count | Should -Be 1
+    }
 }

@@ -347,16 +347,21 @@ The review files are not part of the repository.
 The first hosted Windows smoke job ran PowerShell 7.6.10. Its effective
 execution policy was `RemoteSigned` from `LocalMachine`. On that runner,
 chezmoi rendered `.chezmoi.homeDir` and `.chezmoi.destDir` with forward slashes
-and `joinPath` with backslashes. Neither Windows job reached apply. The Git
-include remains open until the native apply job reports the include origin.
+and `joinPath` with backslashes. Neither Windows job in that run reached apply.
 [Hosted run 44885242196](https://github.com/kangmingxuan/oh-my-devenv/actions/runs/44885242196)
+
+The second hosted Windows apply job confirmed the Git include. Native Git
+reported `C:\Users\runneradmin\.config\oh-my-devenv\git\config` as the origin
+and returned the fixture value `loaded`. Windows OpenSSH 9.5p2 read the managed
+default configuration and rejected unsafe ACLs on the top-level configuration
+and a local drop-in. These results apply to the tools on that runner.
+[Hosted apply job 136793367571](https://github.com/kangmingxuan/oh-my-devenv/actions/runs/44886671628/job/136793367571)
 
 Resolve each item before the phase that depends on it.
 
 | Item | Phase |
 | --- | --- |
 | Whether the effective script execution policy lets chezmoi run the `.ps1` hooks, and the stop condition when it does not. Do not work around device policy. PowerShell 7 stores execution-policy settings separately from Windows PowerShell 5.1. Group Policy can make it use the Windows PowerShell policy settings, so check the effective policy under `pwsh`. | 2 |
-| How chezmoi renders `.chezmoi.homeDir` and joined paths on Windows, and whether the Git include path in `dot_gitconfig.tmpl` resolves correctly | 2 |
 | How `check.ps1` checks the winget manifest: by package ID through winget, or by command presence | 3 |
 | The winget package ID for each included tool, and whether each one installs without elevation | 3 |
 | The per-user font installation method on Windows | 3 |
