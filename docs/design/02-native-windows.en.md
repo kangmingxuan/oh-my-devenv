@@ -220,6 +220,8 @@ The XDG root check in hook 00 stays Unix-only. Windows does not export `XDG_*` v
 
 Add a `.gitattributes` file with `* text=auto eol=lf` in phase 2, and list it in `.chezmoiignore`. A Windows checkout then keeps LF line endings, so the Bash scripts stay valid when the repository is edited on Windows, and the hook hashes match the Unix checkouts. PowerShell 7 runs `.ps1` files with LF line endings.
 
+The file is required, not optional. The Git for Windows installer sets `core.autocrlf=true` in the system Git config by default. Without a repository LF rule, an effective `core.autocrlf=true` can check out text sources with CRLF line endings. chezmoi can preserve those endings in managed output; templates can also generate LF line endings.
+
 ## 10. System Packages
 
 Use `winget import` with a JSON file in the format that `winget export` produces.
@@ -308,6 +310,7 @@ Add one Windows overlay, `profile.local.ps1` (section 9), in phase 2 together wi
 | Fact-check 1–4 | Codex `gpt-6.1-sol` | All findings applied: execution policy in phase 2, existing-profile handling, scope of the chezmoi target-path claim, tmux rationale, target paths in ignore rules, conditional profile loading, the rendered-hash rationale for the hook gate, a clean child environment for the profile check, the LocalAppData location check. |
 | Design review | Gemini 4 Argon | Adopted: ignore-based hook gate, hook `PATH` rebuild, the profile-repair requirement (Claude took the every-apply trigger from Kimi), `--no-upgrade`, `.gitattributes` in phase 2, per-phase `check.ps1`, Go and mise paths in the profile, overlay in phase 2, Windows helper details, multi-platform render of the Git and SSH templates, prompt text, Pester test cases, one `needs-checks` condition. Not adopted: copying the fragment from a hook; moving the CLIs to mise (kept as deferred). Left for the user: persisting `Path` for applications outside PowerShell. The user decided to persist it on 2026-11-21 (section 7). |
 | Design review | Kimi K3.1 Pro | Adopted: narrowed isolation goal, `winget` check moved to hook 20, guarded mise activation, every-apply profile hook, `GOBIN` on `PATH`, test-only profile path, real Windows apply job and minimal uninstall in phase 2, Windows Terminal presence check. |
+| Device probe | The user | The user ran a read-only probe on a Windows machine on 2026-11-21. Claude used the results for general findings only: the `core.autocrlf` reason for `.gitattributes`, the need to check execution policy under PowerShell 7, and the long-path question. The probe results are not part of the repository. |
 
 The review files are not part of the repository.
 
@@ -318,7 +321,7 @@ Resolve each item before the phase that depends on it.
 | Item | Phase |
 | --- | --- |
 | The minimum PowerShell 7 version | 2 |
-| Whether the effective script execution policy lets chezmoi run the `.ps1` hooks, and the stop condition when it does not. Do not work around device policy. | 2 |
+| Whether the effective script execution policy lets chezmoi run the `.ps1` hooks, and the stop condition when it does not. Do not work around device policy. PowerShell 7 stores execution-policy settings separately from Windows PowerShell 5.1. Group Policy can make it use the Windows PowerShell policy settings, so check the effective policy under `pwsh`. | 2 |
 | How chezmoi renders `.chezmoi.homeDir` and joined paths on Windows, and whether the Git include path in `dot_gitconfig.tmpl` resolves correctly | 2 |
 | Which `Host *` settings Windows OpenSSH does not support, in particular connection multiplexing | 2 |
 | The method for first-run backups on Windows | 2 |
@@ -327,6 +330,7 @@ Resolve each item before the phase that depends on it.
 | The per-user font installation method on Windows | 3 |
 | Behavior on devices where policy restricts winget sources | 3 |
 | Whether every tool in the mise config installs on Windows | 4 |
+| Whether runtime and tool installs hit the Windows path-length limit. Do not assume that Windows long-path support (`LongPathsEnabled`) is on; turning it on needs elevation. That setting alone does not guarantee long-path support in each installer or tool; verify their actual behavior. Git has a separate `core.longpaths` setting. | 4 |
 
 ## 18. Sources
 

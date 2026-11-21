@@ -220,6 +220,8 @@ hook 00 的 XDG 根目录检查仍只用于 Unix。Windows 不导出 `XDG_*` 变
 
 在阶段 2 中添加 `.gitattributes`，内容为 `* text=auto eol=lf`，并把它列入 `.chezmoiignore`。这样 Windows checkout 也保持 LF 换行，在 Windows 上编辑本仓库时 Bash 脚本仍然有效，hook 哈希也与 Unix checkout 一致。PowerShell 7 可以运行 LF 换行的 `.ps1` 文件。
 
+这个文件是必需的，不是可选项。Git for Windows 安装器默认在系统级 Git 配置中设置 `core.autocrlf=true`。没有仓库级 LF 规则时，实际生效的 `core.autocrlf=true` 可能以 CRLF 换行检出文本源文件。chezmoi 可能在受管输出中保留这些换行；模板也可能生成 LF 换行。
+
 ## 10. 系统包
 
 使用 `winget import`，输入文件采用 `winget export` 产生的 JSON 格式。
@@ -308,6 +310,7 @@ hook 00 的 XDG 根目录检查仍只用于 Unix。Windows 不导出 `XDG_*` 变
 | 事实核查 1–4 | Codex `gpt-6.1-sol` | 所有发现均已采纳：执行策略提前到阶段 2、已有 profile 的处理、chezmoi 目标路径说法的范围、tmux 的理由、ignore 规则使用目标路径、profile 加载是有条件的、hook 门控的渲染哈希理由、profile 检查使用干净的子进程环境、LocalAppData 位置检查。 |
 | 设计评审 | Gemini 4 Argon | 采纳：基于 ignore 的 hook 门控、hook 中重建 `PATH`、profile 修复需求（Claude 采用了 Kimi 提出的每次 apply 触发方式）、`--no-upgrade`、阶段 2 加入 `.gitattributes`、按阶段的 `check.ps1`、profile 中的 Go 和 mise 路径、overlay 提前到阶段 2、Windows 辅助脚本细节、Git 和 SSH 模板的多平台渲染、提示文字、Pester 测试用例、统一的 `needs-checks` 条件。未采纳：由 hook 复制 fragment；把 CLI 移到 mise（保持延后）。留给用户决定：为 PowerShell 之外的应用持久化 `Path`。用户于 2026-11-21 决定持久化（第 7 节）。 |
 | 设计评审 | Kimi K3.1 Pro | 采纳：收窄隔离目标、`winget` 检查移到 hook 20、受保护的 mise 激活、每次 apply 运行的 profile hook、`GOBIN` 加入 `PATH`、仅供测试的 profile 路径、阶段 2 加入真实的 Windows apply job 和最小卸载、Windows Terminal 存在性检查。 |
+| 设备探测 | 用户 | 用户于 2026-11-21 在一台 Windows 机器上运行了只读探测。Claude 只把结果用于通用结论：`.gitattributes` 的 `core.autocrlf` 理由、需要在 PowerShell 7 下检查执行策略、长路径待决项。探测结果不进入仓库。 |
 
 评审文件不属于本仓库。
 
@@ -318,7 +321,7 @@ hook 00 的 XDG 根目录检查仍只用于 Unix。Windows 不导出 `XDG_*` 变
 | 事项 | 阶段 |
 | --- | --- |
 | PowerShell 7 的最低版本 | 2 |
-| 实际生效的脚本执行策略是否允许 chezmoi 运行 `.ps1` hook，以及不允许时的停止条件。不绕过设备策略。 | 2 |
+| 实际生效的脚本执行策略是否允许 chezmoi 运行 `.ps1` hook，以及不允许时的停止条件。不绕过设备策略。PowerShell 7 与 Windows PowerShell 5.1 分开存储执行策略设置。组策略可以让它使用 Windows PowerShell 的策略设置，所以要在 `pwsh` 下检查实际生效的策略。 | 2 |
 | chezmoi 在 Windows 上如何呈现 `.chezmoi.homeDir` 和拼接后的路径，`dot_gitconfig.tmpl` 中的 Git include 路径能否正确解析 | 2 |
 | Windows OpenSSH 不支持哪些 `Host *` 设置，尤其是连接复用 | 2 |
 | Windows 上首次运行备份的方法 | 2 |
@@ -327,6 +330,7 @@ hook 00 的 XDG 根目录检查仍只用于 Unix。Windows 不导出 `XDG_*` 变
 | Windows 上按用户安装字体的方法 | 3 |
 | 设备策略限制 winget 源时的行为 | 3 |
 | mise 配置中的每个工具能否在 Windows 上安装 | 4 |
+| 运行时和工具安装是否会碰到 Windows 路径长度限制。不要假定 Windows 长路径支持（`LongPathsEnabled`）已开启；开启需要提权。仅有这个设置不能保证每个安装器或工具都支持长路径；要验证它们的实际行为。Git 另有独立的 `core.longpaths` 设置。 | 4 |
 
 ## 18. 来源
 
