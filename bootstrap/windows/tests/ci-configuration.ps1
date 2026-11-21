@@ -29,56 +29,6 @@ function Invoke-FixtureApply {
     }
 }
 
-function Write-YqInventory {
-    param([string]$Stage, [string]$WinGet)
-
-    Write-Host "=== yq inventory: $Stage ==="
-    $uninstallKeys = @(
-        'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall'
-        'HKCU:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall'
-        'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall'
-        'HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall'
-    )
-    foreach ($key in $uninstallKeys) {
-        Write-Host "--- $key ---"
-        if (Test-Path -LiteralPath $key) {
-            Get-ChildItem -LiteralPath $key | ForEach-Object {
-                $displayName = $_.GetValue('DisplayName')
-                $packageId = $_.GetValue('WinGetPackageIdentifier')
-                if ("$($_.PSChildName) $displayName $packageId" -match '\byq\b|MikeFarah') {
-                    Write-Host $_.Name
-                    foreach ($name in $_.GetValueNames()) {
-                        Write-Host "$name=$($_.GetValue($name))"
-                    }
-                }
-            }
-        }
-    }
-    foreach ($command in Get-Command yq,yq.exe -All -ErrorAction SilentlyContinue) {
-        Write-Host "yq command: $($command.CommandType) $($command.Source)"
-    }
-    foreach ($query in @('list', 'list --source winget', 'list --id MikeFarah.yq --exact --source winget',
-        'list --id mikefarah.yq --exact --source winget', 'search --id MikeFarah.yq --exact --source winget', 'list --name yq')) {
-        $arguments = $query.Split(' ') + @('--accept-source-agreements', '--disable-interactivity', '--verbose-logs')
-        $result = Invoke-NativeCommand -Executable $WinGet -Arguments $arguments -AllowFailure
-        Write-Host "winget $query (exit $($result.ExitCode))"
-        Write-Host $result.Stdout
-        Write-Host $result.Stderr
-        if ($query -like '*--id MikeFarah.yq*') {
-            $logDirectory = Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) `
-                'Packages/Microsoft.DesktopAppInstaller_8wekyb3d8bbwe/LocalState/DiagOutputDir'
-            if (Test-Path -LiteralPath $logDirectory) {
-                $log = Get-ChildItem -LiteralPath $logDirectory -Filter 'WinGet-*.log' |
-                    Sort-Object LastWriteTimeUtc -Descending | Select-Object -First 1
-                if ($null -ne $log) {
-                    Select-String -LiteralPath $log.FullName -Pattern 'CLI command|Search request|MikeFarah|Correlation' |
-                        Select-Object -First 20 | ForEach-Object { Write-Host $_.Line }
-                }
-            }
-        }
-    }
-}
-
 function Set-FixtureText {
     [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseShouldProcessForStateChangingFunctions', '',
         Justification = 'Internal fixture setup runs only on a disposable hosted runner.')]
@@ -446,17 +396,7 @@ $env:PATH = '{1};' + $env:PATH
         [IO.Directory]::Move($backupRoot, (Join-Path $fixture 'failed-backup'))
     }
 
-    if ($Mode -eq 'apply') {
-        Write-YqInventory -Stage 'before import' -WinGet $winget.Source
-        try {
-            Invoke-FixtureApply
-        } finally {
-            Update-HookPath
-            Write-YqInventory -Stage 'after apply attempt' -WinGet $winget.Source
-        }
-    } else {
-        Invoke-FixtureApply
-    }
+    Invoke-FixtureApply
     foreach ($old in @(@{ Path = $miseConfig; Text = $oldMise }, @{ Path = $profilePath; Text = $oldProfile })) {
         $backupCopies = @(Get-ChildItem -LiteralPath $backupRoot -Directory | ForEach-Object {
             $copy = Get-BackupPath -Path $old.Path -RunDirectory $_.FullName

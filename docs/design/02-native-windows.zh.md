@@ -1,6 +1,6 @@
 # 技术设计：原生 Windows 平台
 
-状态：已接受。阶段 3（系统包和桌面基线）已实现，待托管 Windows 验证。阶段 4–5 尚未开始。
+状态：已接受。阶段 3（系统包和桌面基线）已通过托管 Windows smoke 和 apply 作业。阶段 4–5 尚未开始。
 
 ## 1. 概要
 
@@ -270,7 +270,7 @@ hook 00 的 XDG 根目录检查仍只用于 Unix。Windows 不导出 `XDG_*` 变
 
 用户盘点前，Claude 从 Unix 基线选定起始清单。
 [Microsoft 目录](https://github.com/microsoft/winget-pkgs/tree/master/manifests)确认了包 ID 和安装器类型。
-无需提权的实际安装仍待 Windows 验证。
+托管作业验证了用户范围的导入。用户设备上的首次 apply 仍待进行。
 
 | Unix 条目 | Windows 决定 |
 | --- | --- |
@@ -315,7 +315,7 @@ hook 00 的 XDG 根目录检查仍只用于 Unix。Windows 不导出 `XDG_*` 变
   - 为辅助脚本运行 Pester 测试，包括共享 manifest 的测试用例。
   - 在临时 home 中，用 WinGet stub 执行 apply 和 reapply。使用 fixture 中的 profile 路径。用模拟下载以及隔离的字体目录和注册表位置单独测试桌面安装器。
 - 托管 Windows apply job 要求 WinGet 和 Terminal 可用。它执行真实 WinGet 导入、桌面 hook 和检查器。测试后恢复字体文件和注册表值。
-- 真实安装的覆盖缺口要求在合并前完成实机签核。用户将首次实机 apply 安排在所有计划阶段完成后。托管覆盖和实机签核仍待确认。
+- 真实安装的覆盖缺口要求在合并前完成实机签核。第 17 节记录托管作业的覆盖范围。用户将首次实机 apply 安排在所有计划阶段完成后。
 - 两个 Windows job 都在与 Unix job 相同的 `needs-checks` 条件下运行，并汇入现有的单一 required check。这样不需要第二个路径分类器，避免共享文件改动后 Windows CI 被跳过。
 - 在真实 Windows 机器上的实际安装，遵循与 Unix 平台相同的本地验证策略。
 
@@ -373,7 +373,18 @@ Windows OpenSSH 9.5p2 读取了受管的默认配置，并拒绝了顶层配置�
 包清单使用内置源和用户范围。字体使用当前用户的目录和注册表。源或安装器受限时，
 apply 会停止并输出诊断。
 
-阶段 3 托管 smoke 证据：**待补链接**。阶段 3 托管 apply 证据和覆盖缺口：**待补链接**。
+阶段 3 托管 smoke 作业通过 PSScriptAnalyzer 和 73 项 Pester 测试，跳过 1 项。
+它验证了使用其他桌面目标目录时，apply 会在写入 fragment 前停止。
+[托管 smoke 作业 136844172633](https://github.com/kangmingxuan/oh-my-devenv/actions/runs/44903506985/job/136844172633)。
+
+阶段 3 托管 apply 作业使用 `windows-2025-vs2026` 镜像 `20261116.315.1`、
+WinGet `1.11.510` 和 Windows Terminal `1.23.20211.0`。它执行真实导入、
+检查全部 10 个包 ID 和 x64 运行库，并验证字体注册与已部署的 fragment。
+它还验证了卸载和恢复。[托管 apply 作业 136844172639](https://github.com/kangmingxuan/oh-my-devenv/actions/runs/44903506985/job/136844172639)。
+
+在该客户端上，按 ID 筛选已安装包时，WinGet 无法将 yq 的注册项关联到目录 ID。
+完整列表和 WinGet 导出都找到了该包。检查器现在从已安装清单导出结果中比较完整的目录 ID。
+[首次诊断作业](https://github.com/kangmingxuan/oh-my-devenv/actions/runs/44902747366/job/136841925517)。
 
 在依赖某一项的阶段开始前解决其余事项。
 

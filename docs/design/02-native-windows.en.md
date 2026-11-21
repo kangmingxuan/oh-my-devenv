@@ -1,6 +1,6 @@
 # Technical Design: Native Windows Platform
 
-Status: accepted. Phase 3 (system packages and desktop baseline) is implemented. Hosted Windows validation is pending. Phases 4–5 have not started.
+Status: accepted. Phase 3 (system packages and desktop baseline) passed the hosted Windows smoke and apply jobs. Phases 4–5 have not started.
 
 ## 1. Summary
 
@@ -274,8 +274,8 @@ Use `winget import` with a JSON file in the format that `winget export` produces
 
 Claude chose the starting inventory from the Unix baseline while the user
 inventory is pending. The [Microsoft catalog](https://github.com/microsoft/winget-pkgs/tree/master/manifests)
-confirms the package IDs and installer types. Actual installation without
-elevation still needs Windows evidence.
+confirms the package IDs and installer types. The hosted run verified the
+user-scope import. The first apply on a user machine is still pending.
 
 | Unix entry | Windows decision |
 | --- | --- |
@@ -320,7 +320,7 @@ Add one Windows overlay, `profile.local.ps1` (section 9), in phase 2 together wi
   - Run the Pester tests for the helpers, including the shared-manifest test cases.
   - Apply and reapply the main source in a temporary home with a WinGet stub. Use a fixture profile path. Test the desktop installer separately with stubbed downloads and isolated font and registry targets.
 - The hosted Windows apply job requires WinGet and Terminal. It runs the real WinGet import, desktop hook, and checker. It restores the font files and registry values after testing.
-- A coverage gap in real installation requires live signoff before merge. The user scheduled the first live apply after all planned phases. Hosted coverage or live signoff is still pending.
+- A coverage gap in real installation requires live signoff before merge. Section 17 records hosted coverage. The user scheduled the first live apply after all planned phases.
 - Run both Windows jobs under the same `needs-checks` condition as the Unix jobs, and feed them into the existing single required check. This avoids a second path classifier that could skip Windows CI after a change to a shared file.
 - Live installs on a real Windows machine follow the same local validation policy as the Unix platforms.
 
@@ -380,8 +380,20 @@ queries exact package IDs. The inventory uses the built-in source and user
 scope. Font registration uses current-user file and registry targets. A blocked
 source or installer stops apply with a diagnostic.
 
-Hosted phase-3 smoke evidence: **pending link**. Hosted phase-3 apply evidence
-and any coverage gaps: **pending link**.
+The hosted phase-3 smoke job passed PSScriptAnalyzer and 73 Pester tests, with
+one skip. It rejected an alternate desktop destination before writing the
+fragment. [Hosted smoke job 136844172633](https://github.com/kangmingxuan/oh-my-devenv/actions/runs/44903506985/job/136844172633).
+
+The hosted phase-3 apply job used `windows-2025-vs2026` image `20261116.315.1`,
+WinGet `1.11.510`, and Windows Terminal `1.23.20211.0`. It ran the real import,
+checked all ten package IDs and the x64 runtime, and verified the registered
+fonts and the deployed fragment. It also exercised uninstall and restore.
+[Hosted apply job 136844172639](https://github.com/kangmingxuan/oh-my-devenv/actions/runs/44903506985/job/136844172639).
+
+On that client, the filtered installed-package query could not correlate the
+yq registration to its catalog ID. The unfiltered list and WinGet export found
+it. The checker now compares complete catalog IDs from the installed export.
+[Initial diagnostic job](https://github.com/kangmingxuan/oh-my-devenv/actions/runs/44902747366/job/136841925517).
 
 Resolve each remaining item before the phase that depends on it.
 
