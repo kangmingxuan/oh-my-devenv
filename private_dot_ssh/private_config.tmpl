@@ -10,6 +10,7 @@ Include ~/.ssh/config.d/*.conf
 # ============================================================================
 Host *
   IdentitiesOnly yes
+{{- if ne .chezmoi.os "windows" }}
   ControlMaster auto           # Reuse SSH connections
 {{- if eq .chezmoi.os "darwin" }}
   ControlPath ~/.ssh/cm-%C
@@ -17,6 +18,7 @@ Host *
   ControlPath ~/.ssh/%r@%h:%p.sock
 {{- end }}
   ControlPersist 30m           # Keep connections alive for 30 minutes
+{{- end }}
   TCPKeepAlive yes             # Enable TCP keepalive
   ServerAliveInterval 60       # Send keepalive every 60 seconds
   SendEnv LANG LC_*            # Forward locale settings

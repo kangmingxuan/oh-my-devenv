@@ -185,12 +185,48 @@ jobs:
       - name: Run the clean-machine round trip
         run: bash bootstrap/scripts/ci-apply.sh "${{ matrix.desktop }}"
 
+  windows:
+    name: ${{ matrix.name }}-windows
+    needs: changes
+    if: needs.changes.outputs.needs-checks == 'true'
+    runs-on: windows-2025
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: smoke-tests
+            mode: smoke
+          - name: apply
+            mode: apply
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v7
+      - name: Prepare the Windows tools
+        run: |
+          if ($PSVersionTable.PSVersion -lt [version]'7.6') {
+            throw "The runner needs PowerShell 7.6 or later. Found $($PSVersionTable.PSVersion)."
+          }
+          if (-not (Get-Command chezmoi -CommandType Application -ErrorAction SilentlyContinue)) {
+            choco install chezmoi --yes --no-progress
+            if ($LASTEXITCODE -ne 0) { throw "Chocolatey exited with code $LASTEXITCODE." }
+          }
+      - name: Prepare PowerShell validation modules
+        if: matrix.mode == 'smoke'
+        run: |
+          Install-Module PSScriptAnalyzer -Scope CurrentUser -Force
+          Install-Module Pester -MinimumVersion 5.7 -Scope CurrentUser -Force
+      - name: Validate the Windows configuration
+        run: ./bootstrap/windows/tests/ci-configuration.ps1 -Mode '${{ matrix.mode }}'
+
   # The one required status check on main. A job skipped by a condition reports
   # success, and a skipped matrix job reports its unexpanded name, so branch
   # protection cannot require the platform jobs directly. always() keeps this
   # job from being skipped, because a skipped required check counts as passing.
   ci-gate:
-    needs: [changes, secret-scan, smoke, apply]
+    needs: [changes, secret-scan, smoke, apply, windows]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -199,15 +235,16 @@ jobs:
       SECRET_SCAN: ${{ needs.secret-scan.result }}
       SMOKE: ${{ needs.smoke.result }}
       APPLY: ${{ needs.apply.result }}
+      WINDOWS: ${{ needs.windows.result }}
       NEEDS_CHECKS: ${{ needs.changes.outputs.needs-checks }}
     steps:
       - name: Require every job that had to run
         shell: bash
         run: |
-          echo "changes=$CHANGES secret-scan=$SECRET_SCAN smoke=$SMOKE apply=$APPLY needs-checks=$NEEDS_CHECKS"
+          echo "changes=$CHANGES secret-scan=$SECRET_SCAN smoke=$SMOKE apply=$APPLY windows=$WINDOWS needs-checks=$NEEDS_CHECKS"
           [[ "$CHANGES" == success && "$SECRET_SCAN" == success ]]
           case "$NEEDS_CHECKS" in
-            true) [[ "$SMOKE" == success && "$APPLY" == success ]] ;;
-            false) [[ "$SMOKE" == skipped && "$APPLY" == skipped ]] ;;
+            true) [[ "$SMOKE" == success && "$APPLY" == success && "$WINDOWS" == success ]] ;;
+            false) [[ "$SMOKE" == skipped && "$APPLY" == skipped && "$WINDOWS" == skipped ]] ;;
             *) exit 1 ;;
           esac

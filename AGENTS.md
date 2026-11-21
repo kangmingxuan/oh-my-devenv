@@ -23,6 +23,8 @@ The smoke suite renders templates, checks behavior and contracts, exercises sele
 
 Write Bash with `set -euo pipefail`, two-space indentation, quoted expansions, and `snake_case` functions and variables. All repository Bash code, including Linux-only scripts and managed Bash dotfiles, must be compatible with Bash 3.2, the macOS `/bin/bash`. Keep shared behavior in `bootstrap/scripts/common.sh`. Preserve chezmoi naming (`dot_zshrc.tmpl`, `private_dot_ssh/`) and numbered hook ordering such as `run_onchange_after_40-install-runtimes.sh.tmpl`. Match existing Markdown and YAML formatting; ShellCheck is the enforced shell linter.
 
+Require PowerShell 7.6 or later for Windows hooks, helpers, and the managed profile. Use strict mode and stop on errors. Check each native command's exit code. Keep Windows bootstrap helpers under `bootstrap/windows/` and lint them with PSScriptAnalyzer.
+
 ## Design Principles
 
 Treat configuration files and manifests as the sole source of truth. Tests may validate parsing, rendering, syntax, permissions, boundaries, and observable behavior, but must not duplicate volatile configuration facts such as package lists, versions, paths, or defaults in test logic.

@@ -1,0 +1,3 @@
+# Copy to ~/.config/oh-my-devenv/powershell/profile.local.ps1.
+# Put machine-local PowerShell settings here.
+# $env:EDITOR = 'code --wait'

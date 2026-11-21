@@ -1,5 +1,7 @@
 {{- $xdgConfigHome := env "XDG_CONFIG_HOME" -}}
-{{- if not (hasPrefix "/" $xdgConfigHome) -}}
+{{- if eq .chezmoi.os "windows" -}}
+{{-   $xdgConfigHome = joinPath .chezmoi.destDir ".config" -}}
+{{- else if not (hasPrefix "/" $xdgConfigHome) -}}
 {{-   $xdgConfigHome = joinPath .chezmoi.homeDir ".config" -}}
 {{- end -}}
 [user]

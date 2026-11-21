@@ -10,6 +10,8 @@
 
 oh-my-devenv is an opinionated, declarative development environment. It publishes one maintainer's current choices as a coherent baseline: use it when those choices fit, and do not use it when they do not. Point `chezmoi` at it on a fresh machine and minutes later you have managed shells, language runtimes, and a curated CLI toolchain — all from a single source of truth. Secrets and private machine facts stay in local overlays so the public baseline remains safe to clone.
 
+Native Windows has a [configuration-only quick start](#native-windows-quick-start) for PowerShell, Git, OpenSSH, and mise.
+
 ## What you get
 
 - **Cross-platform from one source** — macOS (Intel + Apple Silicon), Ubuntu / Debian, and Arch Linux share the same templated baseline.
@@ -49,7 +51,41 @@ chezmoi is the single entry point: it renders your dotfiles, then runs ordered b
 
 This is the default first-run path for a clean machine. You should be able to finish it without opening another doc.
 
-### 1. Install `git`, `curl`, and `chezmoi`
+### Native Windows Quick Start
+
+Install the prerequisites from a terminal with winget.
+
+```powershell
+winget install --id Microsoft.PowerShell --exact --source winget
+winget install --id Git.Git --exact --source winget
+winget install --id twpayne.chezmoi --exact --source winget
+```
+
+Open a new PowerShell (`pwsh`) session. Confirm that the version is 7.6 or later
+and that Git, OpenSSH, and chezmoi are on `PATH`. If `ssh` is missing, enable
+the Windows OpenSSH Client optional feature or use an available OpenSSH client.
+
+```powershell
+$PSVersionTable.PSVersion
+Get-Command git, ssh, chezmoi -CommandType Application
+Get-ExecutionPolicy
+```
+
+After you verify the prerequisites, apply the configuration.
+
+```powershell
+chezmoi init --apply https://github.com/kangmingxuan/oh-my-devenv.git
+```
+
+If policy prevents PowerShell from running the hooks, stop and contact the
+device administrator. When apply succeeds, open a new `pwsh` session to load the
+profile. Windows currently deploys configuration only. The desktop prompt
+records your choice for when Windows Terminal settings and Maple Mono NF CN
+become available. See the [Windows onboarding notes](docs/01-onboarding.md#native-windows) for backups, overlays, checks, and uninstall.
+
+### macOS and Linux
+
+#### 1. Install `git`, `curl`, and `chezmoi`
 
 Use the block for your platform. Do not continue until the last line prints paths for `git`, `curl`, and `chezmoi` in this same shell. Once it does, `chezmoi` is already on `PATH` in the current shell session, so you can run Step 2 immediately below without opening a new terminal.
 
@@ -88,7 +124,7 @@ command -v git curl chezmoi
 Keep Arch fully upgraded before applying. The bootstrap uses `pacman -S --needed`
 with existing databases; it does not refresh databases or upgrade the whole system.
 
-### 2. Bootstrap the baseline
+#### 2. Bootstrap the baseline
 
 Use the repository URL below.
 
