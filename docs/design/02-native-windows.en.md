@@ -180,7 +180,7 @@ Tests:
 
 - A uv tool environment keeps its interpreter at `Scripts\python.exe`, not `bin/python`.
 - Executables have an `.exe` suffix. The shadow check that compares the resolved command with the installer-owned binary includes the suffix.
-- The Unix helpers run global mise commands from `/` so that a project `mise.toml` does not apply. The PowerShell helpers run them from a fixed directory with no mise config, such as the temporary directory.
+- The Unix helpers run global mise commands from `/`, so the project config of the caller's working directory does not apply. The PowerShell helpers run them from the root of the system drive (`$env:SystemDrive\`) for the same reason. mise searches for project config from the current directory up to the drive root, so a temporary directory under the user profile does not isolate the commands: a config file in a parent directory still applies. A config file in the root directory itself still applies, on Unix and on Windows. The user-global config, by default `%USERPROFILE%\.config\mise\config.toml`, applies independently of that search. On Unix the default system config directory `/etc/mise` is absolute; on Windows it resolves on the drive of the current directory, so running from the system drive root selects `\etc\mise` on that drive.
 
 ## 8. Shared Data
 

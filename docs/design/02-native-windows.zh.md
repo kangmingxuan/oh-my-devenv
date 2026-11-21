@@ -180,7 +180,7 @@ hook 10 在文件内容上沿用 Unix 的约定：首次 apply 覆盖目标之�
 
 - uv 工具环境的解释器位于 `Scripts\python.exe`，而不是 `bin/python`。
 - 可执行文件带 `.exe` 后缀。比较解析到的命令与安装器所属二进制的遮蔽检查要包含这个后缀。
-- Unix 辅助脚本在 `/` 下运行全局 mise 命令，使项目的 `mise.toml` 不生效。PowerShell 辅助脚本在一个没有 mise 配置的固定目录（例如临时目录）下运行这些命令。
+- Unix 辅助脚本在 `/` 下运行全局 mise 命令，使调用方工作目录的项目配置不生效。PowerShell 辅助脚本出于同样的原因，在系统盘根目录（`$env:SystemDrive\`）下运行这些命令。mise 从当前目录向上查找项目配置，直到盘符根目录，所以用户 profile 下的临时目录不能隔离这些命令：父目录中的配置文件仍会生效。根目录本身的配置文件在 Unix 和 Windows 上都仍会生效。用户全局配置（默认是 `%USERPROFILE%\.config\mise\config.toml`）与这一查找无关，始终生效。Unix 上的默认系统配置目录 `/etc/mise` 是绝对路径；Windows 上它解析到当前目录所在的盘，所以在系统盘根目录下运行时，使用的是该盘上的 `\etc\mise`。
 
 ## 8. 共享数据
 
