@@ -238,6 +238,7 @@ chezmoi 可以通过 `.chezmoiexternal` 用配置数据计算目标路径。Clau
 - 仅在 `mise` 位于 `PATH` 上时，用 `(&mise activate pwsh) | Out-String | Invoke-Expression` 激活 mise。Unix rc 文件也用同样方式保护激活。
 - 激活 mise 后，查找 `PATH` 上第一个 `oh-my-posh` 应用程序。找到时，使用受管文件 `~/.config/oh-my-devenv/powershell/robbyrussell.omp.json` 初始化。这个本地主题沿用 Unix 的 `robbyrussell` 提示符。主题和 MIT 许可证声明来自 [Oh My Posh v33.0.0](https://github.com/JanDeDobbeleer/oh-my-posh/tree/v33.0.0)。
 - 主题关闭自动升级和升级通知。它启用 `async`，因此即使设备缓存打开了升级功能，Oh My Posh 也会禁用它们。profile 使用 `init pwsh`。Oh My Posh 在 PowerShell 启动时注册提示符，在首次显示提示符时加载渲染模块。主题从磁盘加载，路径和 Git 段读取本地状态。[功能选择](https://github.com/JanDeDobbeleer/oh-my-posh/blob/v33.0.0/src/config/config.go#L144-L191)、[PowerShell 初始化脚本生成器](https://github.com/JanDeDobbeleer/oh-my-posh/blob/v33.0.0/src/shell/init.go#L47-L76)。
+- 控制台输入或输出被重定向时，脚本宿主跳过提示符初始化，仍加载 profile 的其他部分和本地 overlay。检查器在新 PowerShell 进程中显式启用提示符初始化，以验证同一条初始化路径。
 - 初始化脚本导出解析后的 `POSH_CONFIG` 和 `POSH_SESSION_ID`。生成的脚本注册提示符函数后，profile 在运行 overlay 前记录该配置路径。检查器在新 PowerShell 进程中清除继承值，并要求记录的路径与已部署主题一致。[会话变量](https://github.com/JanDeDobbeleer/oh-my-posh/blob/v33.0.0/src/shell/init.go#L315-L326)、[延迟渲染提示符](https://github.com/JanDeDobbeleer/oh-my-posh/blob/v33.0.0/src/shell/init.go#L270-L290)。
 - 本地 overlay `~/.config/oh-my-devenv/powershell/profile.local.ps1` 存在时加载它。overlay 可以覆盖提示符。
 - 运行 overlay 后，把缺失的受管目录放到 `PATH` 最前面，包括实际生效的 `GOBIN`。保留 overlay 中已有的 `PATH` 条目及其顺序。
@@ -331,7 +332,7 @@ WinGet 将清单要求的用户范围应用到 Oh My Posh MSIX。
   - 用 PSScriptAnalyzer 检查 PowerShell 代码。
   - 为辅助脚本运行 Pester 测试，包括共享 manifest 的测试用例。
   - 在临时 home 中，用 WinGet stub 执行 apply 和 reapply。使用 fixture 中的 profile 路径。用模拟下载以及隔离的字体目录和注册表位置单独测试桌面安装器。
-- 托管 Windows apply job 要求 WinGet 和 Terminal 可用。它执行真实 WinGet 导入、桌面 hook 和检查器。测试后恢复字体文件和注册表值。
+- 托管 Windows apply job 要求 WinGet 和 Terminal 可用。它执行真实 WinGet 导入、桌面 hook 和检查器。托管 Windows Server 启动已注册的 Oh My Posh MSIX 时会卡住。fixture 将已安装的可执行文件复制到临时目录，再用副本验证真实提示符初始化。通过 Windows 应用执行别名启动仍待 Windows 客户端验收。测试后恢复字体文件和注册表值。
 - 真实安装的覆盖缺口要求在合并前完成实机签核。第 17 节记录托管作业的覆盖范围。用户将首次实机 apply 安排在所有计划阶段完成后。
 - 两个 Windows job 都在与 Unix job 相同的 `needs-checks` 条件下运行，并汇入现有的单一 required check。这样不需要第二个路径分类器，避免共享文件改动后 Windows CI 被跳过。
 - 在真实 Windows 机器上的实际安装，遵循与 Unix 平台相同的本地验证策略。

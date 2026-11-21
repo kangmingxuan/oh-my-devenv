@@ -324,6 +324,12 @@ Describe 'Managed file listing' {
         $result.ExitCode | Should -Be 42
         { Invoke-NativeCommand @process } | Should -Throw '*code 42*'
     }
+
+    It 'reports a native child timeout' {
+        $arguments = @('-NoProfile', '-Command', 'Start-Sleep -Seconds 10')
+        { Invoke-NativeCommand -Executable $listing.Executable -Arguments $arguments -TimeoutSeconds 1 } |
+            Should -Throw '*did not finish within 1 seconds*'
+    }
 }
 
 Describe 'Profile line' {

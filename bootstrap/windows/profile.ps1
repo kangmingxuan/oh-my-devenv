@@ -184,13 +184,14 @@ function Confirm-ManagedProfile {
     $probeEnvironment = @{
         PATH = Get-ProfileProbePath
         OH_MY_DEVENV_PROFILE_LOADED = $null
+        OH_MY_DEVENV_PROBE_PROMPT = '1'
         OH_MY_DEVENV_POSH_CONFIG = $null
         POSH_CONFIG = $null
         POSH_SESSION_ID = $null
     }
     $pwsh = Join-Path $PSHOME $(if ($IsWindows) { 'pwsh.exe' } else { 'pwsh' })
     try {
-        $result = Invoke-NativeCommand -Executable $pwsh -Arguments $arguments -Environment $probeEnvironment
+        $result = Invoke-NativeCommand -Executable $pwsh -Arguments $arguments -Environment $probeEnvironment -TimeoutSeconds 90
         if (($result.Stdout -split '\r?\n') -cnotcontains $successMarker) {
             throw 'The child PowerShell did not report the profile probe success marker.'
         }

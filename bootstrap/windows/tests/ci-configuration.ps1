@@ -257,6 +257,22 @@ try {
         $fontManifest = Read-DesktopFontManifest -Path $fontManifestPath
         $fontTarget = Get-DesktopFontTarget -LocalData (Get-DesktopLocalData -Destination $destination)
         $fontState = Get-FixtureFontState -Manifest $fontManifest @fontTarget
+
+        # The hosted Windows Server stalls when activating the installed MSIX.
+        # Keep the real registration and run its binary from a fixture directory.
+        Install-WinGetPackage -ManifestPath $packageManifestPath
+        $windowsPowerShell = Join-Path $env:WINDIR 'System32/WindowsPowerShell/v1.0/powershell.exe'
+        $package = Invoke-NativeCommand -Executable $windowsPowerShell -Arguments @(
+            '-NoProfile', '-NonInteractive', '-Command', "(Get-AppxPackage -Name 'ohmyposh.cli').InstallLocation"
+        ) -TimeoutSeconds 90
+        $installLocation = $package.Stdout.Trim()
+        if (-not $installLocation) {
+            throw 'WinGet did not register Oh My Posh for the hosted user.'
+        }
+        $poshBin = [IO.Directory]::CreateDirectory((Join-Path $fixture 'posh-bin')).FullName
+        Copy-Item -LiteralPath (Join-Path $installLocation 'oh-my-posh.exe') -Destination $poshBin
+        $env:PATH = "$poshBin;$env:PATH"
+        Write-Host 'Hosted Oh My Posh probe uses the executable copied from the registered MSIX.'
     }
     $ssh = Get-PathApplication -Name ssh
     if ($Mode -eq 'apply' -and $ssh.Source -ne (Join-Path $openSsh 'ssh.exe')) {
@@ -501,10 +517,19 @@ $env:OH_MY_DEVENV_PROFILE_LOADED = '1'
     }
 
     $baselineProfile = [IO.File]::ReadAllText($profilePath)
-    $probe = Invoke-NativeCommand -Executable $pwsh -Arguments @(
-        '-NoLogo', '-NonInteractive', '-Command',
-        '[Console]::WriteLine($env:OH_MY_DEVENV_PROFILE_FIXTURE); [Console]::WriteLine((prompt)); [Console]::Write($env:PATH)'
-    )
+    $plainScript = Join-Path $fixture 'plain-profile-startup.ps1'
+    Set-FixtureText -Path $plainScript -Content @'
+if ($env:OH_MY_DEVENV_PROFILE_LOADED -cne '1' -or $env:OH_MY_DEVENV_POSH_CONFIG) {
+    throw 'Script startup must load the managed profile without initializing Oh My Posh.'
+}
+[Console]::WriteLine($env:OH_MY_DEVENV_PROFILE_FIXTURE)
+[Console]::WriteLine((prompt))
+[Console]::Write($env:PATH)
+'@
+    $probe = Invoke-NativeCommand -Executable $pwsh -Arguments @('-NoLogo', '-File', $plainScript) -TimeoutSeconds 90 -Environment @{
+        OH_MY_DEVENV_PROFILE_LOADED = $null
+        OH_MY_DEVENV_PROBE_PROMPT = $null
+    }
     $profileOutput = $probe.Stdout -split '\r?\n', 3
     if ($profileOutput.Count -ne 3 -or $profileOutput[0] -cne 'loaded' -or $profileOutput[1] -cne 'overlay prompt> ') {
         throw "A new PowerShell process did not load the profile overlay.`n$($probe.Stderr)`n$($probe.Stdout)"
@@ -512,6 +537,7 @@ $env:OH_MY_DEVENV_PROFILE_LOADED = '1'
     if (-not ";$($profileOutput[2])".Contains(";$overlayGoBin;$overlayPath;", [StringComparison]::Ordinal)) {
         throw 'The new PowerShell process did not prepend the overlay GOBIN and preserve its PATH order.'
     }
+    Write-Host 'Plain pwsh -File loaded the managed profile and overlay without initializing Oh My Posh.'
 
     Invoke-FixtureApply
     if ([IO.File]::ReadAllText($profilePath) -cne $baselineProfile) {

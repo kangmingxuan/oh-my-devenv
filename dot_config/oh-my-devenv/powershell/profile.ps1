@@ -39,6 +39,12 @@ $ohMyDevenvPoshActivation = & {
     Set-StrictMode -Version Latest
     $ErrorActionPreference = 'Stop'
 
+    # Script hosts with redirected streams do not need a prompt.
+    if ($env:OH_MY_DEVENV_PROBE_PROMPT -cne '1' -and
+        ([Console]::IsInputRedirected -or [Console]::IsOutputRedirected)) {
+        return
+    }
+
     . (Join-Path $PSScriptRoot 'environment.ps1')
     $posh = Get-PathApplication -Name oh-my-posh -Optional
     if ($posh) {

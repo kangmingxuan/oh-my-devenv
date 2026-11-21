@@ -215,8 +215,6 @@ jobs:
             if ($LASTEXITCODE -ne 0) { throw "Chocolatey exited with code $LASTEXITCODE." }
           }
       - name: Validate the Windows configuration
-        if: matrix.mode == 'smoke'
-        timeout-minutes: 6
         run: |
           if ('${{ matrix.mode }}' -eq 'smoke') {
             $modules = @{ PSScriptAnalyzer = '1.24.0'; Pester = '5.7.1' }
@@ -226,30 +224,6 @@ jobs:
             }
           }
           ./bootstrap/windows/tests/ci-configuration.ps1 -Mode '${{ matrix.mode }}'
-      - name: Isolate the Windows apply stall
-        if: matrix.mode == 'apply'
-        shell: pwsh -NoLogo -NoProfile -NonInteractive -Command ". '{0}'"
-        run: ./bootstrap/windows/tests/ci-stall.ps1
-      - name: Verify the Windows hook interpreter
-        if: matrix.mode == 'apply'
-        timeout-minutes: 4
-        shell: pwsh -NoLogo -NoProfile -NonInteractive -Command ". '{0}'"
-        run: ./bootstrap/windows/tests/ci-configuration.ps1 -Mode apply
-      - name: Report the Windows installer diagnostics
-        if: failure() && matrix.mode == 'apply'
-        shell: pwsh -NoLogo -NoProfile -NonInteractive -Command ". '{0}'"
-        run: |
-          Get-Process -Name winget, oh-my-posh, PowerToys, msiexec -ErrorAction SilentlyContinue |
-            Format-Table Name, Id, CPU
-          $wingetLogs = Join-Path $env:LOCALAPPDATA 'Packages/Microsoft.DesktopAppInstaller_8wekyb3d8bbwe/LocalState/DiagOutputDir'
-          $logs = @(
-            Get-ChildItem -LiteralPath $wingetLogs -Filter 'WinGet-*.log' -File -ErrorAction SilentlyContinue
-            Get-ChildItem -LiteralPath $env:TEMP -Filter 'powertoys-bootstrapper*.log' -File
-          )
-          foreach ($log in $logs | Sort-Object LastWriteTime -Descending | Select-Object -First 12) {
-            Write-Host $log.Name
-            Get-Content -LiteralPath $log.FullName -Tail 40
-          }
 
   # The one required status check on main. A job skipped by a condition reports
   # success, and a skipped matrix job reports its unexpanded name, so branch

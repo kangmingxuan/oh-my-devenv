@@ -19,7 +19,7 @@ If you already have a chezmoi configuration, run `chezmoi init` before the
 next apply to pick up the Windows hook interpreter settings. Windows hooks use
 `pwsh -NoProfile`. The environment check starts a separate shell to verify the profile.
 
-The system baseline installs Oh My Posh. A new PowerShell session loads its
+The system baseline installs Oh My Posh. A new PowerShell terminal loads its
 managed robbyrussell theme from disk. The local PowerShell overlay runs after
 initialization and can override the prompt.
 

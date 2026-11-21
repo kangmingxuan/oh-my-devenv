@@ -61,6 +61,7 @@ function Invoke-NativeCommand {
         [Parameter(Mandatory)][string]$Executable,
         [Parameter(Mandatory)][string[]]$Arguments,
         [hashtable]$Environment = @{},
+        [ValidateRange(0, 2147483)][int]$TimeoutSeconds = 0,
         [switch]$AllowFailure
     )
 
@@ -85,7 +86,19 @@ function Invoke-NativeCommand {
     try {
         $stdoutRead = $process.StandardOutput.ReadToEndAsync()
         $stderrRead = $process.StandardError.ReadToEndAsync()
-        $process.WaitForExit()
+        if ($TimeoutSeconds) {
+            $tasks = [Threading.Tasks.Task[]]@($process.WaitForExitAsync(), $stdoutRead, $stderrRead)
+            if (-not [Threading.Tasks.Task]::WaitAll($tasks, [TimeSpan]::FromSeconds($TimeoutSeconds))) {
+                if (-not $process.HasExited) {
+                    try { $process.Kill($true) } catch [InvalidOperationException] {
+                        if (-not $process.HasExited) { throw }
+                    }
+                }
+                throw "'$Executable' did not finish within $TimeoutSeconds seconds."
+            }
+        } else {
+            $process.WaitForExit()
+        }
         $result = @{
             Stdout = $stdoutRead.GetAwaiter().GetResult()
             Stderr = $stderrRead.GetAwaiter().GetResult()
