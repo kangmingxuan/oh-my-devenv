@@ -1,6 +1,6 @@
 # Technical Design: Native Windows Platform
 
-Status: proposed. Implementation has not started.
+Status: accepted. Phase 2 (configuration only) is implemented. Phases 3–5 have not started.
 
 ## 1. Summary
 
