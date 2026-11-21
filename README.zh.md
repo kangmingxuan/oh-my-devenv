@@ -10,6 +10,8 @@
 
 oh-my-devenv 是一套主观鲜明、声明式的开发环境。它公开的是维护者当前认可的一整套选择：认同这些选择就使用，不认同就不使用。在一台全新机器上让 `chezmoi` 指向它，几分钟后你就拥有受管的 shell、语言运行时和精选 CLI 工具链，全部来自同一份事实来源。密钥与机器私有事实留在本地 overlay 中，使公开基线可以安全检出。
 
+原生 Windows 提供[快速开始](#原生-windows-快速开始)，覆盖配置、WinGet 系统包和可选的桌面基线。
+
 ## 功能亮点
 
 - **一份来源，跨平台通用** —— macOS（Intel + Apple Silicon）、Ubuntu / Debian 与 Arch Linux 共用同一套模板化基线。
@@ -18,7 +20,7 @@ oh-my-devenv 是一套主观鲜明、声明式的开发环境。它公开的是�
 - **受管的 shell** —— 所有平台上的 Zsh 与 Linux 上的 Bash 都提供完整自动补全；macOS Bash 则刻意只保留有限支持。
 - **锁定版本的运行时** —— 通过 mise 管理 Go、Node、Python 与 golangci-lint，外加 `gopls`、`dlv`、`ruff`、`basedpyright`、`pre-commit` 等生态工具。系统软件包、mise 本身以及 oh-my-zsh 与其插件跟随上游发布。
 - **现代 CLI 工具箱** —— ripgrep、fd、bat、fzf、jq、direnv、tmux、shellcheck、shfmt 等。
-- **可选桌面基线** —— 一个全有或全无的平台包：受支持的工作站安装 Ghostty 与 Maple Mono NF CN，macOS 额外安装 OrbStack，Ubuntu 26.04+ 另有仅针对 Ghostty 的 Fontconfig 兼容补丁。
+- **可选桌面基线** —— 受支持的工作站安装 Maple Mono NF CN。原生 Windows 部署 Windows Terminal 设置。macOS 和受支持的 Linux 工作站安装 Ghostty。macOS 额外安装 OrbStack。Ubuntu 26.04+ 包含针对 Ghostty 的 Fontconfig 兼容补丁。
 - **安全的首次运行** —— 自动备份已存在的受管 dotfiles，并仅在首次询问 Git 身份和桌面基线选择。
 - **用本地 overlay 保存私有事实** —— 把凭据、私有主机和机器专属值放进文档明确的用户配置槽位。项目自有槽位统一收敛到 `~/.config/oh-my-devenv/`，配置根目录固定为 `~/.config`。
 - **刻意保持主观** —— 仓库只承载一套当前设计，不提供兼容配置档案，也不追求折中式的中性默认值。
@@ -53,7 +55,7 @@ chezmoi 是唯一入口：它先渲染你的 dotfiles，再运行有序的引导
 
 ```powershell
 winget install --id Microsoft.PowerShell --exact --source winget
-winget install --id Git.Git --exact --source winget
+winget install --id Git.Git --exact --source winget --scope user
 winget install --id twpayne.chezmoi --exact --source winget
 ```
 
@@ -63,9 +65,12 @@ Git、OpenSSH 和 chezmoi。如果找不到 `ssh`，启用 Windows 的 OpenSSH �
 
 ```powershell
 $PSVersionTable.PSVersion
-Get-Command git, ssh, chezmoi -CommandType Application
+Get-Command git, ssh, chezmoi, winget -CommandType Application
 Get-ExecutionPolicy
 ```
+
+要启用桌面基线，确认 `PATH` 上有 Windows Terminal，且 LocalAppData
+位于 home 下的 `AppData\Local`。
 
 确认前置条件后，应用配置。
 
@@ -73,10 +78,10 @@ Get-ExecutionPolicy
 chezmoi init --apply https://github.com/kangmingxuan/oh-my-devenv.git
 ```
 
-如果执行策略阻止 hook 运行，停止并联系设备管理员。apply 成功后，打开新的
-`pwsh` 会话加载 profile。当前 Windows 阶段只部署 PowerShell、Git、OpenSSH
-和 mise 配置。桌面提示会保存选择，供以后部署 Windows Terminal 设置和
-Maple Mono NF CN 时使用。备份、overlay、校验和卸载见
+如果设备策略阻止 PowerShell hook、`winget` 源或安装器，停止并联系设备管理员。
+系统基线安装 Git、GitHub CLI、ripgrep、jq 和 Oh My Posh。可选的桌面基线增加
+PowerToys、Maple Mono NF CN 和 Windows Terminal 设置。
+apply 成功后，打开新的 `pwsh` 会话加载 robbyrussell 提示符。备份、overlay、校验和卸载见
 [Windows 上手说明](docs/01-onboarding.md#native-windows)。
 
 ### macOS 和 Linux
@@ -175,7 +180,7 @@ bash "$(chezmoi source-path)/bootstrap/scripts/check.sh"
 
 ## 适用范围与预期
 
-本仓库由单人以 **尽力而为（best-effort）** 的方式维护。请把它视为该维护者面向笔记本、虚拟机和一次性实验环境公开的主观基线：它能快速把全新机器带到可用的 shell、运行时与 CLI 工具链状态，但不是平台级产品，也不承诺适合每一种工作流。公开默认值都是有意选择；凭据、私有基础设施和机器专属事实应放在本地 overlay 中。桌面基线是显式、全有或全无的机器选择，目前仅在 macOS，以及 WSL 之外的 Arch Linux 和 Ubuntu 26.04+ 上安装；具体内容因平台而异，macOS 包含 OrbStack。
+本仓库由单人以 **尽力而为（best-effort）** 的方式维护。请把它视为该维护者面向笔记本、虚拟机和一次性实验环境公开的主观基线：它能快速把全新机器带到可用的 shell、运行时与 CLI 工具链状态，但不是平台级产品，也不承诺适合每一种工作流。公开默认值都是有意选择；凭据、私有基础设施和机器专属事实应放在本地 overlay 中。桌面基线是显式、全有或全无的机器选择。它支持 macOS、原生 Windows，以及 WSL 之外的 Arch Linux 和 Ubuntu 26.04+。
 
 ## 文档
 

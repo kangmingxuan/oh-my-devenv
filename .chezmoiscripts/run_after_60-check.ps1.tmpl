@@ -1,11 +1,14 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+if (-not $IsWindows) {
+    throw 'This hook requires native Windows.'
+}
+
 . {{ includeTemplate "powershell-literal" (joinPath .chezmoi.sourceDir "bootstrap/windows/common.ps1") }}
 
-Update-HookPath
 $destination = {{ includeTemplate "powershell-literal" .chezmoi.destDir }}
 $homeDirectory = {{ includeTemplate "powershell-literal" .chezmoi.homeDir }}
 $profilePath = Get-HookProfilePath -Destination $destination -HomeDirectory $homeDirectory
 & {{ includeTemplate "powershell-literal" (joinPath .chezmoi.sourceDir "bootstrap/windows/check.ps1") }} `
-    -Destination $destination -ProfilePath $profilePath
+    -Destination $destination -ProfilePath $profilePath -DesktopBaseline:${{ if (index . "desktopBaseline") }}true{{ else }}false{{ end }}

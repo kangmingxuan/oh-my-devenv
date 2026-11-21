@@ -1,18 +1,25 @@
 param(
     [string]$Destination = $HOME,
-    [string]$ProfilePath = $PROFILE.CurrentUserAllHosts
+    [string]$ProfilePath = $PROFILE.CurrentUserAllHosts,
+    [switch]$DesktopBaseline
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-. (Join-Path $PSScriptRoot 'common.ps1')
-. (Join-Path $PSScriptRoot 'backup.ps1')
-. (Join-Path $PSScriptRoot 'profile.ps1')
-
+if (-not $IsWindows) {
+    throw 'This check requires native Windows.'
+}
 if ($PSVersionTable.PSVersion -lt [version]'7.6') {
     throw "PowerShell 7.6 or later is required. Running $($PSVersionTable.PSVersion)."
 }
+. (Join-Path $PSScriptRoot 'common.ps1')
+. (Join-Path $PSScriptRoot 'backup.ps1')
+. (Join-Path $PSScriptRoot 'profile.ps1')
+. (Join-Path $PSScriptRoot 'system-packages.ps1')
+. (Join-Path $PSScriptRoot 'desktop.ps1')
+
+Update-HookPath
 $git = Get-PathApplication -Name git
 $result = Invoke-NativeCommand -Executable $git.Source -Arguments @('--version')
 Write-Host $result.Stdout.Trim()
@@ -40,7 +47,7 @@ if ($null -eq (Resolve-RegularFile -Path $ProfilePath) -or
     throw "The managed line is missing from PowerShell profile '$ProfilePath'. Run chezmoi apply."
 }
 
-Confirm-ManagedProfile -ProfilePath $ProfilePath
+Confirm-ManagedProfile -ProfilePath $ProfilePath -Destination $Destination
 
 $ssh = Get-PathApplication -Name ssh
 $version = Invoke-NativeCommand -Executable $ssh.Source -Arguments @('-V')
@@ -58,4 +65,27 @@ if (-not (Test-SshConfigRead -Diagnostic $result.Stderr -Path $sshConfig)) {
     throw "SSH did not report reading its default user config at '$sshConfig'.`n$($result.Stderr)"
 }
 Write-Host "SSH read managed config: $sshConfig"
+
+$manifestRoot = Join-Path $PSScriptRoot '../manifests'
+if (-not $PSBoundParameters.ContainsKey('DesktopBaseline')) {
+    $chezmoi = Get-PathApplication -Name chezmoi
+    $data = Invoke-NativeCommand -Executable $chezmoi.Source -Arguments @('data', '--format=json')
+    $DesktopBaseline = [bool](ConvertFrom-Json -InputObject $data.Stdout -AsHashtable)['desktopBaseline']
+}
+$packageManifests = @(
+    Join-Path $manifestRoot 'system/winget-packages.json'
+    if ($DesktopBaseline) { Join-Path $manifestRoot 'desktop/winget-packages.json' }
+)
+Confirm-WinGetPackage -ManifestPath $packageManifests
+if ($DesktopBaseline) {
+    $localData = Get-DesktopLocalData -Destination $Destination
+    $target = Get-DesktopFontTarget -LocalData $localData
+    $manifest = Read-DesktopFontManifest -Path (Join-Path $manifestRoot 'desktop/maple-mono-nf-cn.env')
+    Confirm-DesktopFont -Manifest $manifest @target
+    $fragment = Join-Path $Destination 'AppData/Local/Microsoft/Windows Terminal/Fragments/oh-my-devenv/desktop.json'
+    if ($null -eq (Resolve-RegularFile -Path $fragment)) {
+        throw "Missing Windows Terminal fragment '$fragment'. Run chezmoi apply."
+    }
+    Confirm-TerminalFragment -Path $fragment -Family $manifest.Family
+}
 Write-Host 'All checks passed.'

@@ -167,7 +167,7 @@ function Get-ProfileProbePath {
 }
 
 function Confirm-ManagedProfile {
-    param([string]$ProfilePath)
+    param([string]$ProfilePath, [string]$Destination)
 
     $arguments = @('-NoLogo', '-NonInteractive')
     $fixtureProfile = (ConvertTo-PathKey -Path $ProfilePath) -cne
@@ -177,21 +177,26 @@ function Confirm-ManagedProfile {
     }
     $successMarker = "oh-my-devenv-profile-probe-$(New-Guid)"
     $arguments += @('-File', (Join-Path $PSScriptRoot 'profile-probe.ps1'), '-SuccessMarker', $successMarker)
+    $arguments += @('-ExpectedPoshConfig', (Join-Path $Destination '.config/oh-my-devenv/powershell/robbyrussell.omp.json'))
     if ($fixtureProfile) {
         $arguments += @('-FixtureProfilePath', $ProfilePath)
     }
     $probeEnvironment = @{
         PATH = Get-ProfileProbePath
         OH_MY_DEVENV_PROFILE_LOADED = $null
+        OH_MY_DEVENV_PROBE_PROMPT = '1'
+        OH_MY_DEVENV_POSH_CONFIG = $null
+        POSH_CONFIG = $null
+        POSH_SESSION_ID = $null
     }
     $pwsh = Join-Path $PSHOME $(if ($IsWindows) { 'pwsh.exe' } else { 'pwsh' })
     try {
-        $result = Invoke-NativeCommand -Executable $pwsh -Arguments $arguments -Environment $probeEnvironment
+        $result = Invoke-NativeCommand -Executable $pwsh -Arguments $arguments -Environment $probeEnvironment -TimeoutSeconds 90
         if (($result.Stdout -split '\r?\n') -cnotcontains $successMarker) {
             throw 'The child PowerShell did not report the profile probe success marker.'
         }
     } catch {
         throw "PowerShell profile check failed for '$ProfilePath'. $_"
     }
-    Write-Host "PowerShell loaded the managed profile and restored its PATH entries."
+    Write-Host 'PowerShell loaded the managed profile, restored its PATH entries, and initialized Oh My Posh with the managed theme.'
 }

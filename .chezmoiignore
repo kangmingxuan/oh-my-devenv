@@ -47,11 +47,15 @@ bootstrap/**
 .config/fontconfig/**
 .config/ghostty
 .config/ghostty/**
+{{ if not (index . "desktopBaseline") -}}
+.chezmoiscripts/22-install-desktop-assets.ps1
+{{ end -}}
 {{ else -}}
 .chezmoiscripts/*.ps1
+# Includes the managed PowerShell profile and Oh My Posh theme.
 .config/oh-my-devenv
 .config/oh-my-devenv/powershell
 .config/oh-my-devenv/powershell/**
-AppData/Local/Microsoft/Windows Terminal/Fragments/oh-my-devenv
-AppData/Local/Microsoft/Windows Terminal/Fragments/oh-my-devenv/**
+AppData
+AppData/**
 {{ end -}}

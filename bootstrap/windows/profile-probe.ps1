@@ -1,4 +1,8 @@
-param([Parameter(Mandatory)][string]$SuccessMarker, [string]$FixtureProfilePath)
+param(
+    [Parameter(Mandatory)][string]$SuccessMarker,
+    [Parameter(Mandatory)][string]$ExpectedPoshConfig,
+    [string]$FixtureProfilePath
+)
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
@@ -16,5 +20,9 @@ foreach ($entry in Get-ManagedProfilePathEntry) {
     if ((ConvertTo-PathKey -Path $entry) -cnotin $entries) {
         throw "The managed profile did not add '$entry' to PATH."
     }
+}
+if (-not $env:OH_MY_DEVENV_POSH_CONFIG -or
+    (ConvertTo-PathKey -Path $env:OH_MY_DEVENV_POSH_CONFIG) -cne (ConvertTo-PathKey -Path $ExpectedPoshConfig)) {
+    throw "Oh My Posh did not load the managed theme.`nExpected '$ExpectedPoshConfig'. Check that oh-my-posh is on PATH and run chezmoi apply."
 }
 [Console]::WriteLine("`n$SuccessMarker")

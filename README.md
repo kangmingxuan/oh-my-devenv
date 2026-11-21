@@ -10,7 +10,7 @@
 
 oh-my-devenv is an opinionated, declarative development environment. It publishes one maintainer's current choices as a coherent baseline: use it when those choices fit, and do not use it when they do not. Point `chezmoi` at it on a fresh machine and minutes later you have managed shells, language runtimes, and a curated CLI toolchain — all from a single source of truth. Secrets and private machine facts stay in local overlays so the public baseline remains safe to clone.
 
-Native Windows has a [configuration-only quick start](#native-windows-quick-start) for PowerShell, Git, OpenSSH, and mise.
+Native Windows has a [quick start](#native-windows-quick-start) for the configuration, WinGet system packages, and optional desktop baseline.
 
 ## What you get
 
@@ -20,7 +20,7 @@ Native Windows has a [configuration-only quick start](#native-windows-quick-star
 - **Managed shells** — first-class completion for Zsh everywhere and Bash on Linux, with intentionally limited Bash support on macOS.
 - **Pinned runtimes** — Go, Node, Python, and golangci-lint via mise, plus ecosystem tools such as `gopls`, `dlv`, `ruff`, `basedpyright`, and `pre-commit`. System packages, mise itself, and oh-my-zsh with its plugins track their upstream releases.
 - **Modern CLI toolkit** — ripgrep, fd, bat, fzf, jq, direnv, tmux, shellcheck, shfmt, and more.
-- **Opt-in desktop baseline** — one all-or-nothing platform bundle: Ghostty and Maple Mono NF CN on supported workstations, OrbStack on macOS, and a Ghostty-specific Fontconfig workaround on Ubuntu 26.04+.
+- **Opt-in desktop baseline** — Maple Mono NF CN on supported workstations, Windows Terminal settings on native Windows, and Ghostty on macOS and supported Linux workstations. macOS also gets OrbStack. Ubuntu 26.04+ includes a Ghostty-specific Fontconfig workaround.
 - **Safe first run** — backs up any existing managed dotfiles and prompts once for your Git identity and desktop-baseline choice.
 - **Local overlays for private facts** — keep credentials, private hosts, and machine-only values in the documented user-owned config slots. The project-owned slots use `~/.config/oh-my-devenv/` under the fixed config root `~/.config`.
 - **Opinionated by design** — the repository carries one current design, not compatibility profiles or neutral-by-committee defaults.
@@ -57,7 +57,7 @@ Install the prerequisites from a terminal with winget.
 
 ```powershell
 winget install --id Microsoft.PowerShell --exact --source winget
-winget install --id Git.Git --exact --source winget
+winget install --id Git.Git --exact --source winget --scope user
 winget install --id twpayne.chezmoi --exact --source winget
 ```
 
@@ -67,9 +67,12 @@ the Windows OpenSSH Client optional feature or use an available OpenSSH client.
 
 ```powershell
 $PSVersionTable.PSVersion
-Get-Command git, ssh, chezmoi -CommandType Application
+Get-Command git, ssh, chezmoi, winget -CommandType Application
 Get-ExecutionPolicy
 ```
+
+For the desktop baseline, make sure Windows Terminal is available on `PATH`
+and LocalAppData is under your home directory at `AppData\Local`.
 
 After you verify the prerequisites, apply the configuration.
 
@@ -77,11 +80,12 @@ After you verify the prerequisites, apply the configuration.
 chezmoi init --apply https://github.com/kangmingxuan/oh-my-devenv.git
 ```
 
-If policy prevents PowerShell from running the hooks, stop and contact the
-device administrator. When apply succeeds, open a new `pwsh` session to load the
-profile. Windows currently deploys configuration only. The desktop prompt
-records your choice for when Windows Terminal settings and Maple Mono NF CN
-become available. See the [Windows onboarding notes](docs/01-onboarding.md#native-windows) for backups, overlays, checks, and uninstall.
+If device policy blocks PowerShell hooks, the `winget` source, or an installer,
+stop and contact the device administrator. The system baseline installs Git,
+GitHub CLI, ripgrep, jq, and Oh My Posh. The optional desktop baseline adds
+PowerToys, Maple Mono NF CN, and Windows Terminal settings. After apply succeeds,
+open a new `pwsh` session to load the robbyrussell prompt. See the
+[Windows onboarding notes](docs/01-onboarding.md#native-windows) for backups, overlays, checks, and uninstall.
 
 ### macOS and Linux
 
@@ -178,7 +182,7 @@ For prompts, hook order, success signals, and troubleshooting, see [docs/01-onbo
 
 ## Scope and expectations
 
-This repository is maintained on a **best-effort** basis by a single maintainer. Treat it as that maintainer's public, opinionated baseline for laptops, VMs, and disposable notebook environments: it gets a clean machine to a working shell, runtime, and CLI toolchain quickly, but it is not a platform-grade product or a promise to fit every workflow. Public defaults are deliberate; credentials, private infrastructure, and machine-only facts belong in local overlays. The desktop baseline is an explicit, all-or-nothing machine choice and currently installs only on macOS and on Arch Linux and Ubuntu 26.04+ outside WSL; its contents are platform-specific, with OrbStack included on macOS.
+This repository is maintained on a **best-effort** basis by a single maintainer. Treat it as that maintainer's public, opinionated baseline for laptops, VMs, and disposable notebook environments: it gets a clean machine to a working shell, runtime, and CLI toolchain quickly, but it is not a platform-grade product or a promise to fit every workflow. Public defaults are deliberate; credentials, private infrastructure, and machine-only facts belong in local overlays. The desktop baseline is an explicit, all-or-nothing machine choice. It supports macOS, native Windows, and Arch Linux and Ubuntu 26.04+ outside WSL.
 
 ## Documentation
 

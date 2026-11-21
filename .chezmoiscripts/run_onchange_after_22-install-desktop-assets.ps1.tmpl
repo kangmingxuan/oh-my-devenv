@@ -1,0 +1,24 @@
+# maple-mono-nf-cn.env: {{ include "bootstrap/manifests/desktop/maple-mono-nf-cn.env" | sha256sum }}
+# winget-packages.json: {{ include "bootstrap/manifests/desktop/winget-packages.json" | sha256sum }}
+# desktop.ps1: {{ include "bootstrap/windows/desktop.ps1" | sha256sum }}
+# system-packages.ps1: {{ include "bootstrap/windows/system-packages.ps1" | sha256sum }}
+# common.ps1: {{ include "bootstrap/windows/common.ps1" | sha256sum }}
+# environment.ps1: {{ include "dot_config/oh-my-devenv/powershell/environment.ps1" | sha256sum }}
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = 'Stop'
+
+if (-not $IsWindows) {
+    throw 'This hook requires native Windows.'
+}
+
+. {{ includeTemplate "powershell-literal" (joinPath .chezmoi.sourceDir "bootstrap/windows/common.ps1") }}
+. {{ includeTemplate "powershell-literal" (joinPath .chezmoi.sourceDir "bootstrap/windows/desktop.ps1") }}
+. {{ includeTemplate "powershell-literal" (joinPath .chezmoi.sourceDir "bootstrap/windows/system-packages.ps1") }}
+
+Update-HookPath
+$localData = Get-DesktopLocalData -Destination {{ includeTemplate "powershell-literal" .chezmoi.destDir }}
+$target = Get-DesktopFontTarget -LocalData $localData
+$manifest = Read-DesktopFontManifest -Path {{ includeTemplate "powershell-literal" (joinPath .chezmoi.sourceDir "bootstrap/manifests/desktop/maple-mono-nf-cn.env") }}
+Install-WinGetPackage -ManifestPath {{ includeTemplate "powershell-literal" (joinPath .chezmoi.sourceDir "bootstrap/manifests/desktop/winget-packages.json") }}
+Install-DesktopFont -Manifest $manifest @target

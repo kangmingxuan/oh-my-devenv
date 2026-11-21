@@ -1,0 +1,20 @@
+{
+  "$schema": "https://aka.ms/winget-packages.schema.2.0.json",
+  "Sources": [
+    {
+      "SourceDetails": {
+        "Name": "winget",
+        "Identifier": "Microsoft.Winget.Source_8wekyb3d8bbwe",
+        "Argument": "https://cdn.winget.microsoft.com/cache",
+        "Type": "Microsoft.PreIndexed.Package"
+      },
+      "Packages": [
+        { "PackageIdentifier": "Git.Git", "Scope": "user" },
+        { "PackageIdentifier": "GitHub.cli", "Scope": "user" },
+        { "PackageIdentifier": "BurntSushi.ripgrep.MSVC", "Scope": "user" },
+        { "PackageIdentifier": "jqlang.jq", "Scope": "user" },
+        { "PackageIdentifier": "JanDeDobbeleer.OhMyPosh", "Scope": "user" }
+      ]
+    }
+  ]
+}

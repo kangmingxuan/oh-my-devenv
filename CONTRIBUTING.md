@@ -96,16 +96,18 @@ Ubuntu and Arch. macOS provides both tools.
 
 ## Manifest Contracts
 
-The installer scripts and `bootstrap/scripts/check.sh` consume the following source manifests. Keep both sides in sync:
+The installer scripts and platform checkers consume the following source manifests. Keep both sides in sync.
 
 - `bootstrap/manifests/shell/oh-my-zsh-plugins.txt`
 - `bootstrap/manifests/shell/completions.txt`
 - `bootstrap/manifests/system/apt-packages.txt`
 - `bootstrap/manifests/system/pacman-packages.txt`
 - `bootstrap/manifests/system/Brewfile`
+- `bootstrap/manifests/system/winget-packages.json` (Windows installer and checker)
 - `bootstrap/manifests/desktop/apt-packages.txt`
 - `bootstrap/manifests/desktop/pacman-packages.txt`
 - `bootstrap/manifests/desktop/Brewfile`
+- `bootstrap/manifests/desktop/winget-packages.json` (Windows installer and checker)
 - `bootstrap/manifests/desktop/maple-mono-nf-cn.env`
 - `bootstrap/manifests/ecosystem/go-tools.txt`
 - `bootstrap/manifests/ecosystem/uv-tools.txt`

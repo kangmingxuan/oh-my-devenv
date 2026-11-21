@@ -14,7 +14,7 @@
 {{- if eq .chezmoi.os "darwin" -}}
 {{- $desktopBaselinePrompt = "Install macOS desktop baseline (Ghostty + Maple Mono NF CN + OrbStack)" -}}
 {{- else if eq .chezmoi.os "windows" -}}
-{{- $desktopBaselinePrompt = "Install Windows desktop baseline (Windows Terminal settings + Maple Mono NF CN)" -}}
+{{- $desktopBaselinePrompt = "Install Windows desktop baseline (PowerToys + Windows Terminal settings + Maple Mono NF CN)" -}}
 {{- end -}}
 {{- $desktopBaseline := promptBoolOnce . "desktopBaseline" $desktopBaselinePrompt $desktopBaselineDefault -}}
 
@@ -28,6 +28,11 @@
     # Match status output: routine run_* hooks are reviewed through git,
     # not as destination-file drift.
     exclude = ["scripts"]
+{{ if eq .chezmoi.os "windows" }}
+[interpreters.ps1]
+    command = "pwsh"
+    args = ["-NoLogo", "-NoProfile", "-File"]
+{{- end }}
 
 [data]
     name = {{ $gitName | quote }}

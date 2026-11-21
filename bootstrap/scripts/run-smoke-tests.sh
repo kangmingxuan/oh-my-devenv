@@ -804,6 +804,9 @@ for hook_platform in "${hook_platforms[@]}" "windows|$windows_chezmoi_data"; do
       || fail_test 'Windows and macOS mise configs differ'
     grep -Fxq '.config/oh-my-devenv/powershell/profile.ps1' <<<"$managed_platform" \
       || fail_test 'Windows does not manage the PowerShell profile body'
+    windows_prompt_theme='.config/oh-my-devenv/powershell/robbyrussell.omp.json'
+    grep -Fxq "$windows_prompt_theme" <<<"$managed_platform" \
+      || fail_test 'Windows does not manage the Oh My Posh theme'
     for unix_startup in .bash_profile .bashrc .profile .zprofile .zshenv .zshrc; do
       if grep -Fxq "$unix_startup" <<<"$managed_platform"; then
         fail_test "Windows manages Unix startup file $unix_startup"
@@ -812,6 +815,56 @@ for hook_platform in "${hook_platforms[@]}" "windows|$windows_chezmoi_data"; do
     if grep -Eq '^([.]chezmoiscripts/.*[.]sh$|[.](bash|zsh|local)(/|$)|[.]config/(fontconfig|ghostty)(/|$))' <<<"$managed_platform"; then
       fail_test 'Windows manages a Unix-only target'
     fi
+    terminal_fragment_dir='AppData/Local/Microsoft/Windows Terminal/Fragments/oh-my-devenv'
+    terminal_fragment="$terminal_fragment_dir/desktop.json"
+    grep -Fxq "$terminal_fragment" <<<"$managed_platform" \
+      || fail_test 'Windows desktop baseline does not manage the Terminal fragment'
+    while IFS= read -r managed_path; do
+      case "$managed_path" in
+        .*|"$terminal_fragment_dir"|"$terminal_fragment_dir/"*) ;;
+        *) [[ "$terminal_fragment_dir" == "$managed_path/"* ]] \
+             || fail_test "Windows manages an unexpected non-dotfile target: $managed_path" ;;
+      esac
+    done <<<"$managed_platform"
+    chezmoi --source="$repo_root" --destination="$HOME" --override-data "$platform_override" \
+      cat "$HOME/$terminal_fragment" >"$tmp_dir/windows-desktop.json"
+    # shellcheck disable=SC2016
+    rendered_family="$(chezmoi --source="$tmp_dir" execute-template '
+      {{- $fragment := include "windows-desktop.json" | mustFromJson -}}
+      {{- if ne (len $fragment.profiles) 1 }}{{ fail "expected one Terminal profile update" }}{{ end -}}
+      {{- $profile := index $fragment.profiles 0 -}}
+      {{- if ne $profile.updates "{574e775e-4f2a-5b96-ac1e-a2962a402336}" }}{{ fail "expected a PowerShell 7 profile update" }}{{ end -}}
+      {{- $profile.font.face -}}')"
+    [[ "$rendered_family" == "$MAPLE_MONO_FAMILY" ]] \
+      || fail_test "unexpected Windows Terminal font family: $rendered_family"
+    windows_desktop_home="$tmp_dir/windows-desktop-home"
+    windows_desktop_target="$windows_desktop_home/$terminal_fragment"
+    windows_desktop_neighbor="$(dirname "$windows_desktop_target")/other.json"
+    mkdir -p "$(dirname "$windows_desktop_target")"
+    printf 'keep\n' >"$windows_desktop_neighbor"
+    for windows_desktop_setting in '"desktopBaseline":false,' ''; do
+      chezmoi --source="$repo_root" --destination="$windows_desktop_home" \
+        --override-data "$platform_override" apply --exclude=scripts "$windows_desktop_home/AppData"
+      [[ -s "$windows_desktop_target" ]] || fail_test 'Windows desktop apply did not write its Terminal fragment'
+      windows_minimal_override="{$windows_desktop_setting\"chezmoi\":$windows_chezmoi_data}"
+      managed_windows_minimal="$(chezmoi --source="$repo_root" --destination="$windows_desktop_home" \
+        --override-data "$windows_minimal_override" managed --format=)"
+      if grep -Fxq '.chezmoiscripts/22-install-desktop-assets.ps1' <<<"$managed_windows_minimal"; then
+        fail_test 'Windows manages the desktop installer with the baseline disabled or omitted'
+      fi
+      grep -Fxq '.chezmoiscripts/20-install-system-packages.ps1' <<<"$managed_windows_minimal" \
+        || fail_test 'Windows disables system packages with the desktop baseline'
+      grep -Fxq "$windows_prompt_theme" <<<"$managed_windows_minimal" \
+        || fail_test 'Windows does not manage the prompt theme with the desktop baseline disabled or omitted'
+      chezmoi --source="$repo_root" --destination="$windows_desktop_home" \
+        --override-data "$windows_minimal_override" apply --exclude=scripts "$windows_desktop_home/AppData"
+      [[ ! -e "$windows_desktop_target" ]] || fail_test 'Windows desktop opt-out left the Terminal fragment in place'
+      [[ "$(cat "$windows_desktop_neighbor")" == keep ]] || fail_test 'Windows desktop opt-out changed another Terminal fragment'
+      chezmoi --source="$repo_root" --destination="$windows_desktop_home" --override-data "$windows_minimal_override" \
+        execute-template --file "$repo_root/.chezmoiscripts/run_after_60-check.ps1.tmpl" >"$tmp_dir/windows-check-disabled.ps1"
+      # shellcheck disable=SC2016
+      assert_file_contains "$tmp_dir/windows-check-disabled.ps1" '-DesktopBaseline:$false'
+    done
     # Native syntax and lint checks of the rendered hooks run in Windows CI.
     for hook_template in "$repo_root"/.chezmoiscripts/*.ps1.tmpl; do
       rendered_hook="$tmp_dir/hook-windows-$(basename "$hook_template" .tmpl)"
@@ -824,8 +877,8 @@ for hook_platform in "${hook_platforms[@]}" "windows|$windows_chezmoi_data"; do
     done
     continue
   fi
-  if grep -Eq '^([.]chezmoiscripts/.*[.]ps1|[.]config/oh-my-devenv(/|$)|AppData/)' <<<"$managed_platform"; then
-    fail_test "$hook_platform_name manages a Windows-only target"
+  if grep -Eq '^([.]chezmoiscripts/.*[.]ps1|[.]config/oh-my-devenv(/|$)|AppData(/|$))' <<<"$managed_platform"; then
+    fail_test "$hook_platform_name manages a Windows-only target, including the PowerShell profile and theme"
   fi
   for hook_template in "$repo_root"/.chezmoiscripts/*.sh.tmpl; do
     rendered_hook="$tmp_dir/hook-$hook_platform_name-$(basename "$hook_template" .tmpl)"
@@ -2558,14 +2611,17 @@ chezmoi execute-template --init \
 assert_toml_section_contains "$tmp_chezmoi_toml" "data" 'name = "Smoke Tests"'
 assert_toml_section_contains "$tmp_chezmoi_toml" "data" 'email = "smoke@example.com"'
 assert_toml_section_contains "$tmp_chezmoi_toml" "data" 'desktopBaseline = true'
+assert_file_not_contains "$tmp_chezmoi_toml" '[interpreters.ps1]'
 
 windows_init_override="{\"name\":\"Smoke Tests\",\"email\":\"smoke@example.com\",\"chezmoi\":$windows_chezmoi_data}"
 chezmoi --source="$repo_root" --override-data "$windows_init_override" \
   execute-template --init --file "$repo_root/.chezmoi.toml.tmpl" >"$tmp_dir/windows-init.toml"
 assert_toml_section_contains "$tmp_dir/windows-init.toml" "data" 'desktopBaseline = true'
+assert_toml_section_contains "$tmp_dir/windows-init.toml" "interpreters.ps1" 'command = "pwsh"'
+assert_toml_section_contains "$tmp_dir/windows-init.toml" "interpreters.ps1" 'args = ["-NoLogo", "-NoProfile", "-File"]'
 chezmoi --source="$repo_root" --override-data "$windows_init_override" \
   execute-template --init --file "$repo_root/.chezmoi.toml.tmpl" \
-  --promptBool 'Install Windows desktop baseline (Windows Terminal settings + Maple Mono NF CN)=false' >"$tmp_dir/windows-init.toml"
+  --promptBool 'Install Windows desktop baseline (PowerToys + Windows Terminal settings + Maple Mono NF CN)=false' >"$tmp_dir/windows-init.toml"
 assert_toml_section_contains "$tmp_dir/windows-init.toml" "data" 'desktopBaseline = false'
 
 log_step "📦" "Exercising the pacman installer with a stubbed sudo..."

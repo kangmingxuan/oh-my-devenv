@@ -1,6 +1,6 @@
 # Technical Design: Native Windows Platform
 
-Status: accepted. Phase 2 (configuration only) is implemented. Phases 3–5 have not started.
+Status: accepted. Phase 3 (system packages and desktop baseline) passed the hosted Windows smoke and apply jobs. Phases 4–5 have not started.
 
 ## 1. Summary
 
@@ -23,14 +23,16 @@ The user made these decisions on 2026-11-20, except where another date is stated
 | --- | --- |
 | Support native Windows | The work environment depends on native Windows, so WSL alone does not meet the need. |
 | Use the current repository | Do not start a separate repository. |
-| Keep platforms consistent, as a soft rule | Windows uses the same versions and tool lists by default. A Windows exception is allowed when a tool does not work there. |
+| Share runtimes and ecosystem tools | On 2026-11-21, the user confirmed that Windows uses the shared mise language versions and ecosystem tool manifests. Select Windows system packages for their usefulness on Windows. |
+| Install Oh My Posh by default | On 2026-11-21, the user chose Oh My Posh as the PowerShell counterpart of oh-my-zsh. |
+| Approve the Windows system inventory | On 2026-11-21, the user approved Claude's five-package proposal in section 10. Claude selected tools that are useful on Windows, run well there, and are widely used. |
 | Scope Windows as a general development baseline | Windows content stays public and general. Employer-specific content stays out of the repository. |
-| Defer the Windows tool inventory | The user has not collected the full set of daily Windows tools yet. Use the macOS and Linux baseline as the starting point. |
+| Defer the Windows tool inventory | The user has not collected the full set of daily Windows tools yet. Start with the approved Windows system inventory. |
 | Use the current-user, all-hosts PowerShell profile | Claude proposed this target and the user approved it. |
 | Ask for design reviews from Gemini 4 Argon and Kimi K3.1 Pro | The user asked Claude to weigh these reviews together with the Codex fact-checks. |
 | Persist the managed directories in the user `Path` | The user decided this on 2026-11-21, so that applications started outside PowerShell find the managed tools. Claude designed the mechanism in section 7. |
 
-Claude proposed every other decision in this document within the scope above. Section 16 lists which review findings Claude adopted. Each decision is open for user review before implementation.
+Claude proposed every other decision in this document within the scope above. Section 16 lists which review findings Claude adopted. The user approved phase 3 on 2026-11-21 and deferred the first live Windows apply until after all planned phases. Claude decided the installation scope, installer and checker behavior, device-policy handling, desktop installation and validation, and the phase-3 uninstall boundary within that approval.
 
 ## 3. Goals and Non-Goals
 
@@ -63,12 +65,13 @@ bootstrap/
 ├── manifests/
 │   ├── system/winget-packages.json    # new; Windows system packages
 │   ├── ecosystem/*.txt                # shared, unchanged format
+│   ├── desktop/winget-packages.json   # Windows desktop packages
 │   └── desktop/maple-mono-nf-cn.env   # shared font facts
 ├── scripts/                           # Unix Bash helpers, unchanged
 └── windows/                           # new; PowerShell helpers and tests
 dot_config/
 ├── mise/config.toml.tmpl              # shared target
-└── oh-my-devenv/powershell/           # new; PowerShell profile body
+└── oh-my-devenv/powershell/           # new; PowerShell profile body and theme
 AppData/Local/Microsoft/Windows Terminal/Fragments/oh-my-devenv/  # new; desktop only
 ```
 
@@ -86,13 +89,13 @@ Keep the platform decisions in the same places that the Unix platforms use:
 
 - `.chezmoitemplates/system-package-manager` returns `winget` when `.chezmoi.os` is `windows`.
 - `.chezmoitemplates/desktop-platform-supported` returns `true` on Windows.
-- `.chezmoi.toml.tmpl` defaults the desktop-baseline prompt to yes on Windows, and its prompt text names the Windows contents: Windows Terminal settings and Maple Mono NF CN.
+- `.chezmoi.toml.tmpl` defaults the desktop-baseline prompt to yes on Windows, and its prompt text names the Windows contents (PowerToys, Windows Terminal settings, and Maple Mono NF CN).
 
 Gate both hooks and deployed files through `.chezmoiignore`:
 
 - Write ignore patterns as target paths relative to the home directory, not as source paths. A script's target name drops its `run_` attributes and `.tmpl` suffix, so `.chezmoiscripts/*.ps1` matches every Windows hook. Claude confirmed this pattern with chezmoi v2.73.2 on a disposable fixture.
 - On Windows, ignore `.chezmoiscripts/*.sh` and the Unix-only targets: Zsh and Bash files, `.local/share/oh-my-devenv/xdg.sh`, Fontconfig, and Ghostty.
-- Outside Windows, ignore `.chezmoiscripts/*.ps1` and the Windows-only targets: the PowerShell profile body and the Windows Terminal fragment.
+- Outside Windows, ignore `.chezmoiscripts/*.ps1` and the Windows-only targets: the PowerShell profile, Oh My Posh theme, and Windows Terminal fragment.
 - Do not edit the existing Unix hook templates for this gate. `.chezmoiignore` keeps the gate in one place instead of ten templates. chezmoi hashes the rendered script, so a wrapper reruns a Unix hook only when it changes the rendered output, but each edited template is still a place where the gate can drift.
 
 ## 6. Hook Mapping
@@ -105,7 +108,7 @@ Keep the Unix hook numbers, so the order of the layers is the same on every plat
 | 10 | Prerequisites and first-run backup | `run_once_before_`: check `git`, first-run backup | 2 |
 | 15 | — | `run_after_`, every apply: ensure the profile dot-source line (section 9, phase 2) and the persistent user `Path` entries (section 7, phase 4) | 2 |
 | 20 | System packages | Check `winget`, then `winget import` from `winget-packages.json` | 3 |
-| 22 | Desktop assets | Check Windows Terminal, then Maple Mono NF CN in the user font directory | 3 |
+| 22 | Desktop assets | Check Windows Terminal, import the desktop packages, and install Maple Mono NF CN in the user font directory | 3 |
 | 25 | oh-my-zsh assets | None | — |
 | 30 | Install mise | Install mise with winget when `mise` is not on `PATH` | 4 |
 | 40 | Runtimes | `mise install` | 4 |
@@ -122,7 +125,8 @@ Hook 30 uses winget, so mise comes from the same package manager as the other sy
 - Require PowerShell 7.6 or later before the first `chezmoi init --apply`, together with `git` and `chezmoi`. 7.6 is the current LTS branch. The PowerShell support lifecycle table gives its end of support as 2028-11-14, and gives 2026-11-10 for 7.4 and 7.5. The Microsoft Lifecycle catalog shows one day later for each; the design uses the earlier dates. Every PowerShell feature this design uses exists in 7.6.
 - The quick start installs PowerShell with `winget install --id Microsoft.PowerShell --exact --source winget`. On a fresh client with the unrestricted winget source, omitting `--version` selects the highest applicable release, which can be a non-LTS release. Existing installs and source policy can change the result or make the install fail. The inspected winget catalog has no separate LTS package ID.
 - Write Windows hooks and helpers for PowerShell 7.6 or later only.
-- Reason: chezmoi runs `.ps1` scripts with `pwsh` and falls back to Windows PowerShell when `pwsh` is not available. A hook that installs `pwsh` during the first apply does not help the later hooks of the same apply, because the running chezmoi process keeps its original `PATH`. A prerequisite is simpler than keeping every hook compatible with 5.1.
+- On Windows, `.chezmoi.toml.tmpl` sets `[interpreters.ps1]` to `pwsh -NoLogo -NoProfile -File`. Hooks run independently of the user's PowerShell profile. Hook 15 maintains the profile entry and hook 60 verifies startup in a separate shell. Run `chezmoi init` to refresh an existing configuration before apply. [chezmoi interpreter configuration](https://www.chezmoi.io/reference/configuration-file/interpreters/).
+- Install `pwsh` before starting chezmoi so every hook can resolve the interpreter from the initial `PATH`.
 - Hook 00 fails when the running PowerShell version is below 7.6. This is a compatibility floor only; hook 00 does not check support status. The user keeps PowerShell on a supported release with its latest servicing update, as for any other prerequisite. Record the minimum in `AGENTS.md` next to the Bash 3.2 rule.
 - Start every script with `Set-StrictMode -Version Latest` and `$ErrorActionPreference = 'Stop'`.
 - Check the exit code of every native command. `$ErrorActionPreference` does not stop on a failed native command by default.
@@ -134,6 +138,15 @@ Every hook that runs in the chezmoi process inherits the `PATH` that chezmoi sta
 1. Read the current machine and user `Path` values.
 2. Prepend the managed directories: the mise shims directory under `%LOCALAPPDATA%\mise`, `~/.local/bin`, and `$GOBIN`.
 3. Set `GOPATH` and `GOBIN` to the same defaults that the Unix env templates use (`~/go` and `$GOPATH/bin`).
+
+In phase 3, the hook helper merges the process, machine, and current user
+`Path` values. WinGet writes user-scope portable paths to
+`HKCU\Environment\Path`. With symlink support, it uses
+`%LOCALAPPDATA%\Microsoft\WinGet\Links`. Without it, WinGet can
+add the package directory. The checker reads those values again after
+hook 20. The phase-4 steps above add the managed mise and tool directories.
+[WinGet portable installer](https://github.com/microsoft/winget-cli/blob/master/src/AppInstallerCLICore/PortableInstaller.cpp),
+[WinGet Path registry implementation](https://github.com/microsoft/winget-cli/blob/master/src/AppInstallerCommonCore/PathVariable.cpp).
 
 ### Persistent user Path
 
@@ -227,7 +240,11 @@ The body mirrors the Unix env templates where they apply on Windows:
 - Prepend the mise shims directory, `~/.local/bin`, and `$GOBIN` to `PATH`.
 - Set `BAT_THEME` to the same value as the Unix env templates.
 - Activate mise with `(&mise activate pwsh) | Out-String | Invoke-Expression`, only when `mise` is on `PATH`. The Unix rc files guard activation in the same way.
-- Load the local overlay at `~/.config/oh-my-devenv/powershell/profile.local.ps1` when it exists.
+- After mise activation, resolve the first `oh-my-posh` application on `PATH`. When it exists, initialize it with the managed `~/.config/oh-my-devenv/powershell/robbyrussell.omp.json`. This local theme follows the Unix `robbyrussell` profile. The theme and its MIT notice are from [Oh My Posh v33.0.0](https://github.com/JanDeDobbeleer/oh-my-posh/tree/v33.0.0).
+- The theme disables automatic upgrades and upgrade notices. It also enables `async` so Oh My Posh disables upgrade features even when its device cache enables them. The profile uses `init pwsh`. Oh My Posh registers its PowerShell prompt during startup and loads the rendering module on the first prompt draw. The theme loads from disk. Its path and Git segments use local state. [Feature selection](https://github.com/JanDeDobbeleer/oh-my-posh/blob/v33.0.0/src/config/config.go#L144-L191), [PowerShell init generator](https://github.com/JanDeDobbeleer/oh-my-posh/blob/v33.0.0/src/shell/init.go#L47-L76).
+- A script host with redirected console input or output skips prompt initialization. It still loads the rest of the profile and the local overlay. The checker explicitly enables prompt initialization in its fresh PowerShell process so it can verify the same init path.
+- The init script exports the resolved `POSH_CONFIG` and a `POSH_SESSION_ID`. After the generated script installs the prompt function, the profile records that config path before the overlay runs. The checker clears inherited values in its fresh PowerShell process and requires that recorded path to match the deployed theme. [Session variables](https://github.com/JanDeDobbeleer/oh-my-posh/blob/v33.0.0/src/shell/init.go#L315-L326), [deferred prompt](https://github.com/JanDeDobbeleer/oh-my-posh/blob/v33.0.0/src/shell/init.go#L270-L290).
+- Load the local overlay at `~/.config/oh-my-devenv/powershell/profile.local.ps1` when it exists. It can override the prompt.
 - After the overlay runs, prepend any missing managed directories, including the effective `GOBIN`. Preserve the overlay's existing `PATH` order and entries.
 
 The profile affects PowerShell sessions only. Applications started from the Windows shell, such as an IDE launched from the Start menu, do not load it. The persistent user `Path` entries cover these applications (section 7).
@@ -237,9 +254,9 @@ The profile affects PowerShell sessions only. Applications started from the Wind
 The baseline does not own Windows Terminal's `settings.json`, so the settings that the user changes in the Terminal UI stay under user control. The baseline deploys a JSON fragment instead.
 
 - Location: `%LOCALAPPDATA%\Microsoft\Windows Terminal\Fragments\oh-my-devenv\`. This is the documented per-user fragment location. The folder is outside Documents, so Documents redirection does not move it.
-- The source path `AppData/Local/...` maps to the default LocalAppData location under the home directory. LocalAppData is a known folder and can have a different location. Hook 22 and `check.ps1` compare the effective LocalAppData path with the default, and fail with a clear unsupported-state message when they differ.
+- The source path `AppData/Local/...` maps to the chezmoi destination. With the desktop baseline enabled, hook 00 compares that path with the effective LocalAppData known folder before chezmoi writes the fragment. Hook 22 and `check.ps1` use the same check.
 - A fragment can add profiles and color schemes, and it can update the built-in and dynamic profiles. It cannot change global settings.
-- The fragment sets the font face from the `desktop-font-family` partial on the PowerShell 7 profile.
+- The fragment uses `profiles[].updates` with the preferred dynamic PowerShell profile GUID `{574e775e-4f2a-5b96-ac1e-a2962a402336}`. It sets `font.face` from the `desktop-font-family` partial. [Fragment format](https://learn.microsoft.com/en-us/windows/terminal/json-fragment-extensions), [PowerShell profile generator](https://github.com/microsoft/terminal/blob/main/src/cascadia/TerminalSettingsModel/PowershellCoreProfileGenerator.cpp), [Font settings](https://learn.microsoft.com/en-us/windows/terminal/customize-settings/profile-appearance#font-face).
 - Deploy the fragment only when `desktopBaseline` is true.
 
 ### XDG
@@ -256,36 +273,51 @@ The file is required, not optional. The Git for Windows installer sets `core.aut
 
 Use `winget import` with a JSON file in the format that `winget export` produces.
 
-- Leave the `Version` field out of each entry. The Unix system manifests do not pin versions either.
+- Use the [WinGet 2.0 export schema](https://github.com/microsoft/winget-cli/blob/master/schemas/JSON/packages/packages.schema.2.0.json) with the built-in `winget` source. Validate its name, type, and identifier. Set `Scope` to `user` on each entry and omit `Version`.
 - Run the import without interactive prompts and accept the agreements on the command line.
 - Pass `--no-upgrade`. Hook 20 ensures that each package is present; upgrades stay a separate user action (`winget upgrade`). An installer upgrade can need elevation or a restart, which a hook must not trigger. The Arch Linux path also leaves a full upgrade to the user.
-- Hook 20 fails with a clear error when `winget` is not available or when an entry does not install. Do not pass `--ignore-unavailable`.
+- Hook 20 fails when WinGet is missing, the source cannot be opened, or an install fails. The error identifies the source and manifest entries and includes the WinGet diagnostic. Device policy can block the source or installation. Use the existing source and contact the device administrator if policy blocks it.
+- `check.ps1` exports the installed inventory with `winget export --source winget`. It compares complete package IDs in the JSON from the built-in source against the manifest. It reports all absent IDs and includes the native diagnostic if export fails. [WinGet export](https://learn.microsoft.com/en-us/windows/package-manager/winget/export).
 
-Starting inventory, derived from the Unix system manifests. Verify each package ID with `winget show` in phase 3.
+The [system manifest](../../bootstrap/manifests/system/winget-packages.json) holds the approved list.
 
-| Unix entry | Windows decision |
+| Package ID | Installer |
 | --- | --- |
-| `git` | Include |
-| `curl` | Skip; Windows ships `curl.exe` |
-| `wget` | Skip; use `curl.exe` |
-| `ca-certificates`, `bash-completion`, `zsh` | Not applicable |
-| `build-essential`, `pkg-config` | Skip; decide on a native toolchain after the inventory |
-| `tmux` | Skip; decide on a native terminal multiplexer after the inventory |
-| `jq`, `yq`, `ripgrep`, `fzf`, `fd`, `bat` | Include |
-| `direnv` | Include only after its PowerShell hook is verified |
-| `tree`, `zip`, `unzip` | Skip; Windows has built-in equivalents |
-| `shellcheck`, `shfmt` | Include, so this repository can be edited on Windows |
-| `gnupg`, `pinentry-mac` | Decide after the inventory |
-| `gh` | Include |
+| `Git.Git` | User-scope Inno |
+| `GitHub.cli` | Portable in a ZIP archive |
+| `BurntSushi.ripgrep.MSVC` | Portable in a ZIP archive |
+| `jqlang.jq` | Portable |
+| `JanDeDobbeleer.OhMyPosh` | MSIX, declared as `appx` in the [catalog](https://github.com/microsoft/winget-pkgs/blob/master/manifests/j/JanDeDobbeleer/OhMyPosh/33.0.0/JanDeDobbeleer.OhMyPosh.installer.yaml) |
+
+WinGet applies the manifest's user scope to the Oh My Posh MSIX.
+[Installer type mapping](https://github.com/microsoft/winget-cli/blob/v1.11.510/src/AppInstallerCommonCore/Manifest/ManifestCommon.cpp#L144-L151),
+[scope filter](https://github.com/microsoft/winget-cli/blob/v1.11.510/src/AppInstallerCommonCore/Manifest/ManifestComparator.cpp#L469-L484).
+
+| Excluded or deferred tools | Reason |
+| --- | --- |
+| `fd`, `bat`, `fzf` | `Get-ChildItem` and `Get-Content` cover routine file lookup and reading. PowerShell filtering covers routine selection. |
+| `yq`, `shellcheck`, `shfmt` | YAML editing and Unix shell maintenance have limited use in this Windows baseline. |
+| Everything | Fast NTFS indexing under a standard account uses a service that requires administrator rights to install. [Everything Service](https://www.voidtools.com/support/everything/everything_service/) |
+| 7-Zip | Windows 11 24H2 extracts ordinary 7z and RAR archives in File Explorer. [Microsoft Support](https://support.microsoft.com/en-gb/windows/experience/storage-filemanagement/zip-and-unzip-files) |
+| DevToys | The current DevToys app catalog entry is a 2.0 preview. [WinGet catalog](https://github.com/microsoft/winget-pkgs/tree/master/manifests/d/DevToys-app/DevToys) |
+| `gsudo` | Elevation is outside the baseline. |
+| `zoxide`, `lazygit`, `delta` | Discuss separately in the mise layer. |
+| `curl`, `wget`, `tree`, `zip`, `unzip` | Windows supplies `curl.exe` and built-in directory and archive tools. |
+| `ca-certificates`, `bash-completion`, `zsh` | These Unix packages do not apply to the Windows baseline. |
+| `direnv` | It evaluates `.envrc` in Bash. [Upstream implementation](https://github.com/direnv/direnv#how-it-works) |
+| Native toolchain, multiplexer, `gnupg`, `pinentry` | Decide after the Windows tool inventory. |
 
 ## 11. Desktop Baseline
 
-On Windows, the desktop baseline is the Maple Mono NF CN font and the Windows Terminal fragment.
+On Windows, the desktop baseline includes PowerToys, Maple Mono NF CN, and the Windows Terminal fragment.
 
-- Install the font per user, without elevation. Read the URL, digest, and required faces from `maple-mono-nf-cn.env`.
-- Verify the digest before installation, as the Linux installer does.
-- Windows Terminal ships with Windows 11, so the baseline does not install it. It can still be missing, for example after removal by policy. Hook 22 and `check.ps1` check that Windows Terminal is installed when `desktopBaseline` is true, and fail with a clear unsupported-state message when it is not.
-- Check the installed faces in `check.ps1`.
+- Hook 22 imports the [desktop manifest](../../bootstrap/manifests/desktop/winget-packages.json) when `desktopBaseline` is enabled. `Microsoft.PowerToys` has a user-scope Burn installer. The hook uses the same import flags, source checks, and failure handling as hook 20. The checker uses one export to verify the complete IDs of both enabled layers. [PowerToys catalog manifest](https://github.com/microsoft/winget-pkgs/blob/master/manifests/m/Microsoft/PowerToys/0.102.3101/Microsoft.PowerToys.installer.yaml).
+
+- Hook 22 reads the URL, digest, family, and required faces from `maple-mono-nf-cn.env`. It validates the archive digest before extracting the required TrueType files and keeps files whose bytes already match.
+- Copy the files to `%LOCALAPPDATA%\Microsoft\Windows\Fonts`. Register each full file path as a string value under `HKCU\Software\Microsoft\Windows NT\CurrentVersion\Fonts`. This persists the fonts for the current user. If the fonts are unavailable in the current session, sign out and back in. [Microsoft's font installer implementation](https://github.com/microsoft/winget-cli/blob/master/src/AppInstallerCommonCore/Fonts.cpp), [FontLab's per-user registry implementation](https://github.com/fontlaborg/fontlift-win-cli/blob/main/src/sys_utils.cpp).
+- With `desktopBaseline` enabled, hooks 00 and 22 and the checker require the destination's `AppData/Local` to match the effective LocalAppData. They also require Windows Terminal discoverable as `wt.exe` or `WindowsTerminal.exe` on `PATH`. Windows 11 normally provides Terminal. An installation with its alias disabled must expose its executable on `PATH`.
+- The checker requires every face's file and registration. It parses the deployed JSON and verifies that the fragment sets the manifest family on the PowerShell 7 profile.
+- When `desktopBaseline` is false or omitted, the fragment template renders empty and chezmoi removes that file on apply. Phase-3 uninstall also removes the managed fragment. Package and font removal belong to phase 5. [Chezmoi template behavior](https://www.chezmoi.io/reference/templates/).
 
 ## 12. Local Overlays
 
@@ -299,12 +331,13 @@ Add one Windows overlay, `profile.local.ps1` (section 9), in phase 2 together wi
 
 - Unix smoke tests:
   - Render the ignore rules with Windows chezmoi data and assert that no `.sh` hook and no Unix-only target is managed. Render with macOS and Linux data and assert that no `.ps1` hook and no Windows-only target is managed.
-  - Render `dot_gitconfig.tmpl` and `private_dot_ssh/private_config.tmpl` for every platform, including Windows, in the existing multi-platform render loop. Today the suite renders them only for the host platform.
+  - Render the shared Git and SSH targets across platforms. Parse the rendered Terminal fragment. Check the desktop hook gate and fragment removal when the desktop option is disabled or omitted.
 - Windows smoke job on a hosted Windows runner:
   - Lint the PowerShell code with PSScriptAnalyzer.
   - Run the Pester tests for the helpers, including the shared-manifest test cases.
-  - Apply the main source into a temporary home with stubbed installers, in the style of the Unix smoke suite. Pass a fixture profile path to the profile helper (section 9).
-- Windows apply job: a real round trip on a hosted Windows runner (apply, reapply, uninstall, and restore), like the Unix apply jobs. Phase 2 covers the configuration; phases 3 and 4 extend it to real package, runtime, and tool installs. If a hosted runner cannot run a real install, record that coverage gap and require a live signoff on a real machine before merge.
+  - Apply and reapply the main source in a temporary home with a WinGet stub. Use a fixture profile path. Test the desktop installer separately with stubbed downloads and isolated font and registry targets.
+- The hosted Windows apply job requires WinGet and Terminal. It runs the real WinGet import, desktop hook, and checker. The hosted Windows Server stalls when launching the registered Oh My Posh MSIX. The fixture copies the installed executable to a temporary directory and uses that copy for the real prompt probe. Launch through the Windows app execution alias still needs a Windows client signoff. The job restores the font files and registry values after testing.
+- A coverage gap in real installation requires live signoff before merge. Section 17 records hosted coverage. The user scheduled the first live apply after all planned phases.
 - Run both Windows jobs under the same `needs-checks` condition as the Unix jobs, and feed them into the existing single required check. This avoids a second path classifier that could skip Windows CI after a change to a shared file.
 - Live installs on a real Windows machine follow the same local validation policy as the Unix platforms.
 
@@ -327,7 +360,7 @@ Add one Windows overlay, `profile.local.ps1` (section 9), in phase 2 together wi
 | Separate repository | Rejected (user decision) | The shared data would exist twice and drift. |
 | Reuse the Bash scripts through Git Bash or MSYS2 | Rejected | Paths, permissions, and package management differ. The result is fragile and still needs a Windows package layer. |
 | Gate hooks with an OS condition inside each template | Rejected | It edits every Unix hook template. `.chezmoiignore` gates hooks in one place. |
-| Scoop instead of winget | Kept as a fallback | winget is part of Windows 11. Scoop installs per user without elevation. It may help when device policy blocks winget, but only if the same policy allows Scoop and its downloads. |
+| Scoop instead of winget | Rejected for the baseline | The package layer uses the built-in winget source and stops when device policy blocks it. |
 | `winget configure` with a DSC file | Rejected for now | It adds a second configuration system. `winget import` covers the need. |
 | Move cross-platform CLIs from the system layer to mise on every platform | Deferred | It would improve consistency, but it changes the Unix design. Evaluate it separately. |
 | Copy the Windows Terminal fragment from hook 22 instead of deploying it as a target | Rejected | chezmoi then no longer tracks or removes the file, and the check and uninstall need their own logic for it. Allowing one exception in the dot-path assertion is smaller. |
@@ -359,15 +392,15 @@ default configuration and rejected unsafe ACLs on the top-level configuration
 and a local drop-in. These results apply to the tools on that runner.
 [Hosted apply job 136793367571](https://github.com/kangmingxuan/oh-my-devenv/actions/runs/44886671628/job/136793367571)
 
-Resolve each item before the phase that depends on it.
+Sections 2, 9, 10, and 11 record the approved phase-3 baseline and its verification rules.
+
+The hosted phase-3 run on `905d27a` passed all jobs. Windows smoke passed 74 Pester tests and skipped one. Windows apply completed the user-scope WinGet imports, including PowerToys. It verified the managed prompt using a copy of the installed Oh My Posh executable. A separate plain `pwsh -File` loaded the profile and overlay and exited. The first apply and Oh My Posh app execution alias check on a user device remain pending. [Full CI run](https://github.com/kangmingxuan/oh-my-devenv/actions/runs/44912366118), [Windows smoke](https://github.com/kangmingxuan/oh-my-devenv/actions/runs/44912366118/job/136870704931), [Windows apply](https://github.com/kangmingxuan/oh-my-devenv/actions/runs/44912366118/job/136870704962).
+
+Resolve each remaining item before the phase that depends on it.
 
 | Item | Phase |
 | --- | --- |
 | Whether the effective script execution policy lets chezmoi run the `.ps1` hooks, and the stop condition when it does not. Do not work around device policy. PowerShell 7 stores execution-policy settings separately from Windows PowerShell 5.1. Group Policy can make it use the Windows PowerShell policy settings, so check the effective policy under `pwsh`. | 2 |
-| How `check.ps1` checks the winget manifest: by package ID through winget, or by command presence | 3 |
-| The winget package ID for each included tool, and whether each one installs without elevation | 3 |
-| The per-user font installation method on Windows | 3 |
-| Behavior on devices where policy restricts winget sources | 3 |
 | Whether every tool in the mise config installs on Windows | 4 |
 | Whether runtime and tool installs hit the Windows path-length limit. Do not assume that Windows long-path support (`LongPathsEnabled`) is on; turning it on needs elevation. That setting alone does not guarantee long-path support in each installer or tool; verify their actual behavior. Git has a separate `core.longpaths` setting. | 4 |
 
