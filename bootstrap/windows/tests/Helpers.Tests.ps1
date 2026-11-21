@@ -214,6 +214,23 @@ Describe 'Verified profile replacement' {
     }
 }
 
+Describe 'Go binary directory' {
+    It 'uses the first Windows GOPATH entry when GOBIN is unset' {
+        $first = Join-Path $TestDrive 'first Go workspace'
+        $second = Join-Path $TestDrive 'second Go workspace'
+        $originalGoPath = $env:GOPATH
+        $originalGoBin = $env:GOBIN
+        try {
+            $env:GOPATH = ($first, $second) -join ';'
+            $env:GOBIN = $null
+            Get-DefaultGoBin | Should -BeExactly (Join-Path $first 'bin')
+        } finally {
+            $env:GOPATH = $originalGoPath
+            $env:GOBIN = $originalGoBin
+        }
+    }
+}
+
 Describe 'Fresh profile probe' {
     It 'rejects <statement> before reaching the managed line' -ForEach @(
         @{ Statement = 'return'; Expected = '*did not run to completion*' }

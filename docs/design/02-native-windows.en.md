@@ -174,6 +174,7 @@ Hook 10 keeps the Unix contract for file content: before the first apply overwri
 - Read back each copy: compare its length and content hash with the source. The hash comparison detects most changes during the copy, but the backup is not an atomic snapshot.
 - On any listing, mapping, copy, or readback error, report the source and destination and exit nonzero before chezmoi writes the targets. Keep partial backups for inspection.
 - Print the completed backup directory, or report that no copy was needed. The uninstall keeps the backups.
+- After removing the managed configuration, uninstall resets the apply configuration's `scriptState` and `entryState` buckets. The next apply runs hook 10 again. The uninstall preview lists both buckets.
 - A backup can contain secrets. Like the Unix hook, the backup does not check or change permissions.
 
 Tests:
@@ -195,7 +196,7 @@ The soft consistency rule from section 2 works like this:
 | --- | --- |
 | `dot_config/mise/config.toml.tmpl` | Same target and same versions. mise reads its global config from `%USERPROFILE%\.config\mise` on Windows. When a tool does not work on Windows, exclude it in the template with a `.chezmoi.os` condition. |
 | `ecosystem/go-tools.txt`, `ecosystem/uv-tools.txt` | The Windows installers read the same files with the same parsing rules. |
-| `dot_gitconfig.tmpl` | Same template. Add Windows-only settings in a Windows branch when a concrete need appears. |
+| `dot_gitconfig.tmpl` | Same template. Add Windows-only settings in a Windows branch when a concrete need appears. `check.ps1` requires Git's global configuration paths to include the managed `.gitconfig`. |
 | `private_dot_ssh/private_config.tmpl` | Same template. The Windows branch leaves out `ControlMaster`, `ControlPath`, and `ControlPersist`. Windows OpenSSH parses them, but its connection multiplexing functions are empty stubs, and the Unix `ControlPath` contains a `:`, which is not valid in a Windows file name. Keep `Include`, `IdentitiesOnly`, `TCPKeepAlive`, `ServerAliveInterval`, and `SendEnv`. Windows OpenSSH checks the owner and ACL of the config files and fails on unsafe ones. chezmoi does not turn `private_` into a Windows ACL. `check.ps1` reads back the path and version of the `ssh` executable it uses, and checks that the managed file exists at that executable's default user config path. It then runs `ssh -v -G` with a test host name and no `-F`, checks the exit code, and checks that the debug output contains a `Reading configuration data` line for the managed file. A setting value in the output does not prove its source, because defaults and other config files can supply the same value. OpenSSH 10.5p1 on macOS prints that debug line; the phase-2 native fixture confirms it on Windows. The inspected source skips the owner and ACL check for a top-level file given with `-F`, and ignores a missing default config file. Local drop-ins are optional; the check covers the drop-ins that exist. Do not rewrite ACLs automatically. These statements come from the public Win32-OpenSSH 9.5p1 and 10.4 sources. The actual Windows `ssh` executable and its version can differ, for example one from Git for Windows, so phase 2 confirms them with native fixtures in an isolated home: an unsafe top-level ACL and an unsafe drop-in ACL must fail. |
 | `desktop/maple-mono-nf-cn.env` | Same font facts, including the pinned URL and SHA-256 digest. Parse the quoted values explicitly. |
 | System packages | Platform-specific by nature. Windows gets its own winget manifest. |
@@ -222,11 +223,12 @@ chezmoi could compute the target path from config data through `.chezmoiexternal
 
 The body mirrors the Unix env templates where they apply on Windows:
 
-- Set `GOPATH` and `GOBIN` with the same defaults as section 7.
+- Default `GOPATH` to `~/go`. Default `GOBIN` to the `bin` directory under the first semicolon-separated `GOPATH` entry.
 - Prepend the mise shims directory, `~/.local/bin`, and `$GOBIN` to `PATH`.
 - Set `BAT_THEME` to the same value as the Unix env templates.
 - Activate mise with `(&mise activate pwsh) | Out-String | Invoke-Expression`, only when `mise` is on `PATH`. The Unix rc files guard activation in the same way.
 - Load the local overlay at `~/.config/oh-my-devenv/powershell/profile.local.ps1` when it exists.
+- After the overlay runs, prepend any missing managed directories, including the effective `GOBIN`. Preserve the overlay's existing `PATH` order and entries.
 
 The profile affects PowerShell sessions only. Applications started from the Windows shell, such as an IDE launched from the Start menu, do not load it. The persistent user `Path` entries cover these applications (section 7).
 

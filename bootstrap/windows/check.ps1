@@ -25,6 +25,16 @@ foreach ($relativePath in @('.gitconfig', '.config/mise/config.toml', '.config/o
     }
 }
 
+$gitConfig = [IO.Path]::GetFullPath((Join-Path $Destination '.gitconfig'))
+$result = Invoke-NativeCommand -Executable $git.Source -Arguments @('var', 'GIT_CONFIG_GLOBAL')
+# Git can read an XDG global file in addition to the managed home file.
+$gitGlobalPaths = @($result.Stdout.TrimEnd("`r`n") -split '\r?\n' | Where-Object { $_ })
+$gitGlobalKeys = @($gitGlobalPaths | ForEach-Object { ConvertTo-PathKey -Path ([IO.Path]::GetFullPath($_)) })
+if ((ConvertTo-PathKey -Path $gitConfig) -cnotin $gitGlobalKeys) {
+    throw "Git global config paths '$($gitGlobalPaths -join "', '")' do not include managed file '$gitConfig'."
+}
+Write-Host "Git reported managed global config: $gitConfig"
+
 if ($null -eq (Resolve-RegularFile -Path $ProfilePath) -or
     (Read-ProfileFile -Path $ProfilePath).Content -cnotmatch (Get-ManagedProfilePattern -Destination $Destination)) {
     throw "The managed line is missing from PowerShell profile '$ProfilePath'. Run chezmoi apply."

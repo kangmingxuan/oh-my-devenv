@@ -172,6 +172,7 @@ hook 10 在文件内容上沿用 Unix 的约定：首次 apply 覆盖目标之�
 - 逐个回读副本：把长度和内容哈希与源文件比较。哈希比较能发现复制期间的大多数变化，但备份不是原子快照。
 - 列表、映射、复制或回读出错时，报告源路径和目标路径，并在 chezmoi 写入目标之前以非零状态退出。保留部分完成的备份以便检查。
 - 输出完成的备份目录，或报告无需复制。卸载保留这些备份。
+- 移除受管配置后，卸载重置 apply 配置所用的 `scriptState` 和 `entryState`。下次 apply 会重新运行 hook 10。卸载预览会列出这两个状态桶。
 - 备份中可能含有密钥。与 Unix hook 一样，备份不检查也不修改权限。
 
 测试：
@@ -193,7 +194,7 @@ hook 10 在文件内容上沿用 Unix 的约定：首次 apply 覆盖目标之�
 | --- | --- |
 | `dot_config/mise/config.toml.tmpl` | 目标相同，版本相同。mise 在 Windows 上从 `%USERPROFILE%\.config\mise` 读取全局配置。某个工具在 Windows 上不可用时，在模板中用 `.chezmoi.os` 条件把它排除。 |
 | `ecosystem/go-tools.txt`、`ecosystem/uv-tools.txt` | Windows 安装器读取同一组文件，解析规则相同。 |
-| `dot_gitconfig.tmpl` | 同一个模板。出现具体需求时，在 Windows 分支中加入 Windows 专属设置。 |
+| `dot_gitconfig.tmpl` | 同一个模板。出现具体需求时，在 Windows 分支中加入 Windows 专属设置。`check.ps1` 要求 Git 的全局配置路径包含受管的 `.gitconfig`。 |
 | `private_dot_ssh/private_config.tmpl` | 同一个模板。Windows 分支去掉 `ControlMaster`、`ControlPath` 和 `ControlPersist`。Windows OpenSSH 会解析它们，但它的连接复用函数是空实现，而且 Unix 的 `ControlPath` 含有 `:`，这在 Windows 文件名中无效。保留 `Include`、`IdentitiesOnly`、`TCPKeepAlive`、`ServerAliveInterval` 和 `SendEnv`。Windows OpenSSH 会检查配置文件的所有者和 ACL，不安全时失败。chezmoi 不会把 `private_` 转换成 Windows ACL。`check.ps1` 回读所用 `ssh` 可执行文件的路径和版本，并检查受管文件位于该可执行文件的默认用户配置路径。随后不带 `-F`、用一个测试主机名运行 `ssh -v -G`，检查退出码，并检查调试输出中有针对受管文件的 `Reading configuration data` 行。输出中的设置值不能证明其来源，因为默认值和其他配置文件也可能给出同样的值。macOS 上的 OpenSSH 10.5p1 会输出这一调试行；阶段 2 的原生 fixture 在 Windows 上确认这一点。检查过的源码中，用 `-F` 指定的顶层文件跳过所有者和 ACL 检查，默认配置文件缺失时也被忽略。本地 drop-in 是可选的；检查覆盖实际存在的 drop-in。不要自动改写 ACL。这些结论来自公开的 Win32-OpenSSH 9.5p1 和 10.4 源码。实际的 Windows `ssh` 可执行文件及其版本可能不同，例如来自 Git for Windows 的版本，所以阶段 2 在隔离的 home 中用原生 fixture 确认它们：不安全的顶层 ACL 和不安全的 drop-in ACL 都必须导致失败。 |
 | `desktop/maple-mono-nf-cn.env` | 相同的字体信息，包括钉死的 URL 和 SHA-256 摘要。显式解析带引号的值。 |
 | 系统包 | 本质上按平台区分。Windows 有自己的 winget manifest。 |
@@ -220,11 +221,12 @@ chezmoi 可以通过 `.chezmoiexternal` 用配置数据计算目标路径。Clau
 
 主体在适用于 Windows 的范围内对齐 Unix env 模板：
 
-- 用第 7 节的默认值设置 `GOPATH` 和 `GOBIN`。
+- `GOPATH` 默认为 `~/go`。`GOBIN` 默认为 `GOPATH` 中第一个分号分隔条目下的 `bin` 目录。
 - 把 mise shims 目录、`~/.local/bin` 和 `$GOBIN` 放到 `PATH` 最前面。
 - 把 `BAT_THEME` 设为与 Unix env 模板相同的值。
 - 仅在 `mise` 位于 `PATH` 上时，用 `(&mise activate pwsh) | Out-String | Invoke-Expression` 激活 mise。Unix rc 文件也用同样方式保护激活。
 - 本地 overlay `~/.config/oh-my-devenv/powershell/profile.local.ps1` 存在时加载它。
+- 运行 overlay 后，把缺失的受管目录放到 `PATH` 最前面，包括实际生效的 `GOBIN`。保留 overlay 中已有的 `PATH` 条目及其顺序。
 
 profile 只影响 PowerShell 会话。从 Windows shell 启动的应用（例如从开始菜单启动的 IDE）不会加载它。持久化的用户 `Path` 条目覆盖这些应用（第 7 节）。
 

@@ -6,7 +6,7 @@ Preview or remove managed Windows configuration.
 Close editors and wait for running Git commands to finish before uninstall because the pre-delete backup holds the content seen when it ran.
 
 .PARAMETER Apply
-Back up candidates and remove the managed configuration.
+Back up candidates, remove the managed configuration, and reset chezmoi script and entry state.
 #>
 [CmdletBinding(SupportsShouldProcess)]
 param(
@@ -33,8 +33,8 @@ if ($PSVersionTable.PSVersion -lt [version]'7.6') {
     throw "PowerShell 7.6 or later is required. Running $($PSVersionTable.PSVersion)."
 }
 if ([IO.Path]::GetFullPath($Destination) -ne [IO.Path]::GetFullPath($HOME)) {
-    if (-not $PSBoundParameters.ContainsKey('ProfilePath') -or ($Apply -and -not $BackupRoot)) {
-        throw 'For alternate destinations, specify -ProfilePath and pass -BackupRoot with -Apply.'
+    if (-not $PSBoundParameters.ContainsKey('ProfilePath') -or ($Apply -and (-not $BackupRoot -or -not $Config))) {
+        throw 'For alternate destinations, specify -ProfilePath. With -Apply, also pass -BackupRoot and the -Config used for apply.'
     }
 }
 
@@ -70,10 +70,14 @@ $candidates = foreach ($path in $paths) {
     $fullPath
 }
 
+$stateBuckets = @('scriptState', 'entryState')
 if (-not $Apply) {
     Write-Host "Would remove the managed line from '$ProfilePath' if present."
     foreach ($path in $candidates) {
         Write-Host "Would remove '$path'."
+    }
+    foreach ($bucket in $stateBuckets) {
+        Write-Host "Would reset chezmoi state bucket '$bucket'."
     }
     return
 }
@@ -84,18 +88,28 @@ $backupCandidates = @($candidates | Where-Object { $_ })
 if ($removeProfileLine) {
     $backupCandidates += $ProfilePath
 }
-if (-not $backupCandidates.Count -or -not $PSCmdlet.ShouldProcess($root, 'Back up and remove Windows configuration')) {
+if (-not $PSCmdlet.ShouldProcess($root, 'Back up and remove Windows configuration and reset chezmoi state')) {
     return
 }
-if (-not $BackupRoot) {
-    $BackupRoot = Get-LocalBackupRoot -Name 'chezmoi-uninstall-backup'
-}
-$backupRun = Backup-ExistingFile -Paths $backupCandidates -BackupRoot $BackupRoot -BeforeUninstall -PassThru
-if ($removeProfileLine) {
-    $profileBackup = Get-BackupPath -Path $ProfilePath -RunDirectory $backupRun
-    Remove-ManagedProfileLine -ProfilePath $ProfilePath -Destination $root -BackupPath $profileBackup -Confirm:$false
+if ($backupCandidates.Count) {
+    if (-not $BackupRoot) {
+        $BackupRoot = Get-LocalBackupRoot -Name 'chezmoi-uninstall-backup'
+    }
+    $backupRun = Backup-ExistingFile -Paths $backupCandidates -BackupRoot $BackupRoot -BeforeUninstall -PassThru
+    if ($removeProfileLine) {
+        $profileBackup = Get-BackupPath -Path $ProfilePath -RunDirectory $backupRun
+        Remove-ManagedProfileLine -ProfilePath $ProfilePath -Destination $root -BackupPath $profileBackup -Confirm:$false
+    }
 }
 foreach ($path in $candidates) {
     [IO.File]::Delete($path)
     Write-Host "Removed '$path'."
+}
+
+# Use the state database selected by the apply configuration.
+foreach ($bucket in $stateBuckets) {
+    $null = Invoke-NativeCommand -Executable $chezmoi.Source -Arguments @(
+        "--config=$Config", "--source=$source", "--destination=$root", 'state', 'delete-bucket', "--bucket=$bucket"
+    )
+    Write-Host "Reset chezmoi state bucket '$bucket'."
 }

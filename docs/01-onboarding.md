@@ -9,8 +9,8 @@ This page goes deeper on the first install after you finish the [Quick Start](..
 Follow the [Windows quick start](../README.md#native-windows-quick-start). A
 successful apply configures Git, OpenSSH, and mise under your home directory
 and deploys the PowerShell profile body. It prints `All checks passed.` after
-checking the managed files and confirming that OpenSSH reads its default user
-configuration. PowerShell must be 7.6 or later. Check the effective execution
+checking the managed files and confirming that Git and OpenSSH use the managed
+user configuration. PowerShell must be 7.6 or later. Check the effective execution
 policy with `Get-ExecutionPolicy` inside `pwsh`. Stop if policy blocks the hooks.
 
 On the first apply, review any backup under
@@ -25,7 +25,8 @@ adds it if needed. This uses the Documents location that PowerShell resolves.
 Apply takes a separate pre-edit copy when it adds the line to an existing
 profile. Start a new PowerShell session to load the profile. Put machine-local
 settings in the [PowerShell overlay](local-overlay-examples/profile.local.ps1.example)
-at `~/.config/oh-my-devenv/powershell/profile.local.ps1`.
+at `~/.config/oh-my-devenv/powershell/profile.local.ps1`. If the overlay sets
+`GOBIN`, the profile prepends that directory to `PATH` when it is missing.
 
 ```powershell
 $source = chezmoi source-path
@@ -39,7 +40,10 @@ because the pre-delete backup holds the content seen when it ran.
 Uninstall backs up the files it will remove and the profile it will edit.
 Review the verified backup under `%LOCALAPPDATA%\oh-my-devenv\chezmoi-uninstall-backup`.
 If backup fails, uninstall stops before it changes the profile or removes
-files. Use `chezmoi apply` to restore the managed configuration.
+files. After removal, uninstall resets chezmoi's script and entry state so that
+the next `chezmoi apply` backs up any files that already exist at managed targets.
+If apply used a custom configuration file, pass the same file to uninstall with
+`-Config`.
 
 ## What you'll have in 5 minutes on macOS and Linux
 

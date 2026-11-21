@@ -16,18 +16,23 @@ function ConvertTo-PathKey {
     ($Path.Trim('"') -replace '[\\/]+', '/').TrimEnd('/').ToUpperInvariant()
 }
 
+function Get-DefaultGoBin {
+    $goPath = $env:GOPATH
+    if (-not $goPath) {
+        $goPath = Join-Path $HOME 'go'
+    }
+    $firstGoPath = ($goPath -split ';', 2)[0]
+    Join-Path $firstGoPath 'bin'
+}
+
 function Get-ManagedProfilePathEntry {
     $localData = [Environment]::GetFolderPath('LocalApplicationData')
     if (-not $localData) {
         throw 'Windows did not resolve the LocalApplicationData known folder.'
     }
-    $goPath = $env:GOPATH
-    if (-not $goPath) {
-        $goPath = Join-Path $HOME 'go'
-    }
     $goBin = $env:GOBIN
     if (-not $goBin) {
-        $goBin = Join-Path $goPath 'bin'
+        $goBin = Get-DefaultGoBin
     }
     Join-Path $localData 'mise/shims'
     Join-Path $HOME '.local/bin'

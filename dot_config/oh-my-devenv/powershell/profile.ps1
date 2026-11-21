@@ -6,14 +6,14 @@ $ohMyDevenvMiseActivation = & {
     Set-StrictMode -Version Latest
     $ErrorActionPreference = 'Stop'
 
+    . (Join-Path $PSScriptRoot 'environment.ps1')
     if (-not $env:GOPATH) {
         $env:GOPATH = Join-Path $HOME 'go'
     }
     if (-not $env:GOBIN) {
-        $env:GOBIN = Join-Path $env:GOPATH 'bin'
+        $env:GOBIN = Get-DefaultGoBin
     }
 
-    . (Join-Path $PSScriptRoot 'environment.ps1')
     $managedPath = @(Get-ManagedProfilePathEntry)
     $seen = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
     $env:PATH = ($managedPath + ($env:PATH -split ';') |
@@ -37,6 +37,17 @@ Remove-Variable -Name ohMyDevenvMiseActivation
 $ohMyDevenvLocalProfile = Join-Path $PSScriptRoot 'profile.local.ps1'
 if (Test-Path -LiteralPath $ohMyDevenvLocalProfile -PathType Leaf) {
     . $ohMyDevenvLocalProfile
+    & {
+        . (Join-Path $PSScriptRoot 'environment.ps1')
+        $pathKeys = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+        foreach ($entry in ($env:PATH -split ';')) {
+            [void]$pathKeys.Add((ConvertTo-PathKey -Path $entry))
+        }
+        $missing = @(Get-ManagedProfilePathEntry | Where-Object { $pathKeys.Add((ConvertTo-PathKey -Path $_)) })
+        if ($missing.Count) {
+            $env:PATH = ($missing + $env:PATH) -join ';'
+        }
+    }
 }
 Remove-Variable -Name ohMyDevenvLocalProfile
 $env:OH_MY_DEVENV_PROFILE_LOADED = '1'

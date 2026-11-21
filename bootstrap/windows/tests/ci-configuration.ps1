@@ -131,8 +131,10 @@ $uninstallBackupRoot = Join-Path $fixture 'uninstall-backups'
 $config = Join-Path $fixture 'chezmoi.json'
 $fixtureConfig = @{
     data = @{ name = 'Windows CI'; email = 'smoke@example.invalid'; desktopBaseline = $true }
+    persistentState = Join-Path $fixture 'state.boltdb'
     scriptEnv = @{ OH_MY_DEVENV_WINDOWS_BACKUP_ROOT = $backupRoot }
 }
+$originalGitGlobal = $env:GIT_CONFIG_GLOBAL
 try {
     if ($Mode -eq 'smoke') {
         $destination = Join-Path $fixture "home with spaces [test] and 'quote’"
@@ -151,9 +153,11 @@ try {
     }
     $chezmoiArgs = @(
         "--source=$source", "--config=$config", "--destination=$destination"
-        "--persistent-state=$(Join-Path $fixture 'state.boltdb')"
     )
     $gitConfig = Join-Path $destination '.gitconfig'
+    if ($Mode -eq 'smoke') {
+        $env:GIT_CONFIG_GLOBAL = $gitConfig
+    }
     $gitOverlay = Join-Path $destination '.config/oh-my-devenv/git/config'
     $miseConfig = Join-Path $destination '.config/mise/config.toml'
     $profileBody = Join-Path $destination '.config/oh-my-devenv/powershell/profile.ps1'
@@ -163,7 +167,15 @@ try {
     $sshOverlay = Join-Path $destination '.ssh/config.d/oh-my-devenv-fixture.conf'
     $oldMise = "# pre-existing mise fixture`n"
     $oldProfile = "# pre-existing profile fixture`n"
-    $overlayContent = '$env:OH_MY_DEVENV_PROFILE_FIXTURE = ''loaded'''
+    $overlayGoBin = [IO.Directory]::CreateDirectory((Join-Path $fixture 'overlay-go-bin')).FullName
+    $overlayFirst = Join-Path $fixture 'overlay-first'
+    $overlaySecond = Join-Path $fixture 'overlay-second'
+    $overlayPath = ($overlayFirst, $overlaySecond, $overlayFirst) -join ';'
+    $overlayContent = @'
+$env:OH_MY_DEVENV_PROFILE_FIXTURE = 'loaded'
+$env:GOBIN = '{0}'
+$env:PATH = '{1};' + $env:PATH
+'@ -f $overlayGoBin.Replace("'", "''"), $overlayPath.Replace("'", "''")
     Set-FixtureText -Path $config -Content ($fixtureConfig | ConvertTo-Json -Depth 4)
     Set-FixtureText -Path $miseConfig -Content $oldMise
     Set-FixtureText -Path $profilePath -Content $oldProfile
@@ -287,6 +299,17 @@ try {
     }
 
     if ($Mode -eq 'smoke') {
+        $alternateGitConfig = Join-Path $fixture 'alternate.gitconfig'
+        Set-FixtureText -Path $alternateGitConfig -Content "# alternate global config`n"
+        $env:GIT_CONFIG_GLOBAL = $alternateGitConfig
+        try {
+            $actual = [regex]::Escape($alternateGitConfig.Replace('\', '/')) -replace '/', '[\\/]'
+            $expected = [regex]::Escape($gitConfig)
+            Assert-FixtureCheckFailure -Pattern "Git global config paths '$actual' do not include managed file '$expected'"
+        } finally {
+            $env:GIT_CONFIG_GLOBAL = $gitConfig
+        }
+
         $installedProfile = [IO.File]::ReadAllText($profilePath)
         Set-FixtureText -Path $profilePath -Content "return`n$installedProfile"
         Assert-FixtureCheckFailure -Pattern 'profile body did not run'
@@ -328,10 +351,14 @@ $env:OH_MY_DEVENV_PROFILE_LOADED = '1'
 
     $baselineProfile = [IO.File]::ReadAllText($profilePath)
     $probe = Invoke-NativeCommand -Executable $pwsh -Arguments @(
-        '-NoLogo', '-NonInteractive', '-Command', '[Console]::Write($env:OH_MY_DEVENV_PROFILE_FIXTURE)'
+        '-NoLogo', '-NonInteractive', '-Command', '[Console]::WriteLine($env:OH_MY_DEVENV_PROFILE_FIXTURE); [Console]::Write($env:PATH)'
     )
-    if ($probe.Stdout -cne 'loaded') {
+    $profileOutput = $probe.Stdout -split '\r?\n', 2
+    if ($profileOutput.Count -ne 2 -or $profileOutput[0] -cne 'loaded') {
         throw "A new PowerShell process did not load the profile overlay.`n$($probe.Stderr)`n$($probe.Stdout)"
+    }
+    if (-not ";$($profileOutput[1])".Contains(";$overlayGoBin;$overlayPath;", [StringComparison]::Ordinal)) {
+        throw 'The new PowerShell process did not prepend the overlay GOBIN and preserve its PATH order.'
     }
 
     Invoke-FixtureApply
@@ -347,11 +374,19 @@ $env:OH_MY_DEVENV_PROFILE_LOADED = '1'
     Assert-UnsafeSshAcl -Path $sshConfig
     Assert-UnsafeSshAcl -Path $sshOverlay
 
+    $beforePreview = (Invoke-FixtureChezmoi -Arguments @('state', 'dump')).Stdout
     & $uninstall -Config $config
+    if ((Invoke-FixtureChezmoi -Arguments @('state', 'dump')).Stdout -cne $beforePreview) {
+        throw 'The uninstall preview changed the chezmoi state.'
+    }
     if ([IO.File]::ReadAllText($profilePath) -cne $baselineProfile -or -not [IO.File]::Exists($profileBody)) {
         throw 'The uninstall preview changed the destination.'
     }
     & $uninstall -Apply -Config $config -BackupRoot $uninstallBackupRoot
+    $state = (Invoke-FixtureChezmoi -Arguments @('state', 'dump')).Stdout | ConvertFrom-Json -AsHashtable
+    if ($state.scriptState.Count -or $state.entryState.Count) {
+        throw 'Uninstall did not reset the chezmoi script and entry state.'
+    }
     foreach ($target in @($gitConfig, $miseConfig, $profileBody, $profileEnvironment, $sshConfig)) {
         if ([IO.File]::Exists($target)) {
             throw "Uninstall kept managed target '$target'."
@@ -363,11 +398,25 @@ $env:OH_MY_DEVENV_PROFILE_LOADED = '1'
         -not [IO.Directory]::Exists($backupRoot)) {
         throw 'Uninstall changed the user profile content, overlays, or backups.'
     }
+    [byte[]]$restoredMiseBytes = [Text.Encoding]::UTF8.GetPreamble() +
+        [Text.Encoding]::UTF8.GetBytes("# user restored mise content before reapply`r`n")
+    [IO.File]::WriteAllBytes($miseConfig, $restoredMiseBytes)
     Invoke-FixtureApply
+    $restoredCopies = @(Get-ChildItem -LiteralPath $backupRoot -Directory | ForEach-Object {
+        $copy = Get-BackupPath -Path $miseConfig -RunDirectory $_.FullName
+        if ([IO.File]::Exists($copy) -and
+            [Linq.Enumerable]::SequenceEqual[byte]([IO.File]::ReadAllBytes($copy), $restoredMiseBytes)) {
+            $copy
+        }
+    })
+    if ($restoredCopies.Count -ne 1) {
+        throw "Expected one byte-for-byte first-run backup of '$miseConfig' after uninstall."
+    }
     $status = Invoke-FixtureChezmoi -Arguments @('status', '--exclude=scripts')
     if ($status.Stdout.Trim()) {
         throw "Restored destination has drift.`n$($status.Stdout)"
     }
 } finally {
+    $env:GIT_CONFIG_GLOBAL = $originalGitGlobal
     [IO.Directory]::Delete($fixture, $true)
 }
