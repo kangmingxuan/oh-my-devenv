@@ -67,10 +67,10 @@ $commands = @(
         -UvManifest (Join-Path $manifestRoot 'ecosystem/uv-tools.txt')
 )
 $completionLocalData = Get-CompletionLocalData -Destination $Destination
-Confirm-ManagedProfile -ProfilePath $ProfilePath -Destination $Destination -Commands $commands -FixtureBin $ProbeFixtureBin `
-    -CompletionLocalData $completionLocalData
 Invoke-PowerShellCompletion -Action check -ManifestPath (Join-Path $manifestRoot 'shell/completions.txt') `
     -LocalData $completionLocalData
+Confirm-ManagedProfile -ProfilePath $ProfilePath -Destination $Destination -Commands $commands -FixtureBin $ProbeFixtureBin `
+    -CompletionLocalData $completionLocalData
 
 $ssh = Get-PathApplication -Name ssh
 $version = Invoke-NativeCommand -Executable $ssh.Source -Arguments @('-V')

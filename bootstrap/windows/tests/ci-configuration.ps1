@@ -162,7 +162,8 @@ class Stub
     foreach ($tool in @('ssh', 'winget', 'oh-my-posh', 'mise')) {
         Copy-Item -LiteralPath $shim -Destination (Join-Path $shimDirectory "$tool.exe")
     }
-    $fixtureConfig.scriptEnv.OH_MY_DEVENV_WINDOWS_PROBE_BIN = $shimDirectory
+    # The fresh profile probe uses persistent PATH plus these fixture entries.
+    $fixtureConfig.scriptEnv.OH_MY_DEVENV_WINDOWS_PROBE_BIN = "$shimDirectory;$([IO.Path]::GetDirectoryName($chezmoi.Source))"
     $env:OH_MY_DEVENV_TEST_PHASE4 = $fixture
     $env:GOBIN = Join-Path $fixture 'ecosystem-bin'
     $env:UV_TOOL_BIN_DIR = $env:GOBIN
@@ -248,18 +249,24 @@ function Test-FixtureCompletionStartup {
     $probePath = Join-Path $fixture 'completion-startup.ps1'
     $resultPath = Join-Path $fixture 'interactive-completion.json'
     Set-FixtureText -Path $probePath -Content @'
-param([string]$Loader, [string]$LocalData, [string]$InteractiveResult)
+param([string]$Loader, [string]$LocalData, [string]$InteractiveResult, [string]$CompletionProbe)
 $ErrorActionPreference = 'Stop'
 if ($InteractiveResult) {
+    $redirected = [Console]::IsInputRedirected -or [Console]::IsOutputRedirected
+    $loaded = $env:OH_MY_DEVENV_COMPLETION_FIXTURE -ceq 'loaded'
+    if (-not $redirected -and $loaded) { & $CompletionProbe }
     @{
-        Redirected = [Console]::IsInputRedirected -or [Console]::IsOutputRedirected
-        Loaded = $env:OH_MY_DEVENV_COMPLETION_FIXTURE -ceq 'loaded'
+        Redirected = $redirected
+        Loaded = $loaded
     } | ConvertTo-Json | Set-Content -LiteralPath $InteractiveResult
     return
 }
 $elapsed = [Diagnostics.Stopwatch]::StartNew()
 . $Loader
-Import-OwnedPowerShellCompletion -LocalData $LocalData
+$directory = Get-PowerShellCompletionDirectory -LocalData $LocalData
+foreach ($file in Get-OwnedPowerShellCompletion -Directory $directory) {
+    . $file.FullName
+}
 $elapsed.Stop()
 if ($env:OH_MY_DEVENV_COMPLETION_FIXTURE -cne 'loaded') { throw 'The managed completion loader did not source the probe.' }
 [Console]::WriteLine($elapsed.ElapsedMilliseconds)
@@ -279,7 +286,8 @@ if ($env:OH_MY_DEVENV_COMPLETION_FIXTURE -cne 'loaded') { throw 'The managed com
     # The child writes a result file so reading the result does not redirect its streams.
     $escapedProbe = $probePath.Replace("'", "''")
     $escapedResult = $resultPath.Replace("'", "''")
-    $command = '& ''{0}'' -InteractiveResult ''{1}''' -f $escapedProbe, $escapedResult
+    $completionProbe = (Join-Path $helpers 'completion-probe.ps1').Replace("'", "''")
+    $command = '& ''{0}'' -InteractiveResult ''{1}'' -CompletionProbe ''{2}''' -f $escapedProbe, $escapedResult, $completionProbe
     $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($command))
     try {
         $process = Start-Process -FilePath $Executable -ArgumentList @('-NoLogo', '-EncodedCommand', $encoded) `
@@ -304,7 +312,7 @@ if ($env:OH_MY_DEVENV_COMPLETION_FIXTURE -cne 'loaded') { throw 'The managed com
         } elseif (-not $result.Loaded) {
             throw 'The interactive profile did not load the managed completions.'
         } else {
-            Write-Host 'An unredirected PowerShell profile loaded the managed completions.'
+            Write-Host 'An unredirected PowerShell profile completed chezmoi and uv commands.'
         }
     } finally {
         $process.Dispose()
@@ -580,7 +588,7 @@ try {
         }
         $poshBin = [IO.Directory]::CreateDirectory((Join-Path $fixture 'posh-bin')).FullName
         Copy-Item -LiteralPath (Join-Path $installLocation 'oh-my-posh.exe') -Destination $poshBin
-        $fixtureConfig.scriptEnv.OH_MY_DEVENV_WINDOWS_PROBE_BIN = $poshBin
+        $fixtureConfig.scriptEnv.OH_MY_DEVENV_WINDOWS_PROBE_BIN = "$poshBin;$([IO.Path]::GetDirectoryName($chezmoi.Source))"
         Write-Host 'Hosted Oh My Posh probe uses the executable copied from the registered MSIX.'
     }
     $ssh = Get-PathApplication -Name ssh
@@ -901,8 +909,27 @@ $env:OH_MY_DEVENV_PROFILE_LOADED = '1'
             Set-FixtureText -Path $profileBody -Content $installedBody
             [IO.File]::Delete($alternateTheme)
         }
+        $generatorLog = Join-Path $fixture 'completion-generators.log'
+        $generatorCalls = [IO.File]::ReadAllText($generatorLog)
+        $completionSnapshot = foreach ($file in $ownedCompletions) {
+            [IO.File]::SetLastWriteTimeUtc($file, [datetime]'2020-01-01Z')
+            @{
+                Path = $file
+                Time = [IO.File]::GetLastWriteTimeUtc($file)
+                Hash = (Get-FileHash -LiteralPath $file).Hash
+            }
+        }
         Set-FixtureText -Path $profilePath -Content $oldProfile
         Invoke-FixtureApply -Reapply
+        if ([IO.File]::ReadAllText($generatorLog) -cne $generatorCalls) {
+            throw 'An unchanged apply called a completion generator.'
+        }
+        foreach ($file in $completionSnapshot) {
+            if ([IO.File]::GetLastWriteTimeUtc($file.Path) -ne $file.Time -or
+                (Get-FileHash -LiteralPath $file.Path).Hash -cne $file.Hash) {
+                throw "An unchanged apply rewrote '$($file.Path)'."
+            }
+        }
         Assert-FixtureWinGet
         Assert-FixturePathUnchanged
         $phase4Calls = @(Get-Content -LiteralPath (Join-Path $fixture 'phase4.log'))
@@ -914,6 +941,25 @@ $env:OH_MY_DEVENV_PROFILE_LOADED = '1'
         )
         if (($phase4Calls -join "`n") -cne ($expectedCalls -join "`n")) {
             throw "Unexpected stub install calls across apply and reapply: $phase4Calls"
+        }
+        $batCompletion = Join-Path $completionDirectory 'bat.ps1'
+        if ([IO.File]::Exists($batCompletion)) {
+            throw 'The availability fixture requires bat to be absent from the runner.'
+        }
+        $batExecutable = Join-Path $fixture 'stub-bin/bat.exe'
+        try {
+            [IO.File]::Copy((Join-Path $fixture 'stub.exe'), $batExecutable)
+            Invoke-FixtureApply
+            if (-not (Test-OwnedPowerShellCompletion -Path $batCompletion) -or
+                [IO.File]::ReadAllText($generatorLog) -cne ($generatorCalls + "bat`n")) {
+                throw 'Apply did not generate exactly one completion for the newly available bat.'
+            }
+        } finally {
+            [IO.File]::Delete($batExecutable)
+        }
+        Invoke-FixtureApply -Reapply
+        if ([IO.File]::Exists($batCompletion) -or [IO.File]::ReadAllText($generatorLog) -cne ($generatorCalls + "bat`n")) {
+            throw 'Apply did not prune the completion for the newly absent bat without generating files.'
         }
         Assert-FixturePathUninstall -Options $uninstallOptions
         Assert-FixtureCompletionUninstall -Owned $ownedCompletions -UserFile $unownedCompletion -UserBytes $unownedCompletionBytes

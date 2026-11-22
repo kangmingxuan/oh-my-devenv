@@ -213,5 +213,5 @@ function Confirm-ManagedProfile {
     } catch {
         throw "PowerShell profile check failed for '$ProfilePath'. $_"
     }
-    Write-Host 'PowerShell loaded the managed profile, restored its PATH entries, resolved the managed commands, initialized Oh My Posh, and loaded owned completions.'
+    Write-Host 'PowerShell loaded the managed profile, restored its PATH entries, resolved the managed commands, initialized Oh My Posh, and completed chezmoi and uv commands.'
 }

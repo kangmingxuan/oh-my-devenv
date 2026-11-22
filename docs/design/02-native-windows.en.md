@@ -124,7 +124,7 @@ Keep the Unix hook numbers, so the order of the layers is the same on every plat
 | 30 | Install mise | Install mise with winget when `mise` is not on `PATH` | 4 |
 | 40 | Runtimes | `mise install` | 4 |
 | 50 | Ecosystem tools | Go and uv tools from the shared manifests | 4 |
-| 55 | Shell completions | Install PowerShell completions from the shared shell inventory | 5 |
+| 55 | Shell completions | `run_after_`, every apply. Reconcile PowerShell completions against the shared shell inventory and current `PATH`. | 5 |
 | 60 | Environment check | `check.ps1` | 2 |
 
 Hash triggers work as on Unix. Each `run_onchange_` Windows hook includes the hashes of its manifest and its helper scripts.
@@ -135,15 +135,21 @@ exact `jdx.mise` package from the `winget` source with user scope and confirms
 apply under the same device-policy rule as hook 20.
 [WinGet package manifest](https://github.com/microsoft/winget-pkgs/blob/master/manifests/j/jdx/mise/2026.11.12/jdx.mise.installer.yaml)
 
-Hook 55 reads the one-command-per-line inventory in
+On every apply, hook 55 reads the one-command-per-line inventory in
 [`bootstrap/manifests/shell/completions.txt`](../../bootstrap/manifests/shell/completions.txt).
-For a command on `PATH`, it prefers an existing PowerShell completion in the
+It creates missing completions and replaces owned completions whose input
+fingerprint has changed. The fingerprint covers the shared inventory, installer
+and helpers, Windows system package manifest, mise configuration, and Go and uv
+manifests. The installer records it in each script's ownership marker. It
+leaves files with the current fingerprint untouched and skips their generators.
+When it needs a completion for a command on `PATH`, it prefers a script in the
 upstream installation location `%LOCALAPPDATA%\PowerShell\completions` and
 otherwise uses the CLI's generator. Install and check require a PowerShell
-generator adapter for every manifest command. They log and skip a known command
-when its application is absent from `PATH`. Install writes marked copies or generated
-scripts under `%LOCALAPPDATA%\oh-my-devenv\completions\powershell`. Install
-prunes obsolete marked scripts. Check reports missing or obsolete scripts.
+generator adapter for every manifest command. They log when a known command is
+absent from `PATH`. Install stores the marked scripts under
+`%LOCALAPPDATA%\oh-my-devenv\completions\powershell` and prunes owned scripts
+when the command leaves the inventory or becomes unavailable on `PATH`.
+Check reports missing or obsolete scripts.
 List returns owned scripts, including obsolete entries, for uninstall.
 [mise completion setup](https://mise.jdx.dev/shell-setup.html#completions)
 
@@ -277,7 +283,7 @@ The body mirrors the Unix env templates where they apply on Windows:
 - The theme disables automatic upgrades and upgrade notices. It also enables `async` so Oh My Posh disables upgrade features even when its device cache enables them. The profile uses `init pwsh`. Oh My Posh registers its PowerShell prompt during startup and loads the rendering module on the first prompt draw. The theme loads from disk. Its path and Git segments use local state. [Feature selection](https://github.com/JanDeDobbeleer/oh-my-posh/blob/v33.0.0/src/config/config.go#L144-L191), [PowerShell init generator](https://github.com/JanDeDobbeleer/oh-my-posh/blob/v33.0.0/src/shell/init.go#L47-L76).
 - A script host with redirected console input or output skips prompt initialization. It still loads the rest of the profile and the local overlay. The checker explicitly enables prompt initialization in its fresh PowerShell process so it can verify the same init path.
 - The init script exports the resolved `POSH_CONFIG` and a `POSH_SESSION_ID`. After the generated script installs the prompt function, the profile records that config path before the overlay runs. The checker clears inherited values in its fresh PowerShell process and requires that recorded path to match the deployed theme. [Session variables](https://github.com/JanDeDobbeleer/oh-my-posh/blob/v33.0.0/src/shell/init.go#L315-L326), [deferred prompt](https://github.com/JanDeDobbeleer/oh-my-posh/blob/v33.0.0/src/shell/init.go#L270-L290).
-- Load owned PowerShell completion scripts before the overlay when both console input and output are unredirected. The checker sets `OH_MY_DEVENV_PROBE_PROMPT=1` in a fresh PowerShell process to exercise both prompt initialization and completion loading with redirected streams. The probe requires the completion loader to finish successfully.
+- Dot-source owned PowerShell completion scripts in the profile's session scope before the overlay. Their helper functions remain available when the completers run. Load them when both console streams are unredirected or when `OH_MY_DEVENV_PROBE_PROMPT=1`. The checker sets that flag in a fresh PowerShell process with redirected streams. After the profile returns, it uses `TabExpansion2` to require subcommand results for `chezmoi` and `uv`.
 - Load the local overlay at `~/.config/oh-my-devenv/powershell/profile.local.ps1` when it exists. It can override the prompt.
 - After the optional overlay, prepend any missing managed directories, including the effective `GOBIN`, on every profile load. Preserve the existing `PATH` order and entries.
 
@@ -380,7 +386,7 @@ Add one Windows overlay, `profile.local.ps1` (section 9), in phase 2 together wi
   the test ownership record. The job logs requested and installed versions for
   each mise tool, identified path-length errors, and the longest path found
   under the mise data and uv tool directories.
-- Phase 5 adds smoke coverage for shipped and generated completions, owned file cleanup, and font ownership. The hosted apply job runs the real hook 55. It measures completion load time in fresh PowerShell processes and attempts an unredirected profile probe. The job verifies that uninstall removes owned assets while installed packages and tools remain, then restores the runner's font files, font registry values, user Path, and configuration files.
+- Phase 5 smoke tests cover shipped and generated completions, changes in command availability between applies, and font ownership. The hosted apply job runs the real hook 55 and measures completion load time in fresh PowerShell processes. When the runner provides an unredirected console, the profile probe uses `TabExpansion2` to require subcommand results for `chezmoi` and `uv`. The job verifies that uninstall removes owned assets while installed packages and tools remain, then restores the runner's font files, font registry values, user Path, and configuration files.
 - Section 17 records hosted coverage. The hosted jobs leave the clean-client install and the Oh My Posh app execution alias unverified. The user deferred the first live apply until after all planned phases and deferred the Oh My Posh MSIX check to that apply.
 - Run both Windows jobs under the same `needs-checks` condition as the Unix jobs, and feed them into the existing single required check. This avoids a second path classifier that could skip Windows CI after a change to a shared file.
 - Live installs on a real Windows machine follow the same local validation policy as the Unix platforms.
@@ -393,7 +399,7 @@ Add one Windows overlay, `profile.local.ps1` (section 9), in phase 2 together wi
 | 2 | Configuration only: platform dispatch, `.gitattributes`, hooks 00, 10, 15, and 60, PowerShell profile and its overlay, shared Git, SSH, and mise targets, minimal uninstall (remove the managed profile line and the managed targets), Windows smoke and apply jobs, repository rules | An apply on Windows deploys the configuration, and `check.ps1` passes for the delivered layers. Unix output does not change. |
 | 3 | System packages and the desktop baseline | Hooks 20 and 22 install their manifests, and `check.ps1` checks them. |
 | 4 | mise, runtimes, and ecosystem tools, and the persistent user `Path` entries | Hooks 30, 40, and 50 install the shared inventories. Hook 15 adds the user `Path` entries, and the uninstall removes them. `check.ps1` checks them. |
-| 5 | Full lifecycle and PowerShell completions | Hook 55 installs completions and hook 60 checks them. Uninstall covers managed configuration, owned Path entries, completions, and fonts. It preserves installed packages and tools and keeps first-run backups. |
+| 5 | Full lifecycle and PowerShell completions | Hook 55 reconciles completions on each apply. Hook 60 checks the files and the fresh profile's completion results. Uninstall covers managed configuration, owned Path entries, completions, and fonts. It preserves installed packages and tools and keeps first-run backups. |
 
 `check.ps1` checks only the layers that the current phase delivers. Each phase adds the checks for its layers.
 

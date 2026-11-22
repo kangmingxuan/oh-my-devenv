@@ -2,7 +2,8 @@ param(
     [Parameter(Mandatory)][ValidateSet('install', 'check', 'list')][string]$Action,
     [Parameter(Mandatory)][ValidateSet('windows')][string]$Platform,
     [Parameter(Mandatory)][string]$ManifestPath,
-    [string]$Destination = $HOME
+    [string]$Destination = $HOME,
+    [string]$Fingerprint
 )
 
 Set-StrictMode -Version Latest
@@ -15,4 +16,6 @@ if ($PSVersionTable.PSVersion -lt [version]'7.6') { throw 'PowerShell 7.6 or lat
 . (Join-Path $PSScriptRoot 'completions.ps1')
 
 if ($Platform -eq 'windows' -and $Action -ne 'list') { Update-HookPath -Managed }
-Invoke-PowerShellCompletion -Action $Action -ManifestPath $ManifestPath -LocalData (Get-CompletionLocalData -Destination $Destination)
+$options = @{ Action = $Action; ManifestPath = $ManifestPath; LocalData = Get-CompletionLocalData -Destination $Destination }
+if ($PSBoundParameters.ContainsKey('Fingerprint')) { $options.Fingerprint = $Fingerprint }
+Invoke-PowerShellCompletion @options

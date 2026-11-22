@@ -121,7 +121,7 @@ hook 和部署文件都通过 `.chezmoiignore` 做门控：
 | 30 | 安装 mise | `mise` 不在 `PATH` 上时，用 winget 安装 mise | 4 |
 | 40 | 运行时 | `mise install` | 4 |
 | 50 | 生态工具 | 按共享 manifest 安装 Go 和 uv 工具 | 4 |
-| 55 | Shell 补全 | 从共享 shell 清单安装 PowerShell 补全 | 5 |
+| 55 | Shell 补全 | `run_after_`，每次 apply。根据共享 shell 清单和当前 `PATH` 更新 PowerShell 补全。 | 5 |
 | 60 | 环境检查 | `check.ps1` | 2 |
 
 哈希触发方式与 Unix 相同。每个 Windows `run_onchange_` hook 都包含其 manifest 和辅助脚本的哈希。
@@ -131,14 +131,17 @@ hook 30 使用 winget，让 mise 与其他系统工具来自同一个包管理�
 hook 20 的设备策略规则停止 apply。
 [WinGet 包清单](https://github.com/microsoft/winget-pkgs/blob/master/manifests/j/jdx/mise/2026.11.12/jdx.mise.installer.yaml)
 
-hook 55 读取共享的逐行命令清单
+每次 apply 时，hook 55 读取共享的逐行命令清单
 [`bootstrap/manifests/shell/completions.txt`](../../bootstrap/manifests/shell/completions.txt)。
-若 `PATH` 上有对应命令，优先使用上游安装位置
+安装器创建缺失的脚本，并替换输入指纹已变化的受管脚本。输入指纹涵盖共享清单、安装器及
+辅助脚本、Windows 系统包清单、mise 配置，以及 Go 和 uv 清单。安装器将指纹写入每个
+脚本的归属标记。指纹相同时保留文件，也跳过对应的生成器。
+若 `PATH` 上的命令需要创建或替换补全脚本，优先使用上游安装位置
 `%LOCALAPPDATA%\PowerShell\completions` 中现有的 PowerShell 补全。无现有脚本时，
 使用该命令的生成器。安装和检查要求清单中的每个命令都有 PowerShell 生成器适配器。
-已知命令的应用程序不在 `PATH` 上时，记录原因并跳过。
-复制或生成的脚本带有归属标记，存放在
-`%LOCALAPPDATA%\oh-my-devenv\completions\powershell`。安装会清除过时的已标记脚本。
+已知命令的应用程序不在 `PATH` 上时，记录原因。
+带归属标记的脚本存放在 `%LOCALAPPDATA%\oh-my-devenv\completions\powershell`。
+命令从清单移除或在 `PATH` 上变为不可用时，安装器清除对应的受管脚本。
 检查会报告缺失或过时的脚本。列表会为卸载返回所有受管脚本，包括过时条目。
 [mise 补全配置](https://mise.jdx.dev/shell-setup.html#completions)
 
@@ -267,7 +270,7 @@ chezmoi 可以通过 `.chezmoiexternal` 用配置数据计算目标路径。Clau
 - 主题关闭自动升级和升级通知。它启用 `async`，因此即使设备缓存打开了升级功能，Oh My Posh 也会禁用它们。profile 使用 `init pwsh`。Oh My Posh 在 PowerShell 启动时注册提示符，在首次显示提示符时加载渲染模块。主题从磁盘加载，路径和 Git 段读取本地状态。[功能选择](https://github.com/JanDeDobbeleer/oh-my-posh/blob/v33.0.0/src/config/config.go#L144-L191)、[PowerShell 初始化脚本生成器](https://github.com/JanDeDobbeleer/oh-my-posh/blob/v33.0.0/src/shell/init.go#L47-L76)。
 - 控制台输入或输出被重定向时，脚本宿主跳过提示符初始化，仍加载 profile 的其他部分和本地 overlay。检查器在新 PowerShell 进程中显式启用提示符初始化，以验证同一条初始化路径。
 - 初始化脚本导出解析后的 `POSH_CONFIG` 和 `POSH_SESSION_ID`。生成的脚本注册提示符函数后，profile 在运行 overlay 前记录该配置路径。检查器在新 PowerShell 进程中清除继承值，并要求记录的路径与已部署主题一致。[会话变量](https://github.com/JanDeDobbeleer/oh-my-posh/blob/v33.0.0/src/shell/init.go#L315-L326)、[延迟渲染提示符](https://github.com/JanDeDobbeleer/oh-my-posh/blob/v33.0.0/src/shell/init.go#L270-L290)。
-- 控制台输入和输出均未重定向时，在本地 overlay 之前加载受管 PowerShell 补全。检查器在新 PowerShell 进程中设置 `OH_MY_DEVENV_PROBE_PROMPT=1`，在重定向时验证提示符初始化和补全加载。探测要求补全加载器成功运行。
+- 在本地 overlay 之前，将受管 PowerShell 补全脚本 dot-source 到 profile 的会话作用域。补全运行时可以调用脚本定义的辅助函数。控制台输入和输出均未重定向，或 `OH_MY_DEVENV_PROBE_PROMPT=1` 时，加载补全脚本。检查器在有重定向的新 PowerShell 进程中设置此标志。profile 返回后，检查器用 `TabExpansion2` 验证 `chezmoi` 和 `uv` 的子命令补全。
 - 本地 overlay `~/.config/oh-my-devenv/powershell/profile.local.ps1` 存在时加载它。overlay 可以覆盖提示符。
 - 每次加载 profile 时，在可选的 overlay 步骤后，把缺失的受管目录放到 `PATH` 最前面，包括实际生效的 `GOBIN`。保留已有的 `PATH` 条目及其顺序。
 
@@ -368,7 +371,7 @@ WinGet 将清单要求的用户范围应用到 Oh My Posh MSIX。
   无输入变化的 reapply 和按归属记录卸载。测试结束后恢复 runner 用户 `Path`
   的原始字节及注册表类型，并移除测试归属记录。作业记录每项 mise 工具的请求和
   安装版本、识别出的路径长度错误，以及 mise 数据和 uv 工具目录中的最长路径。
-- 阶段 5 的 smoke 测试覆盖发行方补全脚本、生成补全、受管文件清理和字体归属。托管 apply 作业运行真实的 hook 55，在新 PowerShell 进程中测量补全加载耗时，并尝试用无重定向会话验证 profile。作业检查卸载是否移除受管资产并保留已安装的软件包和工具，然后恢复 runner 的字体文件、字体注册值、用户 Path 和配置文件。
+- 阶段 5 的 smoke 测试覆盖发行方补全脚本、生成补全、两次 apply 之间的命令可用性变化和字体归属。托管 apply 作业运行真实的 hook 55，并在新 PowerShell 进程中测量补全加载耗时。runner 提供无重定向控制台时，profile 探测使用 `TabExpansion2` 验证 `chezmoi` 和 `uv` 的子命令补全。作业检查卸载是否移除受管资产并保留已安装的软件包和工具，然后恢复 runner 的字体文件、字体注册值、用户 Path 和配置文件。
 - 第 17 节记录托管作业的覆盖范围。托管作业没有验证干净客户端上的安装和 Oh My Posh 应用执行别名。用户将首次实机 apply 推迟到所有计划阶段完成后，并将 Oh My Posh MSIX 检查推迟到该次 apply。
 - 两个 Windows job 都在与 Unix job 相同的 `needs-checks` 条件下运行，并汇入现有的单一 required check。这样不需要第二个路径分类器，避免共享文件改动后 Windows CI 被跳过。
 - 在真实 Windows 机器上的实际安装，遵循与 Unix 平台相同的本地验证策略。
@@ -381,7 +384,7 @@ WinGet 将清单要求的用户范围应用到 Oh My Posh MSIX。
 | 2 | 仅配置：平台分派，`.gitattributes`，hook 00、10、15、60，PowerShell profile 及其 overlay，共享的 Git、SSH、mise 目标，最小卸载（移除受管 profile 行和受管目标），Windows smoke 与 apply job，仓库规则 | 在 Windows 上 apply 能部署配置，`check.ps1` 对已交付的层通过；Unix 输出不变。 |
 | 3 | 系统包与桌面基线 | hook 20 和 22 安装各自的 manifest，`check.ps1` 检查它们。 |
 | 4 | mise、运行时与生态工具，以及持久化用户 `Path` 条目 | hook 30、40、50 安装共享清单。hook 15 添加用户 `Path` 条目，卸载移除它们。`check.ps1` 检查它们。 |
-| 5 | 完整生命周期与 PowerShell 补全 | hook 55 安装补全，hook 60 验证补全。卸载涵盖受管配置、归属记录中的 Path 条目、补全和字体。保留已安装的软件包、工具和首次运行备份。 |
+| 5 | 完整生命周期与 PowerShell 补全 | hook 55 在每次 apply 时更新补全。hook 60 检查脚本及新 profile 的补全结果。卸载涵盖受管配置、归属记录中的 Path 条目、补全和字体。保留已安装的软件包、工具和首次运行备份。 |
 
 `check.ps1` 只检查当前阶段已交付的层。每个阶段加入其各层的检查。
 

@@ -74,15 +74,26 @@ Remove-Variable -Name ohMyDevenvPoshActivation
 $env:OH_MY_DEVENV_COMPLETIONS_LOADED = $null
 if ($env:OH_MY_DEVENV_PROBE_PROMPT -ceq '1' -or
     (-not [Console]::IsInputRedirected -and -not [Console]::IsOutputRedirected)) {
-    & {
-        . (Join-Path $PSScriptRoot 'completions.ps1')
-        $localData = if ($env:OH_MY_DEVENV_PROBE_PROMPT -ceq '1' -and $env:OH_MY_DEVENV_PROBE_COMPLETION_LOCAL_DATA) {
-            $env:OH_MY_DEVENV_PROBE_COMPLETION_LOCAL_DATA
-        } else {
-            [Environment]::GetFolderPath('LocalApplicationData')
+    $ohMyDevenvCompletionErrorAction = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = 'Stop'
+        $ohMyDevenvCompletionFiles = @(& {
+            . (Join-Path $PSScriptRoot 'completions.ps1')
+            $localData = if ($env:OH_MY_DEVENV_PROBE_PROMPT -ceq '1' -and $env:OH_MY_DEVENV_PROBE_COMPLETION_LOCAL_DATA) {
+                $env:OH_MY_DEVENV_PROBE_COMPLETION_LOCAL_DATA
+            } else {
+                [Environment]::GetFolderPath('LocalApplicationData')
+            }
+            Get-OwnedPowerShellCompletion -Directory (Get-PowerShellCompletionDirectory -LocalData $localData)
+        })
+        # Completers can call functions defined by their scripts after startup.
+        foreach ($ohMyDevenvCompletionFile in $ohMyDevenvCompletionFiles) {
+            . $ohMyDevenvCompletionFile.FullName
         }
-        Import-OwnedPowerShellCompletion -LocalData $localData
         $env:OH_MY_DEVENV_COMPLETIONS_LOADED = '1'
+    } finally {
+        $ErrorActionPreference = $ohMyDevenvCompletionErrorAction
+        Remove-Variable -Name ohMyDevenvCompletionErrorAction, ohMyDevenvCompletionFiles, ohMyDevenvCompletionFile -ErrorAction SilentlyContinue
     }
 }
 
