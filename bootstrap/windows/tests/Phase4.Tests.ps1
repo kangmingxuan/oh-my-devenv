@@ -177,13 +177,14 @@ Describe 'Windows phase 4 helpers' -Skip:(-not $IsWindows) {
         ) {
             [IO.File]::WriteAllText($manifest, $Spec)
             $script:fixtureGoArch = $Arch
-            $script:fixtureGoInstall = $Expected -join ' '
+            $script:fixtureGoInstall = $Expected
             Mock Invoke-NativeCommand {
                 @{ ExitCode = 0; Stdout = "$script:fixtureGoArch`n"; Stderr = '' }
             } -ParameterFilter { $Executable -eq 'managed-go.exe' -and ($Arguments -join ' ') -ceq 'env GOARCH' }
             Install-GoTool -ManifestPath $manifest
             Should -Invoke Invoke-NativeCommand -Times 1 -Exactly -ParameterFilter {
-                $Executable -eq 'managed-go.exe' -and ($Arguments -join ' ') -ceq $script:fixtureGoInstall
+                $Executable -eq 'managed-go.exe' -and $Arguments.Count -eq $script:fixtureGoInstall.Count -and
+                -not (Compare-Object -ReferenceObject $script:fixtureGoInstall -DifferenceObject $Arguments -SyncWindow 0 -CaseSensitive)
             }
         }
 
