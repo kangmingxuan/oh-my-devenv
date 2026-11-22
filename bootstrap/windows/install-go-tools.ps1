@@ -5,6 +5,19 @@ $ErrorActionPreference = 'Stop'
 
 if (-not $IsWindows) { throw 'The Go installer requires native Windows.' }
 
+function Get-GoInstallArgument {
+    param(
+        [Parameter(Mandatory)][string]$Spec,
+        [Parameter(Mandatory)][Runtime.InteropServices.Architecture]$Architecture
+    )
+
+    # Delve builds on Windows ARM64 only with its experimental build tag; other modules ignore it.
+    if ($Architecture -eq [Runtime.InteropServices.Architecture]::Arm64) {
+        return @('install', '-tags=exp.winarm64', $Spec)
+    }
+    @('install', $Spec)
+}
+
 function Install-GoTool {
     param([Parameter(Mandatory)][string]$ManifestPath)
 
@@ -19,7 +32,9 @@ function Install-GoTool {
     foreach ($tool in $tools) {
         # Rebuild every tool when the hook inputs change, including the Go version.
         Write-Host "  -> $($tool.Spec)"
-        $result = Invoke-NativeCommand -Executable $go -Arguments @('install', $tool.Spec) -WorkingDirectory "$env:SystemDrive\"
+        $arguments = Get-GoInstallArgument -Spec $tool.Spec `
+            -Architecture ([Runtime.InteropServices.RuntimeInformation]::OSArchitecture)
+        $result = Invoke-NativeCommand -Executable $go -Arguments $arguments -WorkingDirectory "$env:SystemDrive\"
         if ($result.Stdout) { Write-Host $result.Stdout }
         if ($result.Stderr) { Write-Host $result.Stderr }
     }

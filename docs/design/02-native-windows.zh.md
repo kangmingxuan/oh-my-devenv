@@ -222,6 +222,7 @@ hook 10 在文件内容上沿用 Unix 的约定：首次 apply 覆盖目标之�
 ### 辅助脚本中的 Windows 细节
 
 - uv 工具环境的解释器位于 `Scripts\python.exe`，而不是 `bin/python`。
+- 在 Windows ARM64 上，Go 安装器给 `go install` 传入 `-tags=exp.winarm64`。Delve v1.27.2 只有加上这个实验性标签才能在 Windows ARM64 上构建。不使用该标签的模块会忽略它。首次实机 apply 在一台 ARM64 设备上停在 Delve 构建后，用户于 2026-11-22 选择了这个方案。托管 Windows 作业运行在 x64 上，所以不覆盖这个分支。[Delve Windows 架构检查](https://github.com/go-delve/delve/blob/v1.27.2/pkg/proc/native/support_sentinel_windows.go)
 - 可执行文件带 `.exe` 后缀。比较解析到的命令与安装器所属二进制的遮蔽检查要包含这个后缀。
 - 检查器用 `go version -m` 读取 Go 命令导入路径和模块版本，用 `uv tool list` 读取 uv 包版本。检查 uv 工具的解释器是否与记录版本及 mise 选定的 Python 一致。
 - Unix 辅助脚本在 `/` 下运行全局 mise 命令，使调用方工作目录的项目配置不生效。PowerShell 辅助脚本出于同样的原因，在系统盘根目录（`$env:SystemDrive\`）下运行这些命令。mise 从当前目录向上查找项目配置，直到盘符根目录，所以用户 profile 下的临时目录不能隔离这些命令：父目录中的配置文件仍会生效。根目录本身的配置文件在 Unix 和 Windows 上都仍会生效。用户全局配置（默认是 `%USERPROFILE%\.config\mise\config.toml`）与这一查找无关，始终生效。Unix 上的默认系统配置目录 `/etc/mise` 是绝对路径；Windows 上它解析到当前目录所在的盘，所以在系统盘根目录下运行时，使用的是该盘上的 `\etc\mise`。

@@ -165,8 +165,16 @@ Describe 'Windows phase 4 helpers' -Skip:(-not $IsWindows) {
             Install-GoTool -ManifestPath $manifest
             Should -Invoke Invoke-NativeCommand -Times 1 -Exactly -ParameterFilter {
                 $Executable -eq 'managed-go.exe' -and $Arguments[0] -ceq 'install' -and
-                $Arguments[1] -ceq 'example.com/first@v1.2.3'
+                $Arguments[-1] -ceq 'example.com/first@v1.2.3'
             }
+        }
+
+        It 'adds the experimental Delve tag only on <Architecture>' -ForEach @(
+            @{ Architecture = 'Arm64'; Expected = @('install', '-tags=exp.winarm64', 'example.com/tool@v1.2.3') }
+            @{ Architecture = 'X64'; Expected = @('install', 'example.com/tool@v1.2.3') }
+        ) {
+            $actual = Get-GoInstallArgument -Spec 'example.com/tool@v1.2.3' -Architecture $Architecture
+            $actual | Should -BeExactly $Expected
         }
 
         It 'skips an exact uv pin on the selected Python' {
