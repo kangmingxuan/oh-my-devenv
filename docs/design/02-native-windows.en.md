@@ -1,6 +1,6 @@
 # Technical Design: Native Windows Platform
 
-Status: accepted. Phase 3 (system packages and desktop baseline) passed the hosted Windows smoke and apply jobs. Phase 4 is implemented and awaits hosted Windows validation. Phase 5 has not started.
+Status: accepted. Phases 3 and 4 passed the hosted Windows smoke and apply jobs. Phase 4 remains unverified on a clean standard-user Windows client. Phase 5 has not started.
 
 ## 1. Summary
 
@@ -138,6 +138,7 @@ apply under the same device-policy rule as hook 20.
 - Write Windows hooks and helpers for PowerShell 7.6 or later only.
 - On Windows, `.chezmoi.toml.tmpl` sets `[interpreters.ps1]` to `pwsh -NoLogo -NoProfile -File`. Hooks run independently of the user's PowerShell profile. Hook 15 maintains the profile entry and hook 60 verifies startup in a separate shell. Run `chezmoi init` to refresh an existing configuration before apply. [chezmoi interpreter configuration](https://www.chezmoi.io/reference/configuration-file/interpreters/).
 - Install `pwsh` before starting chezmoi so every hook can resolve the interpreter from the initial `PATH`.
+- The WinGet `jdx.mise` package requires the Microsoft Visual C++ 2015+ Redistributable that matches its architecture (x64 or ARM64). The redistributable installs at machine scope. On a standard-user device that lacks it, ask the device administrator to provision it before apply. Hook 30 stops if WinGet fails.
 - Hook 00 fails when the running PowerShell version is below 7.6. This is a compatibility floor only; hook 00 does not check support status. The user keeps PowerShell on a supported release with its latest servicing update, as for any other prerequisite. Record the minimum in `AGENTS.md` next to the Bash 3.2 rule.
 - Start every script with `Set-StrictMode -Version Latest` and `$ErrorActionPreference = 'Stop'`.
 - Check the exit code of every native command. `$ErrorActionPreference` does not stop on a failed native command by default.
@@ -166,7 +167,7 @@ The user decided to add the managed directories to the persistent user `Path` (s
 - Hook 15 adds the mise shims directory, `~/.local/bin`, and `$GOBIN` to the user `Path` in `HKCU\Environment` on every apply. This starts in phase 4, when the tools in these directories arrive.
 - Add only missing entries. Never add an entry twice. Keep every other entry and its order.
 - Write the resolved directory paths. Do not add a new `%GOBIN%` reference, because `GOBIN` is not persisted.
-- Record each entry that the baseline inserts in `oh-my-devenv/user-path.json` under the effective LocalApplicationData folder. Reapply keeps this record. An entry that existed before the first apply is not recorded and is not managed.
+- Record each missing entry in `oh-my-devenv/user-path.json` under the effective LocalApplicationData folder before writing the registry. Reapply keeps this record and adds any entries still missing. An entry that existed before the first apply is not recorded and is not managed.
 - Keep the registry value type and the unexpanded entries, such as `%USERPROFILE%` references. Do not write the expanded value back.
 - Broadcast `WM_SETTINGCHANGE` with `Environment` when the registry value changes. Applications that are already running and do not handle the notification see the change only after a restart.
 - Do not change the machine `Path`. It needs elevation.
@@ -176,14 +177,15 @@ The user decided to add the managed directories to the persistent user `Path` (s
 - The `Path` writer, reader, and uninstaller take the registry target as an explicit parameter. Smoke tests pass a fixture target and mock the change notification, because a temporary home does not isolate `HKCU`. The real apply job checks and restores the runner account's user `Path`.
 - The profile keeps its own `PATH` setup. It sets the order in PowerShell sessions and works without the persistent entries.
 
-`check.ps1` also checks command resolution through a newly started PowerShell that loads the profile. A child process inherits its parent's environment, so the check builds the child environment from the machine and user environment without the hook additions. Before the profile loads, the check removes every occurrence of the managed directories from the combined child `Path`, including occurrences from the machine `Path`. The check does not change the persistent values. Otherwise the hook environment or an existing entry can hide a profile that does not put a tool on `PATH`. A negative test removes a required path from a fixture profile and expects the check to fail. A second negative test supplies the same directory through a fixture machine `Path`.
+`check.ps1` checks command resolution through a newly started PowerShell that loads the profile. It builds the child `Path` from the persistent machine and user `Path` values. It removes every occurrence of the directories the profile restores. This lets the check detect a profile that omits a required directory. The hosted tests explicitly supply the directory that contains their Oh My Posh executable to the probe.
 
 In phase 2, the fresh process checks that the managed profile body completed
 and that it added the managed directories. The smoke fixtures reject a profile
 that returns before the managed line and a profile that signals completion
 without adding the required paths. Phase 4 also verifies that the fresh profile
 resolves the selected mise commands and the Go and uv commands from their shared
-manifests.
+manifests. The first result for each bare command name must be the expected
+application.
 
 ### First-run backup
 
@@ -212,7 +214,7 @@ Tests:
 
 - A uv tool environment keeps its interpreter at `Scripts\python.exe`, not `bin/python`.
 - Executables have an `.exe` suffix. The shadow check that compares the resolved command with the installer-owned binary includes the suffix.
-- The checker reads the Go module version with `go version -m` and the uv package version with `uv tool list`. It checks the uv tool interpreter against its recorded version and the mise-selected Python.
+- The checker reads the Go command import path and module version with `go version -m` and the uv package version with `uv tool list`. It checks the uv tool interpreter against its recorded version and the mise-selected Python.
 - The Unix helpers run global mise commands from `/`, so the project config of the caller's working directory does not apply. The PowerShell helpers run them from the root of the system drive (`$env:SystemDrive\`) for the same reason. mise searches for project config from the current directory up to the drive root, so a temporary directory under the user profile does not isolate the commands: a config file in a parent directory still applies. A config file in the root directory itself still applies, on Unix and on Windows. The user-global config, by default `%USERPROFILE%\.config\mise\config.toml`, applies independently of that search. On Unix the default system config directory `/etc/mise` is absolute; on Windows it resolves on the drive of the current directory, so running from the system drive root selects `\etc\mise` on that drive.
 
 ## 8. Shared Data
@@ -259,7 +261,7 @@ The body mirrors the Unix env templates where they apply on Windows:
 - A script host with redirected console input or output skips prompt initialization. It still loads the rest of the profile and the local overlay. The checker explicitly enables prompt initialization in its fresh PowerShell process so it can verify the same init path.
 - The init script exports the resolved `POSH_CONFIG` and a `POSH_SESSION_ID`. After the generated script installs the prompt function, the profile records that config path before the overlay runs. The checker clears inherited values in its fresh PowerShell process and requires that recorded path to match the deployed theme. [Session variables](https://github.com/JanDeDobbeleer/oh-my-posh/blob/v33.0.0/src/shell/init.go#L315-L326), [deferred prompt](https://github.com/JanDeDobbeleer/oh-my-posh/blob/v33.0.0/src/shell/init.go#L270-L290).
 - Load the local overlay at `~/.config/oh-my-devenv/powershell/profile.local.ps1` when it exists. It can override the prompt.
-- After the overlay runs, prepend any missing managed directories, including the effective `GOBIN`. Preserve the overlay's existing `PATH` order and entries.
+- After the optional overlay, prepend any missing managed directories, including the effective `GOBIN`, on every profile load. Preserve the existing `PATH` order and entries.
 
 The profile affects PowerShell sessions only. Applications started from the Windows shell, such as an IDE launched from the Start menu, do not load it. The persistent user `Path` entries cover these applications (section 7).
 
@@ -416,20 +418,24 @@ Sections 2, 9, 10, and 11 record the approved phase-3 baseline and its verificat
 
 The hosted phase-3 run on `905d27a` passed all jobs. Windows smoke passed 74 Pester tests and skipped one. Windows apply completed the user-scope WinGet imports, including PowerToys. It verified the managed prompt using a copy of the installed Oh My Posh executable. A separate plain `pwsh -File` loaded the profile and overlay and exited. The first apply and Oh My Posh app execution alias check on a user device remain pending. [Full CI run](https://github.com/kangmingxuan/oh-my-devenv/actions/runs/44912366118), [Windows smoke](https://github.com/kangmingxuan/oh-my-devenv/actions/runs/44912366118/job/136870704931), [Windows apply](https://github.com/kangmingxuan/oh-my-devenv/actions/runs/44912366118/job/136870704962).
 
-The phase-4 implementation keeps every tool in the shared mise configuration.
-The hosted apply job will report the result for each requested tool. The job
-also reports whether the install log contains a path-length error and measures
-the longest installed paths under the effective mise data and uv tool directories.
-Both results await the first hosted phase-4 apply.
-<!-- Claude: link the phase-4 Windows smoke and apply jobs here. -->
+The hosted phase-4 run on `edde9e9` passed all jobs. WinGet installed mise
+2026.11.12 on the x64 runner. mise installed all six shared tools: Go 1.27.1,
+golangci-lint v2.14.0, Node 24.21.0, Python 3.13.16, usage 6.12.0, and uv 0.11.33.
+The longest observed paths were 165 characters under the mise data directory
+and 203 under the uv tools directory. The install log showed no path-length
+error. [Full CI run](RUN_LINK), [Windows smoke](SMOKE_LINK), [Windows apply](APPLY_LINK).
+
+A clean standard-user Windows client remains unverified. The WinGet mise
+package requires the architecture-matched Microsoft Visual C++ 2015+
+Redistributable at machine scope. If it is missing, ask the device
+administrator to provision it before apply.
 
 Resolve each remaining item before the phase that depends on it.
 
 | Item | Phase |
 | --- | --- |
 | Whether the effective script execution policy lets chezmoi run the `.ps1` hooks, and the stop condition when it does not. Do not work around device policy. PowerShell 7 stores execution-policy settings separately from Windows PowerShell 5.1. Group Policy can make it use the Windows PowerShell policy settings, so check the effective policy under `pwsh`. | 2 |
-| Windows installation result for each tool in the shared mise config. Pending hosted apply evidence. | 4 |
-| Runtime and tool installation path-length errors and maximum observed lengths. Pending hosted apply evidence. Do not assume that Windows long-path support (`LongPathsEnabled`) is on; turning it on needs elevation. That setting alone does not guarantee long-path support in each installer or tool; verify their actual behavior. Git has a separate `core.longpaths` setting. | 4 |
+| First apply on a clean standard-user Windows client with the prerequisite described in section 7. | 4 |
 
 ## 18. Sources
 

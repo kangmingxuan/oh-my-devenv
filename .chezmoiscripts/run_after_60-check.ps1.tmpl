@@ -14,4 +14,5 @@ $profilePath = Get-HookProfilePath -Destination $destination -HomeDirectory $hom
 $pathTarget = Get-HookUserPathTarget -Destination $destination -HomeDirectory $homeDirectory
 & {{ includeTemplate "powershell-literal" (joinPath .chezmoi.sourceDir "bootstrap/windows/check.ps1") }} `
     -Destination $destination -ProfilePath $profilePath -RegistryPath $pathTarget.RegistryPath `
+    -ProbeFixtureBin $env:OH_MY_DEVENV_WINDOWS_PROBE_BIN `
     -DesktopBaseline:${{ if (index . "desktopBaseline") }}true{{ else }}false{{ end }}

@@ -7,8 +7,8 @@ function Read-EcosystemManifest {
     param([Parameter(Mandatory)][string]$Path)
 
     [IO.File]::ReadLines($Path) | ForEach-Object {
-        $entry = $_ -creplace '#.*$'
-        if (-not [string]::IsNullOrWhiteSpace($entry)) { $entry }
+        $entry = ($_ -creplace '#.*$').Trim()
+        if ($entry) { $entry }
     }
 }
 
@@ -21,10 +21,11 @@ function Read-GoToolManifest {
             throw "Go tool entry must pin an exact module version (module@vX.Y.Z): $spec"
         }
         $version = $Matches[1]
-        $parts = ($token -creplace '@[^@]*$') -csplit '/'
+        $importPath = $token -creplace '@[^@]*$'
+        $parts = $importPath -csplit '/'
         $name = $parts[-1]
         if ($parts.Count -gt 1 -and $name -cmatch '^v([2-9]|[1-9][0-9]+)$') { $name = $parts[-2] }
-        @{ Spec = $spec; Name = $name; Version = $version }
+        @{ Spec = $spec; Name = $name; Version = $version; ImportPath = $importPath }
     }
 }
 
@@ -99,7 +100,12 @@ function Confirm-EcosystemTool {
         foreach ($tool in $goTools) {
             $binary = Confirm-ToolBinary -Name $tool.Name -Directory $env:GOBIN
             $result = Invoke-NativeCommand -Executable $go -Arguments @('version', '-m', $binary)
-            $moduleLines = @($result.Stdout -split '\r?\n' | Where-Object { $_ -cmatch '^\tmod\t' })
+            $buildInfo = $result.Stdout -split '\r?\n'
+            $pathLines = @($buildInfo | Where-Object { $_ -cmatch '^\tpath\t' })
+            if ($pathLines.Count -ne 1 -or ($pathLines[0] -csplit '\t', 3)[2] -cne $tool.ImportPath) {
+                throw "Go tool '$($tool.Name)' does not have command path '$($tool.ImportPath)'.`n$($result.Stdout)"
+            }
+            $moduleLines = @($buildInfo | Where-Object { $_ -cmatch '^\tmod\t' })
             if ($moduleLines.Count -ne 1 -or ($moduleLines[0] -csplit '\t')[3] -cne $tool.Version) {
                 throw "Go tool '$($tool.Name)' does not have module version '$($tool.Version)'.`n$($result.Stdout)"
             }

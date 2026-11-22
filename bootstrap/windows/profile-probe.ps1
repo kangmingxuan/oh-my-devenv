@@ -28,11 +28,16 @@ if (-not $env:OH_MY_DEVENV_POSH_CONFIG -or
 if ($env:OH_MY_DEVENV_PROBE_COMMANDS) {
     $commands = ConvertFrom-Json -InputObject $env:OH_MY_DEVENV_PROBE_COMMANDS -AsHashtable
     foreach ($command in $commands) {
-        $application = Get-PathApplication -Name $command.Name
+        $name = [IO.Path]::GetFileNameWithoutExtension($command.Name)
+        $resolved = Get-Command -Name $name -TotalCount 1 -ErrorAction SilentlyContinue
+        if ($null -eq $resolved) { throw "The managed profile did not resolve '$name'." }
+        if ($resolved.CommandType -ne 'Application') {
+            throw "The managed profile resolved '$name' as $($resolved.CommandType). Expected application '$($command.Path)'."
+        }
         $expected = @($command.Path, $command['Shim'] | Where-Object { $_ } |
             ForEach-Object { ConvertTo-PathKey -Path $_ })
-        if ((ConvertTo-PathKey -Path $application.Source) -cnotin $expected) {
-            throw "The managed profile resolved '$($command.Name)' to '$($application.Source)'. Expected '$($command.Path)'."
+        if ((ConvertTo-PathKey -Path $resolved.Source) -cnotin $expected) {
+            throw "The managed profile resolved '$name' to '$($resolved.Source)'. Expected '$($command.Path)'."
         }
     }
 }

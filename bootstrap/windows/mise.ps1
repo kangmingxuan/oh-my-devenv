@@ -19,7 +19,10 @@ function Install-Mise {
             '--accept-package-agreements', '--accept-source-agreements', '--disable-interactivity'
         ) -AllowFailure
         if ($result.ExitCode -ne 0) {
-            throw "WinGet install of jdx.mise failed (exit $($result.ExitCode)). Device policy may block WinGet or this installer.`n$($result.Stderr)`n$($result.Stdout)"
+            throw ("WinGet install of jdx.mise failed (exit $($result.ExitCode)). " +
+                'mise requires the architecture-matched Microsoft Visual C++ (VC++ 2015+ Redistributable) installed at machine scope. ' +
+                'If it is missing or device policy blocks the install, contact the device administrator. ' +
+                "`n$($result.Stderr)`n$($result.Stdout)")
         }
         Write-Host $result.Stdout
         if ($result.Stderr) { Write-Host $result.Stderr }

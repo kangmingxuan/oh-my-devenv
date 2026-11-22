@@ -249,10 +249,83 @@ Describe 'Fresh profile probe' {
         { Confirm-ManagedProfile -ProfilePath $profilePath -Destination $TestDrive } | Should -Throw '*fixture profile body ran*'
     }
 
-    It 'strips every equivalent managed entry from the merged process and machine PATH' {
-        Mock Get-ManagedProfilePathEntry { 'C:/Users/Example/.local/bin' }
-        Mock Get-HookPath { @('C:/Users/Example/.local/bin', 'C:/Windows', 'c:\USERS\EXAMPLE\.local\bin\') }
-        Get-ProfileProbePath | Should -BeExactly 'C:/Windows'
+    It 'builds the probe Path from persistent entries without inheriting the hook process Path' {
+        $processOnly = Join-Path $TestDrive 'process-only'
+        $fixtureBin = Join-Path $TestDrive 'probe-bin'
+        $separator = [IO.Path]::PathSeparator
+        $persistent = @(
+            [Environment]::GetEnvironmentVariable('Path', 'Machine')
+            [Environment]::GetEnvironmentVariable('Path', 'User')
+        ) -split $separator | Where-Object { $_ }
+        $expected = @($persistent | Select-Object -Unique)
+        if ($expected.Count) {
+            $managed = $expected[0]
+            Mock Get-ManagedProfilePathEntry { $managed.ToUpperInvariant() }
+            $managedKey = ConvertTo-PathKey -Path $managed
+            $expected = @($expected | Where-Object { (ConvertTo-PathKey -Path $_) -cne $managedKey })
+        } else {
+            Mock Get-ManagedProfilePathEntry {}
+        }
+        $originalPath = $env:PATH
+        try {
+            $env:PATH = $processOnly
+            Get-ProfileProbePath | Should -BeExactly ($expected -join $separator)
+            Get-ProfileProbePath -FixtureBin $fixtureBin |
+                Should -BeExactly ((@($fixtureBin) + $expected) -join $separator)
+        } finally {
+            $env:PATH = $originalPath
+        }
+    }
+
+    It 'restores managed entries when mise activation removes them and no overlay exists' {
+        $body = Join-Path $TestDrive 'profile.ps1'
+        $source = Join-Path $PSScriptRoot '../../../dot_config/oh-my-devenv/powershell/profile.ps1'
+        [IO.File]::Copy($source, $body, $true)
+        [IO.File]::WriteAllText((Join-Path $TestDrive 'environment.ps1'), @'
+function Get-ManagedProfilePathEntry { 'fixture-shims'; 'fixture-local-bin'; 'fixture-go-bin' }
+function Get-DefaultGoBin { 'fixture-go-bin' }
+function ConvertTo-PathKey { param([string]$Path) $Path.ToUpperInvariant() }
+function Get-PathApplication {
+    param([string]$Name, [switch]$Optional)
+    if ($Name -eq 'mise') { @{ Source = Join-Path $PSScriptRoot 'mise.ps1' } }
+}
+'@)
+        [IO.File]::WriteAllText((Join-Path $TestDrive 'mise.ps1'), @'
+$global:LASTEXITCODE = 0
+'$env:PATH = "activation-left-this-entry"'
+'@)
+        $runner = Join-Path $TestDrive 'run-profile.ps1'
+        [IO.File]::WriteAllText($runner, @'
+. (Join-Path $PSScriptRoot 'profile.ps1')
+[Console]::Write($env:PATH)
+'@)
+        $pwsh = Join-Path $PSHOME $(if ($IsWindows) { 'pwsh.exe' } else { 'pwsh' })
+        $result = Invoke-NativeCommand -Executable $pwsh -Arguments @('-NoProfile', '-File', $runner)
+        $result.Stdout | Should -BeExactly 'fixture-shims;fixture-local-bin;fixture-go-bin;activation-left-this-entry'
+    }
+
+    It 'rejects a function that shadows the expected application when invoked by its bare name' {
+        $probe = Join-Path $PSScriptRoot '../profile-probe.ps1'
+        $fixtureProfile = Join-Path $TestDrive 'shadowing-profile.ps1'
+        [IO.File]::WriteAllText($fixtureProfile, @'
+. $env:OH_MY_DEVENV_TEST_PROFILE_ENV
+$env:PATH = (@(Get-ManagedProfilePathEntry) + $PSHOME) -join [IO.Path]::PathSeparator
+$env:OH_MY_DEVENV_PROFILE_LOADED = '1'
+$env:OH_MY_DEVENV_POSH_CONFIG = 'fixture-theme'
+function pwsh { 'shadowed' }
+'@)
+        $binary = if ($IsWindows) { 'pwsh.exe' } else { 'pwsh' }
+        $pwsh = Join-Path $PSHOME $binary
+        $environment = @{
+            OH_MY_DEVENV_TEST_PROFILE_ENV = Join-Path $PSScriptRoot '../../../dot_config/oh-my-devenv/powershell/environment.ps1'
+            OH_MY_DEVENV_PROBE_COMMANDS = ConvertTo-Json -InputObject @(@{ Name = $binary; Path = $pwsh }) -Compress
+        }
+        {
+            Invoke-NativeCommand -Executable $pwsh -Arguments @(
+                '-NoProfile', '-File', $probe, '-SuccessMarker', 'fixture-success',
+                '-ExpectedPoshConfig', 'fixture-theme', '-FixtureProfilePath', $fixtureProfile
+            ) -Environment $environment
+        } | Should -Throw "*'pwsh'*Function*"
     }
 
     It 'collects machine PATH entries absent from the process and user PATH' -Skip:(-not $IsWindows) {

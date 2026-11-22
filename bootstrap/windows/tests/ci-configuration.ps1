@@ -75,7 +75,8 @@ function Assert-FixtureCheckFailure {
 
     try {
         & (Join-Path $helpers 'check.ps1') -Destination $destination -ProfilePath $profilePath `
-            -DesktopBaseline:$fixtureConfig.data.desktopBaseline -RegistryPath $pathTarget.RegistryPath
+            -DesktopBaseline:$fixtureConfig.data.desktopBaseline -RegistryPath $pathTarget.RegistryPath `
+            -ProbeFixtureBin $fixtureConfig.scriptEnv.OH_MY_DEVENV_WINDOWS_PROBE_BIN
     } catch {
         # Native stderr is part of the exception message before PowerShell formats it.
         $diagnostic = $_.Exception.Message
@@ -155,9 +156,10 @@ class Stub
     $null = Invoke-NativeCommand -Executable $compiler -Arguments @(
         '/nologo', "/out:$shim", $stubSource, (Join-Path $PSScriptRoot 'Phase4Stub.cs')
     )
-    foreach ($tool in @('ssh', 'winget', 'oh-my-posh')) {
+    foreach ($tool in @('ssh', 'winget', 'oh-my-posh', 'mise')) {
         Copy-Item -LiteralPath $shim -Destination (Join-Path $shimDirectory "$tool.exe")
     }
+    $fixtureConfig.scriptEnv.OH_MY_DEVENV_WINDOWS_PROBE_BIN = $shimDirectory
     $env:OH_MY_DEVENV_TEST_PHASE4 = $fixture
     $env:GOBIN = Join-Path $fixture 'ecosystem-bin'
     $env:UV_TOOL_BIN_DIR = $env:GOBIN
@@ -165,9 +167,7 @@ class Stub
     $env:OH_MY_DEVENV_TEST_HOME = $destination
     $env:OH_MY_DEVENV_TEST_WINGET_LOG = Join-Path $fixture 'winget.log'
     $env:OH_MY_DEVENV_TEST_WINGET_MANIFEST = $packageManifestPath
-    $miseBin = [IO.Directory]::CreateDirectory((Join-Path $fixture 'mise-bin')).FullName
-    Copy-Item -LiteralPath $shim -Destination (Join-Path $miseBin 'mise.exe')
-    $env:PATH = "$shimDirectory;$miseBin;$env:PATH"
+    $env:PATH = "$shimDirectory;$env:PATH"
 }
 
 function Assert-FixtureWinGet {
@@ -302,7 +302,9 @@ function Assert-FixturePathSnapshot {
 }
 
 function Assert-FixturePathUnchanged {
-    Assert-FixturePathSnapshot -RegistryPath $pathTarget.RegistryPath -Expected $afterPhase4
+    param([hashtable]$Expected = $afterPhase4)
+
+    Assert-FixturePathSnapshot -RegistryPath $pathTarget.RegistryPath -Expected $Expected
     if ($recordedPath.Count) {
         if (-not [Linq.Enumerable]::SequenceEqual[byte]([IO.File]::ReadAllBytes($pathTarget.StatePath), $recordBytes)) {
             throw 'The user Path ownership record changed.'
@@ -315,8 +317,21 @@ function Assert-FixturePathUnchanged {
 function Assert-FixturePathUninstall {
     param([hashtable]$Options)
 
+    Assert-FixturePathUnchanged
     $before = Read-UserPath -RegistryPath $pathTarget.RegistryPath
-    $expected = ($before.Value -split ';' | Where-Object { $_ -cnotin $recordedPath }) -join ';'
+    if ($recordedPath.Count) {
+        $key = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($pathTarget.RegistryPath, $true)
+        try { $key.SetValue('Path', "$($before.Value);$($recordedPath[0])", $before.Kind) }
+        finally { $key.Dispose() }
+        $before = Read-UserPath -RegistryPath $pathTarget.RegistryPath
+    }
+    $beforePreview = Get-FixturePathSnapshot -RegistryPath $pathTarget.RegistryPath
+    $remaining = [Collections.Generic.List[string]]::new()
+    $remaining.AddRange([string[]]($before.Value -split ';'))
+    foreach ($entry in $recordedPath) {
+        if (-not $remaining.Remove($entry)) { throw "The fixture Path lacked recorded entry '$entry'." }
+    }
+    $expected = $remaining -join ';'
     $previewOptions = $Options.Clone()
     $previewOptions.Remove('Apply')
     $preview = (& $uninstall @previewOptions 6>&1 | Out-String)
@@ -325,7 +340,7 @@ function Assert-FixturePathUninstall {
             throw "Uninstall preview omitted '$entry'."
         }
     }
-    Assert-FixturePathUnchanged
+    Assert-FixturePathUnchanged -Expected $beforePreview
     & $uninstall @Options
     $after = Read-UserPath -RegistryPath $pathTarget.RegistryPath
     if ($after.Value -cne $expected -or $after.Kind -ne $before.Kind -or [IO.File]::Exists($pathTarget.StatePath)) {
@@ -454,7 +469,7 @@ try {
         }
         $poshBin = [IO.Directory]::CreateDirectory((Join-Path $fixture 'posh-bin')).FullName
         Copy-Item -LiteralPath (Join-Path $installLocation 'oh-my-posh.exe') -Destination $poshBin
-        $env:PATH = "$poshBin;$env:PATH"
+        $fixtureConfig.scriptEnv.OH_MY_DEVENV_WINDOWS_PROBE_BIN = $poshBin
         Write-Host 'Hosted Oh My Posh probe uses the executable copied from the registered MSIX.'
     }
     $ssh = Get-PathApplication -Name ssh
@@ -735,7 +750,7 @@ $env:OH_MY_DEVENV_PROFILE_LOADED = '1'
         $manifestDirectory = Join-Path $source 'bootstrap/manifests/ecosystem'
         $expectedCalls = @(
             'mise install'
-            Read-GoToolManifest -Path (Join-Path $manifestDirectory 'go-tools.txt') | ForEach-Object { "go install $($_.Spec.Trim())" }
+            Read-GoToolManifest -Path (Join-Path $manifestDirectory 'go-tools.txt') | ForEach-Object { "go install $($_.Spec)" }
             Read-UvToolManifest -Path (Join-Path $manifestDirectory 'uv-tools.txt') | ForEach-Object { "uv install $($_.Spec)" }
         )
         if (($phase4Calls -join "`n") -cne ($expectedCalls -join "`n")) {

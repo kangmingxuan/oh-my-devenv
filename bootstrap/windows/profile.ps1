@@ -162,14 +162,21 @@ function Write-ProfileReplacement {
 }
 
 function Get-ProfileProbePath {
-    param([string[]]$ToolDirectories)
+    param([string]$FixtureBin)
 
-    $managed = @(@(Get-ManagedProfilePathEntry) + $ToolDirectories | ForEach-Object { ConvertTo-PathKey -Path $_ })
-    (Get-HookPath | Where-Object { (ConvertTo-PathKey -Path $_) -cnotin $managed }) -join [IO.Path]::PathSeparator
+    $managed = @(Get-ManagedProfilePathEntry | ForEach-Object { ConvertTo-PathKey -Path $_ })
+    $parts = @(
+        $FixtureBin
+        [Environment]::GetEnvironmentVariable('Path', 'Machine')
+        [Environment]::GetEnvironmentVariable('Path', 'User')
+    )
+    ($parts -split [IO.Path]::PathSeparator | Where-Object {
+        $_ -and (ConvertTo-PathKey -Path $_) -cnotin $managed
+    } | Select-Object -Unique) -join [IO.Path]::PathSeparator
 }
 
 function Confirm-ManagedProfile {
-    param([string]$ProfilePath, [string]$Destination, [hashtable[]]$Commands = @())
+    param([string]$ProfilePath, [string]$Destination, [hashtable[]]$Commands = @(), [string]$FixtureBin)
 
     $arguments = @('-NoLogo', '-NonInteractive')
     $fixtureProfile = (ConvertTo-PathKey -Path $ProfilePath) -cne
@@ -183,9 +190,8 @@ function Confirm-ManagedProfile {
     if ($fixtureProfile) {
         $arguments += @('-FixtureProfilePath', $ProfilePath)
     }
-    $toolDirectories = @($Commands | ForEach-Object { [IO.Path]::GetDirectoryName($_.Path) } | Select-Object -Unique)
     $probeEnvironment = @{
-        PATH = Get-ProfileProbePath -ToolDirectories $toolDirectories
+        PATH = Get-ProfileProbePath -FixtureBin $FixtureBin
         OH_MY_DEVENV_PROBE_COMMANDS = ConvertTo-Json -InputObject $Commands -Compress
         OH_MY_DEVENV_PROFILE_LOADED = $null
         OH_MY_DEVENV_PROBE_PROMPT = '1'

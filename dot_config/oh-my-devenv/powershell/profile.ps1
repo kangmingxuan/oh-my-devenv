@@ -74,17 +74,17 @@ Remove-Variable -Name ohMyDevenvPoshActivation
 $ohMyDevenvLocalProfile = Join-Path $PSScriptRoot 'profile.local.ps1'
 if (Test-Path -LiteralPath $ohMyDevenvLocalProfile -PathType Leaf) {
     . $ohMyDevenvLocalProfile
-    & {
-        . (Join-Path $PSScriptRoot 'environment.ps1')
-        $pathKeys = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
-        foreach ($entry in ($env:PATH -split ';')) {
-            [void]$pathKeys.Add((ConvertTo-PathKey -Path $entry))
-        }
-        $missing = @(Get-ManagedProfilePathEntry | Where-Object { $pathKeys.Add((ConvertTo-PathKey -Path $_)) })
-        if ($missing.Count) {
-            $env:PATH = ($missing + $env:PATH) -join ';'
-        }
-    }
 }
 Remove-Variable -Name ohMyDevenvLocalProfile
+& {
+    . (Join-Path $PSScriptRoot 'environment.ps1')
+    $pathKeys = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+    foreach ($entry in ($env:PATH -split ';')) {
+        [void]$pathKeys.Add((ConvertTo-PathKey -Path $entry))
+    }
+    $missing = @(Get-ManagedProfilePathEntry | Where-Object { $pathKeys.Add((ConvertTo-PathKey -Path $_)) })
+    if ($missing.Count) {
+        $env:PATH = ($missing + $env:PATH) -join ';'
+    }
+}
 $env:OH_MY_DEVENV_PROFILE_LOADED = '1'

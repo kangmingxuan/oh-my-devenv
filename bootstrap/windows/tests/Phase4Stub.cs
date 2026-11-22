@@ -59,20 +59,23 @@ static class Phase4Stub
         {
             if (args.Length == 2 && args[0] == "install")
             {
-                string spec = args[1].Trim();
+                string spec = args[1];
                 int separator = spec.LastIndexOf('@');
                 string package = spec.Substring(0, separator);
                 string name = Regex.Replace(package, @"/v([2-9]|[1-9][0-9]+)$", "");
                 name = name.Substring(name.LastIndexOf('/') + 1);
                 string bin = Environment.GetEnvironmentVariable("GOBIN");
                 CopyExecutable(bin, name);
-                File.WriteAllText(Path.Combine(bin, name + ".fixture-version"), spec.Substring(separator + 1));
+                File.WriteAllLines(Path.Combine(bin, name + ".fixture-build-info"), new[] {
+                    "\tpath\t" + package,
+                    "\tmod\t" + package + "\t" + spec.Substring(separator + 1)
+                });
                 Log("go install " + spec);
                 return 0;
             }
             if (args.Length == 3 && args[0] == "version" && args[1] == "-m" && File.Exists(args[2]))
             {
-                Console.WriteLine("\tmod\texample.invalid/fixture\t" + File.ReadAllText(Path.ChangeExtension(args[2], ".fixture-version")));
+                Console.Write(File.ReadAllText(Path.ChangeExtension(args[2], ".fixture-build-info")));
                 return 0;
             }
             return 92;

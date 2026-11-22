@@ -2,7 +2,8 @@ param(
     [string]$Destination = $HOME,
     [string]$ProfilePath = $PROFILE.CurrentUserAllHosts,
     [string]$RegistryPath = 'Environment',
-    [switch]$DesktopBaseline
+    [switch]$DesktopBaseline,
+    [string]$ProbeFixtureBin
 )
 
 Set-StrictMode -Version Latest
@@ -64,7 +65,7 @@ $commands = @(
     Confirm-EcosystemTool -GoManifest (Join-Path $manifestRoot 'ecosystem/go-tools.txt') `
         -UvManifest (Join-Path $manifestRoot 'ecosystem/uv-tools.txt')
 )
-Confirm-ManagedProfile -ProfilePath $ProfilePath -Destination $Destination -Commands $commands
+Confirm-ManagedProfile -ProfilePath $ProfilePath -Destination $Destination -Commands $commands -FixtureBin $ProbeFixtureBin
 
 $ssh = Get-PathApplication -Name ssh
 $version = Invoke-NativeCommand -Executable $ssh.Source -Arguments @('-V')

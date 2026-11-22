@@ -24,7 +24,7 @@ Describe 'Windows phase 4 helpers' -Skip:(-not $IsWindows) {
 
         It 'omits blank lines and comments and preserves remaining entry text' {
             [IO.File]::WriteAllText($manifest, "# comment`r`n`t `r`nalpha # inline`r`nbeta`r`n")
-            @(Read-EcosystemManifest -Path $manifest) | Should -BeExactly @('alpha ', 'beta')
+            @(Read-EcosystemManifest -Path $manifest) | Should -BeExactly @('alpha', 'beta')
         }
 
         It 'reads Go <Spec> as <Name> at <Version>' -ForEach @(
@@ -40,6 +40,7 @@ Describe 'Windows phase 4 helpers' -Skip:(-not $IsWindows) {
             $tool = Read-GoToolManifest -Path $manifest
             $tool.Name | Should -BeExactly $Name
             $tool.Version | Should -BeExactly $Version
+            $tool.ImportPath | Should -BeExactly ($Spec -csplit '@')[0]
         }
 
         It 'rejects a Go entry that is not pinned: <_>' -ForEach @(
@@ -102,7 +103,7 @@ Describe 'Windows phase 4 helpers' -Skip:(-not $IsWindows) {
             Mock Invoke-NativeCommand { @{ ExitCode = 42; Stdout = ''; Stderr = 'blocked by fixture policy' } } -ParameterFilter {
                 $Executable -eq 'winget.exe'
             }
-            { Install-Mise } | Should -Throw '*jdx.mise failed (exit 42)*blocked by fixture policy*'
+            { Install-Mise } | Should -Throw '*jdx.mise failed (exit 42)*VC++ 2015+ Redistributable*blocked by fixture policy*'
             Should -Invoke Update-HookPath -Times 0 -Exactly
             Should -Invoke Invoke-NativeCommand -Times 0 -Exactly -ParameterFilter { $Executable -eq 'mise.exe' }
         }
@@ -159,8 +160,17 @@ Describe 'Windows phase 4 helpers' -Skip:(-not $IsWindows) {
             Should -Invoke Invoke-NativeCommand -Times 0 -Exactly
         }
 
+        It 'passes a commented Go pin to the installer without trailing whitespace' {
+            [IO.File]::WriteAllText($manifest, 'example.com/first@v1.2.3  # pinned for the fixture')
+            Install-GoTool -ManifestPath $manifest
+            Should -Invoke Invoke-NativeCommand -Times 1 -Exactly -ParameterFilter {
+                $Executable -eq 'managed-go.exe' -and $Arguments[0] -ceq 'install' -and
+                $Arguments[1] -ceq 'example.com/first@v1.2.3'
+            }
+        }
+
         It 'skips an exact uv pin on the selected Python' {
-            [IO.File]::WriteAllText($manifest, 'fixture==1.2.3')
+            [IO.File]::WriteAllText($manifest, 'fixture==1.2.3  # pinned for the fixture')
             Install-UvTool -ManifestPath $manifest
             Should -Invoke Invoke-NativeCommand -Times 1 -Exactly -ParameterFilter {
                 $Executable -like '*fixture*Scripts*python.exe'
@@ -189,12 +199,41 @@ Describe 'Windows phase 4 helpers' -Skip:(-not $IsWindows) {
         }
 
         It 'uses normal uv install for a different pin without uninstalling a healthy environment' {
-            [IO.File]::WriteAllText($manifest, 'fixture==2.0.0')
+            [IO.File]::WriteAllText($manifest, 'fixture==2.0.0  # pinned for the fixture')
             Install-UvTool -ManifestPath $manifest
             Should -Invoke Invoke-NativeCommand -Times 0 -Exactly -ParameterFilter { $Arguments[1] -eq 'uninstall' }
             Should -Invoke Invoke-NativeCommand -Times 1 -Exactly -ParameterFilter {
                 ($Arguments -join ' ') -ceq 'tool install --python managed-python.exe fixture==2.0.0'
             }
+        }
+
+        It 'checks a commented uv pin against the installed version' {
+            $goManifest = Join-Path $TestDrive 'empty-go.txt'
+            [IO.File]::WriteAllText($goManifest, '')
+            [IO.File]::WriteAllText($manifest, 'fixture==1.2.3  # pinned for the fixture')
+            Mock Confirm-ToolBinary { Join-Path $TestDrive 'fixture.exe' }
+            Mock Invoke-NativeCommand { @{ Stdout = $TestDrive } } -ParameterFilter { ($Arguments -join ' ') -ceq 'tool dir --bin' }
+            $commands = @(Confirm-EcosystemTool -GoManifest $goManifest -UvManifest $manifest)
+            $commands.Count | Should -Be 1
+            $commands[0].Path | Should -BeExactly (Join-Path $TestDrive 'fixture.exe')
+        }
+
+        It 'checks the Go command package path independently of the module and version' {
+            $uvManifest = Join-Path $TestDrive 'empty-uv.txt'
+            [IO.File]::WriteAllText($uvManifest, '')
+            [IO.File]::WriteAllText($manifest, 'example.com/module/cmd/tool@v1.2.3')
+            Mock Confirm-ToolBinary { Join-Path $env:GOBIN 'tool.exe' }
+            $buildPath = 'example.com/module/cmd/tool'
+            Mock Invoke-NativeCommand {
+                @{ Stdout = "`tpath`t$buildPath`n`tmod`texample.com/module`tv1.2.3" }
+            } -ParameterFilter { $Arguments[0] -ceq 'version' }
+
+            $commands = @(Confirm-EcosystemTool -GoManifest $manifest -UvManifest $uvManifest)
+            $commands.Count | Should -Be 1
+            $commands[0].Path | Should -BeExactly (Join-Path $env:GOBIN 'tool.exe')
+            $buildPath = 'example.com/module/cmd/another-tool'
+            { Confirm-EcosystemTool -GoManifest $manifest -UvManifest $uvManifest } |
+                Should -Throw "*command path 'example.com/module/cmd/tool'*"
         }
     }
 
@@ -231,16 +270,45 @@ Describe 'Windows phase 4 helpers' -Skip:(-not $IsWindows) {
                 Add-ManagedUserPath @target -Entries $entries
                 [Linq.Enumerable]::SequenceEqual[byte]($bytes, [IO.File]::ReadAllBytes($state)) | Should -BeTrue
                 (Read-UserPath -RegistryPath $registry).Value | Should -BeExactly $after.Value
+                $key = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($registry, $true)
+                try { $key.SetValue('Path', "$($after.Value);$($entries[0])", $after.Kind) }
+                finally { $key.Dispose() }
                 (Get-UserPathRemoval @target).Entries | Should -BeExactly @($entries[0], $entries[2])
                 Remove-ManagedUserPath @target
                 $final = Read-UserPath -RegistryPath $registry
-                $final.Value | Should -BeExactly $original
+                $final.Value | Should -BeExactly "$original;$($entries[0])"
                 $final.Kind | Should -Be 'ExpandString'
                 [IO.File]::Exists($state) | Should -BeFalse
                 Should -Invoke Send-UserPathChange -Times 2 -Exactly
             } finally {
                 $env:OH_MY_DEVENV_PATH_TEST_HOME = $oldFixture
             }
+        }
+
+        It 'records ownership before a registry write fails and finishes the change on retry' {
+            $original = "C:\other;$($entries[0])"
+            $key = [Microsoft.Win32.Registry]::CurrentUser.CreateSubKey($registry)
+            try { $key.SetValue('Path', $original, 'String') }
+            finally { $key.Dispose() }
+            [void][IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($state))
+            [IO.File]::WriteAllText($state, (ConvertTo-Json -InputObject @($entries[0]) -Compress))
+
+            # The .NET registry API rejects a subkey segment longer than 255 characters.
+            $blockedRegistry = "$registry\$([string]::new('x', 256))"
+            Mock Read-UserPath { @{ Kind = 'String'; Value = $original } } -ParameterFilter {
+                $RegistryPath -ceq $blockedRegistry
+            }
+            { Add-ManagedUserPath -RegistryPath $blockedRegistry -StatePath $state -Entries $entries } |
+                Should -Throw '*255*'
+            (Read-UserPath -RegistryPath $registry).Value | Should -BeExactly $original
+            @(Read-UserPathRecord -StatePath $state) | Should -BeExactly $entries
+            Should -Invoke Send-UserPathChange -Times 0 -Exactly
+
+            Add-ManagedUserPath @target -Entries $entries
+            @(Read-UserPathRecord -StatePath $state) | Should -BeExactly $entries
+            (Read-UserPath -RegistryPath $registry).Value | Should -BeExactly ("C:\other;" + ($entries -join ';'))
+            Remove-ManagedUserPath @target
+            (Read-UserPath -RegistryPath $registry).Value | Should -BeExactly 'C:\other'
         }
 
         It 'handles <State> Path and retains the type of an existing empty value' -ForEach @(

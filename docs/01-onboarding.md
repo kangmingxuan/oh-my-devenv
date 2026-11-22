@@ -14,6 +14,12 @@ source. Run `winget upgrade` separately when you want to upgrade packages.
 Apply installs mise with WinGet when it is missing. It also installs the
 runtimes in the shared mise configuration and the Go and uv tools in
 `bootstrap/manifests/ecosystem/`.
+
+The WinGet mise package requires the Microsoft Visual C++ 2015+ Redistributable
+that matches its architecture (x64 or ARM64). The redistributable installs at
+machine scope. On a standard-user device that lacks it, ask the device
+administrator to provision it before you apply.
+
 PowerShell must be 7.6 or later. Check the effective execution policy with
 `Get-ExecutionPolicy` inside `pwsh`. If policy blocks the hooks, the source,
 or an installer, stop and contact the device administrator.
@@ -52,8 +58,9 @@ at `~/.config/oh-my-devenv/powershell/profile.local.ps1`. If the overlay sets
 `GOBIN`, the profile prepends that directory to `PATH` when it is missing.
 Apply adds the mise shims directory, `~/.local/bin`, and the Go binary directory
 to the user `Path`. Restart an already running app if it still sees the old
-`Path`. The ownership record in `%LOCALAPPDATA%\oh-my-devenv\user-path.json`
-lists only the entries apply added.
+`Path`. Apply records missing entries in
+`%LOCALAPPDATA%\oh-my-devenv\user-path.json` before it adds them. If the registry
+write fails, reapply to add the entries that are still missing.
 
 ```powershell
 $source = chezmoi source-path

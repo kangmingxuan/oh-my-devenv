@@ -1,6 +1,6 @@
 # 技术设计：原生 Windows 平台
 
-状态：已接受。阶段 3（系统包和桌面基线）已通过托管 Windows smoke 和 apply 作业。阶段 4 已实现，待托管 Windows 作业验证。阶段 5 尚未开始。
+状态：已接受。阶段 3 和阶段 4 已通过托管 Windows smoke 和 apply 作业。阶段 4 仍待在全新的标准用户 Windows 客户端上验证。阶段 5 尚未开始。
 
 ## 1. 概要
 
@@ -135,6 +135,7 @@ hook 20 的设备策略规则停止 apply。
 - Windows hook 和辅助脚本只面向 PowerShell 7.6 或更高版本编写。
 - 在 Windows 上，`.chezmoi.toml.tmpl` 将 `[interpreters.ps1]` 设为 `pwsh -NoLogo -NoProfile -File`。hook 独立于用户的 PowerShell profile 运行。hook 15 维护 profile 的受管行，hook 60 在单独的 shell 中验证启动。已有配置时，在 apply 前运行 `chezmoi init` 刷新配置。[chezmoi 解释器配置](https://www.chezmoi.io/reference/configuration-file/interpreters/)。
 - 在启动 chezmoi 前安装 `pwsh`，让每个 hook 都能从初始 `PATH` 找到解释器。
+- WinGet 的 `jdx.mise` 包需要与其架构（x64 或 ARM64）匹配的 Microsoft Visual C++ 2015+ Redistributable。该运行库在机器范围安装。标准用户设备缺少该运行库时，请在 apply 前由设备管理员预装。WinGet 失败时，hook 30 停止。
 - 正在运行的 PowerShell 版本低于 7.6 时，hook 00 失败。这只是兼容性下限；hook 00 不检查支持状态。与其他前置条件一样，由用户让 PowerShell 保持在受支持的版本并装上最新的服务更新。把最低版本写进 `AGENTS.md`，与 Bash 3.2 规则并列。
 - 每个脚本以 `Set-StrictMode -Version Latest` 和 `$ErrorActionPreference = 'Stop'` 开头。
 - 检查每个原生命令的退出码。默认情况下，原生命令失败时 `$ErrorActionPreference` 不会中止执行。
@@ -161,7 +162,7 @@ hook 20 的设备策略规则停止 apply。
 - hook 15 在每次 apply 时，把 mise shims 目录、`~/.local/bin` 和 `$GOBIN` 加入 `HKCU\Environment` 中的用户 `Path`。这从阶段 4 开始，因为这些目录中的工具在阶段 4 才安装。
 - 只添加缺失的条目。绝不重复添加同一条目。保留其他所有条目及其顺序。
 - 写入解析后的目录路径。不要新增 `%GOBIN%` 引用，因为 `GOBIN` 不持久化。
-- 把基线实际添加的每个条目记录到有效 LocalApplicationData 目录下的 `oh-my-devenv/user-path.json`。重复 apply 保留这份记录。首次 apply 前已存在的条目不记录，也不受管。
+- 写入注册表前，把每个缺失条目记录到有效 LocalApplicationData 目录下的 `oh-my-devenv/user-path.json`。重复 apply 保留这份记录，并添加仍然缺失的条目。首次 apply 前已存在的条目不记录，也不受管。
 - 保留注册表值的类型和未展开的条目，例如 `%USERPROFILE%` 引用。不要把展开后的值写回。
 - 注册表值变更时，广播带有 `Environment` 的 `WM_SETTINGCHANGE`。已经在运行、且不处理该通知的应用，要重启后才能看到变更。
 - 不修改机器 `Path`，因为它需要提权。
@@ -171,11 +172,12 @@ hook 20 的设备策略规则停止 apply。
 - `Path` 的写入、读取和卸载辅助函数把注册表目标作为显式参数。smoke test 传入 fixture 目标并模拟变更通知，因为临时 home 不会隔离 `HKCU`。真实 apply job 检查并恢复 runner 账户的用户 `Path`。
 - profile 保留自己的 `PATH` 设置。它决定 PowerShell 会话中的顺序，且不依赖持久化条目。
 
-`check.ps1` 还通过一个新启动、会加载 profile 的 PowerShell 检查命令解析。子进程会继承父进程的环境，所以检查从不含 hook 附加项的机器与用户环境构建子进程环境。在加载 profile 前，检查从合并后的子进程 `Path` 中移除受管目录的每一次出现，包括来自机器 `Path` 的条目。检查不修改持久化值。否则，hook 环境或已有条目可能掩盖 profile 没有把某个工具加入 `PATH` 的问题。一个负向测试从 fixture profile 中去掉一个必需路径，并期望检查失败。第二个负向测试通过 fixture 机器 `Path` 提供同一目录。
+`check.ps1` 通过一个新启动、会加载 profile 的 PowerShell 检查命令解析。它用持久化的机器和用户 `Path` 构建子进程的 `Path`。它移除 profile 会恢复的目录的所有条目，以便发现 profile 遗漏的必需目录。托管测试显式向探针传入 fixture 中 Oh My Posh 可执行文件所在的目录。
 
 在阶段 2，新进程检查受管 profile 主体是否运行完毕，以及它是否加入了受管目录。
 smoke fixture 要求两种情况报错：profile 在受管行之前返回，或者报告运行完毕却没有加入必需路径。
 阶段 4 还通过新进程验证所选的 mise 命令，以及共享清单中的 Go 和 uv 命令。
+按不带扩展名的命令名查找时，第一项结果必须是预期的应用程序。
 
 ### 首次运行备份
 
@@ -204,7 +206,7 @@ hook 10 在文件内容上沿用 Unix 的约定：首次 apply 覆盖目标之�
 
 - uv 工具环境的解释器位于 `Scripts\python.exe`，而不是 `bin/python`。
 - 可执行文件带 `.exe` 后缀。比较解析到的命令与安装器所属二进制的遮蔽检查要包含这个后缀。
-- 检查器用 `go version -m` 读取 Go 模块版本，用 `uv tool list` 读取 uv 包版本。检查 uv 工具的解释器是否与记录版本及 mise 选定的 Python 一致。
+- 检查器用 `go version -m` 读取 Go 命令导入路径和模块版本，用 `uv tool list` 读取 uv 包版本。检查 uv 工具的解释器是否与记录版本及 mise 选定的 Python 一致。
 - Unix 辅助脚本在 `/` 下运行全局 mise 命令，使调用方工作目录的项目配置不生效。PowerShell 辅助脚本出于同样的原因，在系统盘根目录（`$env:SystemDrive\`）下运行这些命令。mise 从当前目录向上查找项目配置，直到盘符根目录，所以用户 profile 下的临时目录不能隔离这些命令：父目录中的配置文件仍会生效。根目录本身的配置文件在 Unix 和 Windows 上都仍会生效。用户全局配置（默认是 `%USERPROFILE%\.config\mise\config.toml`）与这一查找无关，始终生效。Unix 上的默认系统配置目录 `/etc/mise` 是绝对路径；Windows 上它解析到当前目录所在的盘，所以在系统盘根目录下运行时，使用的是该盘上的 `\etc\mise`。
 
 ## 8. 共享数据
@@ -251,7 +253,7 @@ chezmoi 可以通过 `.chezmoiexternal` 用配置数据计算目标路径。Clau
 - 控制台输入或输出被重定向时，脚本宿主跳过提示符初始化，仍加载 profile 的其他部分和本地 overlay。检查器在新 PowerShell 进程中显式启用提示符初始化，以验证同一条初始化路径。
 - 初始化脚本导出解析后的 `POSH_CONFIG` 和 `POSH_SESSION_ID`。生成的脚本注册提示符函数后，profile 在运行 overlay 前记录该配置路径。检查器在新 PowerShell 进程中清除继承值，并要求记录的路径与已部署主题一致。[会话变量](https://github.com/JanDeDobbeleer/oh-my-posh/blob/v33.0.0/src/shell/init.go#L315-L326)、[延迟渲染提示符](https://github.com/JanDeDobbeleer/oh-my-posh/blob/v33.0.0/src/shell/init.go#L270-L290)。
 - 本地 overlay `~/.config/oh-my-devenv/powershell/profile.local.ps1` 存在时加载它。overlay 可以覆盖提示符。
-- 运行 overlay 后，把缺失的受管目录放到 `PATH` 最前面，包括实际生效的 `GOBIN`。保留 overlay 中已有的 `PATH` 条目及其顺序。
+- 每次加载 profile 时，在可选的 overlay 步骤后，把缺失的受管目录放到 `PATH` 最前面，包括实际生效的 `GOBIN`。保留已有的 `PATH` 条目及其顺序。
 
 profile 只影响 PowerShell 会话。从 Windows shell 启动的应用（例如从开始菜单启动的 IDE）不会加载它。持久化的用户 `Path` 条目覆盖这些应用（第 7 节）。
 
@@ -405,18 +407,22 @@ Windows OpenSSH 9.5p2 读取了受管的默认配置，并拒绝了顶层配置�
 
 `905d27a` 的阶段 3 托管运行通过了所有作业。Windows smoke 通过 74 项 Pester 测试，跳过 1 项。Windows apply 完成了用户范围的 WinGet 导入，包括 PowerToys。它使用已安装的 Oh My Posh 可执行文件副本验证了受管提示符。单独运行的普通 `pwsh -File` 加载了 profile 和 overlay，随后正常退出。用户设备上的首次 apply 和 Oh My Posh 应用执行别名检查仍待进行。[完整 CI 运行](https://github.com/kangmingxuan/oh-my-devenv/actions/runs/44912366118)、[Windows smoke](https://github.com/kangmingxuan/oh-my-devenv/actions/runs/44912366118/job/136870704931)、[Windows apply](https://github.com/kangmingxuan/oh-my-devenv/actions/runs/44912366118/job/136870704962)。
 
-阶段 4 保留共享 mise 配置中的所有工具。托管 apply job 会逐项记录工具的安装结果，
-检查安装日志是否包含路径长度错误，并测量有效 mise 数据目录和 uv 工具目录中的最长
-安装路径。两项结果等待阶段 4 的首次托管 apply 验证。
-<!-- Claude: link the phase-4 Windows smoke and apply jobs here. -->
+`edde9e9` 的阶段 4 托管运行通过了所有作业。WinGet 在 x64 runner 上安装了 mise
+2026.11.12。mise 安装了共享配置中的全部六项工具：Go 1.27.1、golangci-lint v2.14.0、
+Node 24.21.0、Python 3.13.16、usage 6.12.0 和 uv 0.11.33。mise 数据目录和 uv 工具
+目录中观察到的最长路径分别为 165 和 203 个字符。安装日志没有路径长度错误。
+[完整 CI 运行](RUN_LINK)、[Windows smoke](SMOKE_LINK)、[Windows apply](APPLY_LINK)。
+
+全新的标准用户 Windows 客户端仍待验证。WinGet 的 mise 包需要在机器范围安装架构
+匹配的 Microsoft Visual C++ 2015+ Redistributable。缺少该运行库时，请在 apply 前
+由设备管理员预装。
 
 在依赖某一项的阶段开始前解决其余事项。
 
 | 事项 | 阶段 |
 | --- | --- |
 | 实际生效的脚本执行策略是否允许 chezmoi 运行 `.ps1` hook，以及不允许时的停止条件。不绕过设备策略。PowerShell 7 与 Windows PowerShell 5.1 分开存储执行策略设置。组策略可以让它使用 Windows PowerShell 的策略设置，所以要在 `pwsh` 下检查实际生效的策略。 | 2 |
-| 共享 mise 配置中每项工具的 Windows 安装结果。待托管 apply 提供证据。 | 4 |
-| 运行时和工具安装的路径长度错误及最长路径。待托管 apply 提供证据。不要假定 Windows 长路径支持（`LongPathsEnabled`）已开启；开启需要提权。仅有这个设置不能保证每个安装器或工具都支持长路径；要验证它们的实际行为。Git 另有独立的 `core.longpaths` 设置。 | 4 |
+| 在满足第 7 节前置条件的全新标准用户 Windows 客户端上完成首次 apply。 | 4 |
 
 ## 18. 来源
 

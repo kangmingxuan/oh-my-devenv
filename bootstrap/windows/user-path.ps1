@@ -123,16 +123,11 @@ function Add-ManagedUserPath {
     $newValue = if ($before.Value) { $before.Value + ';' + ($missing -join ';') } else { $missing -join ';' }
     try {
         [IO.File]::WriteAllText($temporary, (ConvertTo-Json -InputObject $record -Compress))
+        # Keep ownership if the process stops after the registry write. A retry adds any entries still missing.
+        [IO.File]::Move($temporary, $StatePath, $true)
         $key = [Microsoft.Win32.Registry]::CurrentUser.CreateSubKey($RegistryPath)
         try {
             $key.SetValue('Path', $newValue, $kind)
-            try {
-                [IO.File]::Move($temporary, $StatePath, $true)
-            } catch {
-                if ($null -eq $before.Kind) { $key.DeleteValue('Path', $false) }
-                else { $key.SetValue('Path', $before.Value, $before.Kind) }
-                throw
-            }
         } finally {
             $key.Dispose()
         }
