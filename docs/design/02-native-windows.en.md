@@ -149,14 +149,14 @@ Every hook that runs in the chezmoi process inherits the `PATH` that chezmoi sta
 
 1. Read the current machine and user `Path` values.
 2. Prepend the managed directories: the mise shims directory under `%LOCALAPPDATA%\mise`, `~/.local/bin`, and `$GOBIN`.
-3. Set `GOPATH` and `GOBIN` to the same defaults that the Unix env templates use (`~/go` and `$GOPATH/bin`).
+3. Keep existing `GOPATH` and `GOBIN` values. If `GOPATH` is empty, set it to `~/go`. If `GOBIN` is empty, set it to the `bin` directory under the first `GOPATH` entry.
 
 In phase 3, the hook helper merges the process, machine, and current user
 `Path` values. WinGet writes user-scope portable paths to
 `HKCU\Environment\Path`. With symlink support, it uses
 `%LOCALAPPDATA%\Microsoft\WinGet\Links`. Without it, WinGet can
 add the package directory. The checker reads those values again after
-hook 20. Hooks 30, 40, 50, and the checker also prepend the managed directories and set the Go defaults for their own process.
+hook 20. Hooks 30, 40, 50, and the checker also prepend the managed directories to their process `PATH`. They keep existing `GOPATH` and `GOBIN` values and set defaults only when those variables are empty.
 [WinGet portable installer](https://github.com/microsoft/winget-cli/blob/master/src/AppInstallerCLICore/PortableInstaller.cpp),
 [WinGet Path registry implementation](https://github.com/microsoft/winget-cli/blob/master/src/AppInstallerCommonCore/PathVariable.cpp).
 
@@ -167,12 +167,12 @@ The user decided to add the managed directories to the persistent user `Path` (s
 - Hook 15 adds the mise shims directory, `~/.local/bin`, and `$GOBIN` to the user `Path` in `HKCU\Environment` on every apply. This starts in phase 4, when the tools in these directories arrive.
 - Add only missing entries. Never add an entry twice. Keep every other entry and its order.
 - Write the resolved directory paths. Do not add a new `%GOBIN%` reference, because `GOBIN` is not persisted.
-- Record each missing entry in `oh-my-devenv/user-path.json` under the effective LocalApplicationData folder before writing the registry. Reapply keeps this record and adds any entries still missing. An entry that existed before the first apply is not recorded and is not managed.
+- Record each missing entry in `oh-my-devenv/user-path.json` under the effective LocalApplicationData folder before writing the registry. Reapply keeps this record and adds any entries still missing. An entry already present at apply time is not newly added to the record. If the managed directory is later absent from the user `Path`, the next apply adds it and records it if it is not already recorded.
 - Keep the registry value type and the unexpanded entries, such as `%USERPROFILE%` references. Do not write the expanded value back.
 - Broadcast `WM_SETTINGCHANGE` with `Environment` when the registry value changes. Applications that are already running and do not handle the notification see the change only after a restart.
 - Do not change the machine `Path`. It needs elevation.
 - Do not persist `GOPATH` or `GOBIN`. Their values match the Go defaults.
-- The uninstall preview lists recorded entries still in the user `Path`. Apply removes one exact occurrence per recorded entry and deletes the record. It keeps matching entries that existed before the first apply and all other entries. It does not restore an old snapshot of the whole `Path`.
+- The uninstall preview lists recorded entries still in the user `Path`. Uninstall with `-Apply` removes one exact occurrence per recorded entry and deletes the record. It keeps matching entries that existed before the first apply and all other entries. It does not restore an old snapshot of the whole `Path`.
 - `check.ps1` fails when the user `Path` lacks any of the three required directories listed above, including a directory whose entry existed before the first apply. The ownership record controls uninstall removal, not the set of directories to check.
 - The `Path` writer, reader, and uninstaller take the registry target as an explicit parameter. Smoke tests pass a fixture target and mock the change notification, because a temporary home does not isolate `HKCU`. The real apply job checks and restores the runner account's user `Path`.
 - The profile keeps its own `PATH` setup. It sets the order in PowerShell sessions and works without the persistent entries.
@@ -359,7 +359,7 @@ Add one Windows overlay, `profile.local.ps1` (section 9), in phase 2 together wi
   the test ownership record. The job logs requested and installed versions for
   each mise tool, identified path-length errors, and the longest path found
   under the mise data and uv tool directories.
-- A coverage gap in real installation requires live signoff before merge. Section 17 records hosted coverage. The user scheduled the first live apply after all planned phases.
+- Section 17 records hosted coverage. The hosted jobs leave the clean-client install and the Oh My Posh app execution alias unverified. The user deferred the first live apply until after all planned phases and deferred the Oh My Posh MSIX check to that apply.
 - Run both Windows jobs under the same `needs-checks` condition as the Unix jobs, and feed them into the existing single required check. This avoids a second path classifier that could skip Windows CI after a change to a shared file.
 - Live installs on a real Windows machine follow the same local validation policy as the Unix platforms.
 
@@ -422,8 +422,8 @@ The hosted phase-4 run on `edde9e9` passed all jobs. WinGet installed mise
 2026.11.12 on the x64 runner. mise installed all six shared tools: Go 1.27.1,
 golangci-lint v2.14.0, Node 24.21.0, Python 3.13.16, usage 6.12.0, and uv 0.11.33.
 The longest observed paths were 165 characters under the mise data directory
-and 203 under the uv tools directory. The install log showed no path-length
-error. [Full CI run](RUN_LINK), [Windows smoke](SMOKE_LINK), [Windows apply](APPLY_LINK).
+and 203 under the uv tools directory. The captured apply log had no path-length
+error that matched the diagnostic patterns. These runner paths do not establish behavior for longer client paths. [Full CI run](https://github.com/kangmingxuan/oh-my-devenv/actions/runs/44985641100), [Windows smoke](https://github.com/kangmingxuan/oh-my-devenv/actions/runs/44985641100/job/137095504120), [Windows apply](https://github.com/kangmingxuan/oh-my-devenv/actions/runs/44985641100/job/137095504118).
 
 A clean standard-user Windows client remains unverified. The WinGet mise
 package requires the architecture-matched Microsoft Visual C++ 2015+

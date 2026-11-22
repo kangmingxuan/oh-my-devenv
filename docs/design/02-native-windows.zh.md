@@ -146,12 +146,12 @@ hook 20 的设备策略规则停止 apply。
 
 1. 读取当前的机器 `Path` 和用户 `Path`。
 2. 把受管目录放到最前面：`%LOCALAPPDATA%\mise` 下的 mise shims 目录、`~/.local/bin` 和 `$GOBIN`。
-3. 把 `GOPATH` 和 `GOBIN` 设为与 Unix env 模板相同的默认值（`~/go` 和 `$GOPATH/bin`）。
+3. 保留已有的 `GOPATH` 和 `GOBIN` 值。`GOPATH` 为空时设为 `~/go`。`GOBIN` 为空时设为第一个 `GOPATH` 条目下的 `bin` 目录。
 
 阶段 3 的 hook 辅助函数合并进程、机器和当前用户的 `Path`。WinGet 把用户级便携包路径写入
 `HKCU\Environment\Path`。支持符号链接时，使用
 `%LOCALAPPDATA%\Microsoft\WinGet\Links`。否则 WinGet 可以加入包目录。
-检查器在 hook 20 之后重读这些值。hook 30、40、50 和检查器也会把受管目录放到本进程的 `PATH` 前面，并设置 Go 的默认值。
+检查器在 hook 20 之后重读这些值。hook 30、40、50 和检查器也会把受管目录放到本进程的 `PATH` 前面。它们保留已有的 `GOPATH` 和 `GOBIN` 值，只在变量为空时设置默认值。
 [WinGet 便携包安装器](https://github.com/microsoft/winget-cli/blob/master/src/AppInstallerCLICore/PortableInstaller.cpp)、
 [WinGet Path 注册表实现](https://github.com/microsoft/winget-cli/blob/master/src/AppInstallerCommonCore/PathVariable.cpp)。
 
@@ -162,7 +162,7 @@ hook 20 的设备策略规则停止 apply。
 - hook 15 在每次 apply 时，把 mise shims 目录、`~/.local/bin` 和 `$GOBIN` 加入 `HKCU\Environment` 中的用户 `Path`。这从阶段 4 开始，因为这些目录中的工具在阶段 4 才安装。
 - 只添加缺失的条目。绝不重复添加同一条目。保留其他所有条目及其顺序。
 - 写入解析后的目录路径。不要新增 `%GOBIN%` 引用，因为 `GOBIN` 不持久化。
-- 写入注册表前，把每个缺失条目记录到有效 LocalApplicationData 目录下的 `oh-my-devenv/user-path.json`。重复 apply 保留这份记录，并添加仍然缺失的条目。首次 apply 前已存在的条目不记录，也不受管。
+- 写入注册表前，把每个缺失条目记录到有效 LocalApplicationData 目录下的 `oh-my-devenv/user-path.json`。重复 apply 保留这份记录，并添加仍然缺失的条目。apply 时已存在的条目不会因此新增到记录中。如果用户 `Path` 中之后不再有该受管目录，下一次 apply 会添加它；如果记录中尚无该条目，也会记录它。
 - 保留注册表值的类型和未展开的条目，例如 `%USERPROFILE%` 引用。不要把展开后的值写回。
 - 注册表值变更时，广播带有 `Environment` 的 `WM_SETTINGCHANGE`。已经在运行、且不处理该通知的应用，要重启后才能看到变更。
 - 不修改机器 `Path`，因为它需要提权。
@@ -349,7 +349,7 @@ WinGet 将清单要求的用户范围应用到 Oh My Posh MSIX。
   无输入变化的 reapply 和按归属记录卸载。测试结束后恢复 runner 用户 `Path`
   的原始字节及注册表类型，并移除测试归属记录。作业记录每项 mise 工具的请求和
   安装版本、识别出的路径长度错误，以及 mise 数据和 uv 工具目录中的最长路径。
-- 真实安装的覆盖缺口要求在合并前完成实机签核。第 17 节记录托管作业的覆盖范围。用户将首次实机 apply 安排在所有计划阶段完成后。
+- 第 17 节记录托管作业的覆盖范围。托管作业没有验证干净客户端上的安装和 Oh My Posh 应用执行别名。用户将首次实机 apply 推迟到所有计划阶段完成后，并将 Oh My Posh MSIX 检查推迟到该次 apply。
 - 两个 Windows job 都在与 Unix job 相同的 `needs-checks` 条件下运行，并汇入现有的单一 required check。这样不需要第二个路径分类器，避免共享文件改动后 Windows CI 被跳过。
 - 在真实 Windows 机器上的实际安装，遵循与 Unix 平台相同的本地验证策略。
 
@@ -410,8 +410,8 @@ Windows OpenSSH 9.5p2 读取了受管的默认配置，并拒绝了顶层配置�
 `edde9e9` 的阶段 4 托管运行通过了所有作业。WinGet 在 x64 runner 上安装了 mise
 2026.11.12。mise 安装了共享配置中的全部六项工具：Go 1.27.1、golangci-lint v2.14.0、
 Node 24.21.0、Python 3.13.16、usage 6.12.0 和 uv 0.11.33。mise 数据目录和 uv 工具
-目录中观察到的最长路径分别为 165 和 203 个字符。安装日志没有路径长度错误。
-[完整 CI 运行](RUN_LINK)、[Windows smoke](SMOKE_LINK)、[Windows apply](APPLY_LINK)。
+目录中观察到的最长路径分别为 165 和 203 个字符。采集到的 apply 日志中没有与诊断模式匹配的路径长度错误。这些 runner 路径不能说明更长的客户端路径的行为。
+[完整 CI 运行](https://github.com/kangmingxuan/oh-my-devenv/actions/runs/44985641100)、[Windows smoke](https://github.com/kangmingxuan/oh-my-devenv/actions/runs/44985641100/job/137095504120)、[Windows apply](https://github.com/kangmingxuan/oh-my-devenv/actions/runs/44985641100/job/137095504118)。
 
 全新的标准用户 Windows 客户端仍待验证。WinGet 的 mise 包需要在机器范围安装架构
 匹配的 Microsoft Visual C++ 2015+ Redistributable。缺少该运行库时，请在 apply 前
