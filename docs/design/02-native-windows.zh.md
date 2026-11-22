@@ -135,7 +135,7 @@ hook 20 的设备策略规则停止 apply。
 [`bootstrap/manifests/shell/completions.txt`](../../bootstrap/manifests/shell/completions.txt)。
 安装器创建缺失的脚本，并替换输入指纹已变化的受管脚本。输入指纹涵盖共享清单、安装器及
 辅助脚本、Windows 系统包清单、mise 配置，以及 Go 和 uv 清单。安装器将指纹写入每个
-脚本的归属标记。指纹相同时保留文件，也跳过对应的生成器。
+脚本的归属标记。对于仍在清单中且在 `PATH` 上可用的命令，指纹相同时保留受管文件，也跳过对应的生成器。
 若 `PATH` 上的命令需要创建或替换补全脚本，优先使用上游安装位置
 `%LOCALAPPDATA%\PowerShell\completions` 中现有的 PowerShell 补全。无现有脚本时，
 使用该命令的生成器。安装和检查要求清单中的每个命令都有 PowerShell 生成器适配器。
@@ -447,13 +447,13 @@ Node 24.21.0、Python 3.13.16、usage 6.12.0 和 uv 0.11.33。mise 数据目录�
 | 实际生效的脚本执行策略是否允许 chezmoi 运行 `.ps1` hook，以及不允许时的停止条件。不绕过设备策略。PowerShell 7 与 Windows PowerShell 5.1 分开存储执行策略设置。组策略可以让它使用 Windows PowerShell 的策略设置，所以要在 `pwsh` 下检查实际生效的策略。 | 2 |
 | 在满足第 7 节前置条件的全新标准用户 Windows 客户端上完成首次 apply。 | 4 |
 
-阶段 5 在 `4ed2234` 上的托管运行通过了所有作业。Windows smoke 通过了 130 项 Pester
+阶段 5 在 `c30194a` 上的托管运行通过了所有作业。Windows smoke 通过了 132 项 Pester
 测试，跳过一项。Windows apply 作业安装了七个 PowerShell 补全。由于 `bat` 不在
-`PATH` 上，作业跳过了它。新 PowerShell 进程加载补全增加的耗时为 286、295 和 346
-毫秒，中位数为 295 毫秒。无重定向的 profile 探测加载了受管补全。卸载移除了受管配置、
+`PATH` 上，作业跳过了它。新 PowerShell 进程加载补全增加的耗时为 227、233 和 238
+毫秒，中位数为 233 毫秒。无重定向的 profile 探测在 profile 返回后完成了 `chezmoi` 和 `uv` 命令的补全。卸载移除了受管配置、
 受管的用户 `Path` 条目、补全，以及桌面字体文件和注册值。WinGet 包、mise、运行时
 以及 Go 和 uv 工具都保留。
-[完整 CI 运行](https://github.com/kangmingxuan/oh-my-devenv/actions/runs/44999549868)、[Windows smoke](https://github.com/kangmingxuan/oh-my-devenv/actions/runs/44999549868/job/137137875263)、[Windows apply](https://github.com/kangmingxuan/oh-my-devenv/actions/runs/44999549868/job/137137875282)。
+[完整 CI 运行](https://github.com/kangmingxuan/oh-my-devenv/actions/runs/45017493063)、[Windows smoke](https://github.com/kangmingxuan/oh-my-devenv/actions/runs/45017493063/job/137192897238)、[Windows apply](https://github.com/kangmingxuan/oh-my-devenv/actions/runs/45017493063/job/137192897275)。
 
 ## 18. 来源
 

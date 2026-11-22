@@ -140,8 +140,9 @@ On every apply, hook 55 reads the one-command-per-line inventory in
 It creates missing completions and replaces owned completions whose input
 fingerprint has changed. The fingerprint covers the shared inventory, installer
 and helpers, Windows system package manifest, mise configuration, and Go and uv
-manifests. The installer records it in each script's ownership marker. It
-leaves files with the current fingerprint untouched and skips their generators.
+manifests. The installer records it in each script's ownership marker. For
+commands still in the inventory and available on `PATH`, it leaves owned files
+with the current fingerprint untouched and skips their generators.
 When it needs a completion for a command on `PATH`, it prefers a script in the
 upstream installation location `%LOCALAPPDATA%\PowerShell\completions` and
 otherwise uses the CLI's generator. Install and check require a PowerShell
@@ -465,15 +466,15 @@ Resolve each remaining item before the phase that depends on it.
 | Whether the effective script execution policy lets chezmoi run the `.ps1` hooks, and the stop condition when it does not. Do not work around device policy. PowerShell 7 stores execution-policy settings separately from Windows PowerShell 5.1. Group Policy can make it use the Windows PowerShell policy settings, so check the effective policy under `pwsh`. | 2 |
 | First apply on a clean standard-user Windows client with the prerequisite described in section 7. | 4 |
 
-The hosted phase 5 run on `4ed2234` passed all jobs. Windows smoke passed
-130 Pester tests and skipped one. The Windows apply job installed seven
+The hosted phase 5 run on `c30194a` passed all jobs. Windows smoke passed
+132 Pester tests and skipped one. The Windows apply job installed seven
 PowerShell completions. It skipped `bat` because the application was absent
 from `PATH`. Added completion load times in fresh PowerShell processes were
-286, 295, and 346 ms, with a median of 295 ms. An unredirected profile probe
-loaded the managed completions. Uninstall removed the managed configuration,
+227, 233, and 238 ms, with a median of 233 ms. An unredirected profile probe
+completed `chezmoi` and `uv` commands after the profile returned. Uninstall removed the managed configuration,
 owned user `Path` entries, completions, and desktop font files and registrations.
 WinGet packages, mise, runtimes, and Go and uv tools remained installed.
-[Full CI run](https://github.com/kangmingxuan/oh-my-devenv/actions/runs/44999549868), [Windows smoke](https://github.com/kangmingxuan/oh-my-devenv/actions/runs/44999549868/job/137137875263), [Windows apply](https://github.com/kangmingxuan/oh-my-devenv/actions/runs/44999549868/job/137137875282).
+[Full CI run](https://github.com/kangmingxuan/oh-my-devenv/actions/runs/45017493063), [Windows smoke](https://github.com/kangmingxuan/oh-my-devenv/actions/runs/45017493063/job/137192897238), [Windows apply](https://github.com/kangmingxuan/oh-my-devenv/actions/runs/45017493063/job/137192897275).
 
 ## 18. Sources
 
