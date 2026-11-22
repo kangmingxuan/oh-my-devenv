@@ -1,0 +1,16 @@
+# common.ps1: {{ include "bootstrap/windows/common.ps1" | sha256sum }}
+# environment.ps1: {{ include "dot_config/oh-my-devenv/powershell/environment.ps1" | sha256sum }}
+# mise.ps1: {{ include "bootstrap/windows/mise.ps1" | sha256sum }}
+# system-packages.ps1: {{ include "bootstrap/windows/system-packages.ps1" | sha256sum }}
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = 'Stop'
+
+if (-not $IsWindows) { throw 'This hook requires native Windows.' }
+
+. {{ includeTemplate "powershell-literal" (joinPath .chezmoi.sourceDir "bootstrap/windows/common.ps1") }}
+. {{ includeTemplate "powershell-literal" (joinPath .chezmoi.sourceDir "bootstrap/windows/system-packages.ps1") }}
+. {{ includeTemplate "powershell-literal" (joinPath .chezmoi.sourceDir "bootstrap/windows/mise.ps1") }}
+
+Update-HookPath -Managed
+Install-Mise

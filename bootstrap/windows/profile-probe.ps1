@@ -25,4 +25,20 @@ if (-not $env:OH_MY_DEVENV_POSH_CONFIG -or
     (ConvertTo-PathKey -Path $env:OH_MY_DEVENV_POSH_CONFIG) -cne (ConvertTo-PathKey -Path $ExpectedPoshConfig)) {
     throw "Oh My Posh did not load the managed theme.`nExpected '$ExpectedPoshConfig'. Check that oh-my-posh is on PATH and run chezmoi apply."
 }
+if ($env:OH_MY_DEVENV_PROBE_COMMANDS) {
+    $commands = ConvertFrom-Json -InputObject $env:OH_MY_DEVENV_PROBE_COMMANDS -AsHashtable
+    foreach ($command in $commands) {
+        $name = [IO.Path]::GetFileNameWithoutExtension($command.Name)
+        $resolved = Get-Command -Name $name -TotalCount 1 -ErrorAction SilentlyContinue
+        if ($null -eq $resolved) { throw "The managed profile did not resolve '$name'." }
+        if ($resolved.CommandType -ne 'Application') {
+            throw "The managed profile resolved '$name' as $($resolved.CommandType). Expected application '$($command.Path)'."
+        }
+        $expected = @($command.Path, $command['Shim'] | Where-Object { $_ } |
+            ForEach-Object { ConvertTo-PathKey -Path $_ })
+        if ((ConvertTo-PathKey -Path $resolved.Source) -cnotin $expected) {
+            throw "The managed profile resolved '$name' to '$($resolved.Source)'. Expected '$($command.Path)'."
+        }
+    }
+}
 [Console]::WriteLine("`n$SuccessMarker")

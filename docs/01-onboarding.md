@@ -11,6 +11,15 @@ successful apply configures Git, OpenSSH, and mise under your home directory
 and deploys the PowerShell profile body. It imports the user-scope packages in
 `bootstrap/manifests/system/winget-packages.json` from the built-in `winget`
 source. Run `winget upgrade` separately when you want to upgrade packages.
+Apply installs mise with WinGet when it is missing. It also installs the
+runtimes in the shared mise configuration and the Go and uv tools in
+`bootstrap/manifests/ecosystem/`.
+
+The WinGet mise package requires the Microsoft Visual C++ 2015+ Redistributable
+that matches its architecture (x64 or ARM64). The redistributable installs at
+machine scope. On a standard-user device that lacks it, ask the device
+administrator to provision it before you apply.
+
 PowerShell must be 7.6 or later. Check the effective execution policy with
 `Get-ExecutionPolicy` inside `pwsh`. If policy blocks the hooks, the source,
 or an installer, stop and contact the device administrator.
@@ -30,7 +39,8 @@ fragment for the PowerShell profile. Sign out and back in if Windows Terminal ca
 font. To disable the desktop option, set `desktopBaseline = false` in your
 chezmoi configuration and apply again. This removes the project's Terminal
 fragment and keeps the installed packages and fonts. Apply prints `All checks passed.` after
-the configuration, system packages, and any enabled desktop assets pass inspection.
+the configuration, packages, runtimes, tools, user `Path`, and any enabled
+desktop assets pass inspection.
 
 On the first apply, review any backup under
 `%LOCALAPPDATA%\oh-my-devenv\chezmoi-first-run-backup`. The path follows the
@@ -46,6 +56,11 @@ profile. Start a new PowerShell session to load the profile. Put machine-local
 settings in the [PowerShell overlay](local-overlay-examples/profile.local.ps1.example)
 at `~/.config/oh-my-devenv/powershell/profile.local.ps1`. If the overlay sets
 `GOBIN`, the profile prepends that directory to `PATH` when it is missing.
+Apply adds the mise shims directory, `~/.local/bin`, and the Go binary directory
+to the user `Path`. Restart an already running app if it still sees the old
+`Path`. Apply records missing entries in
+`%LOCALAPPDATA%\oh-my-devenv\user-path.json` before it adds them. If the registry
+write fails, reapply to add the entries that are still missing.
 
 ```powershell
 $source = chezmoi source-path
@@ -59,8 +74,9 @@ because the pre-delete backup holds the content seen when it ran.
 Uninstall backs up the files it will remove and the profile it will edit.
 Review the verified backup under `%LOCALAPPDATA%\oh-my-devenv\chezmoi-uninstall-backup`.
 If backup fails, uninstall stops before it changes the profile or removes
-files. The phase-3 uninstall removes the managed Terminal fragment and leaves the
-installed system packages and fonts in place. After removal, uninstall resets
+files. The uninstall preview lists the recorded user `Path` entries it can
+remove. Uninstall removes those entries and the managed Terminal fragment. It
+keeps installed packages, fonts, runtimes, and tools. After removal, uninstall resets
 chezmoi's script and entry state so that the next `chezmoi apply` backs up any
 files that already exist at managed targets.
 If apply used a custom configuration file, pass the same file to uninstall with

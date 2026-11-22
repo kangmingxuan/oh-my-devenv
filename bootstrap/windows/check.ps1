@@ -1,7 +1,9 @@
 param(
     [string]$Destination = $HOME,
     [string]$ProfilePath = $PROFILE.CurrentUserAllHosts,
-    [switch]$DesktopBaseline
+    [string]$RegistryPath = 'Environment',
+    [switch]$DesktopBaseline,
+    [string]$ProbeFixtureBin
 )
 
 Set-StrictMode -Version Latest
@@ -18,8 +20,11 @@ if ($PSVersionTable.PSVersion -lt [version]'7.6') {
 . (Join-Path $PSScriptRoot 'profile.ps1')
 . (Join-Path $PSScriptRoot 'system-packages.ps1')
 . (Join-Path $PSScriptRoot 'desktop.ps1')
+. (Join-Path $PSScriptRoot 'user-path.ps1')
+. (Join-Path $PSScriptRoot 'mise.ps1')
+. (Join-Path $PSScriptRoot 'ecosystem.ps1')
 
-Update-HookPath
+Update-HookPath -Managed
 $git = Get-PathApplication -Name git
 $result = Invoke-NativeCommand -Executable $git.Source -Arguments @('--version')
 Write-Host $result.Stdout.Trim()
@@ -47,7 +52,20 @@ if ($null -eq (Resolve-RegularFile -Path $ProfilePath) -or
     throw "The managed line is missing from PowerShell profile '$ProfilePath'. Run chezmoi apply."
 }
 
-Confirm-ManagedProfile -ProfilePath $ProfilePath -Destination $Destination
+$manifestRoot = Join-Path $PSScriptRoot '../manifests'
+Confirm-MiseToolchain
+$configPath = Join-Path $Destination '.config/mise/config.toml'
+$managedEntries = @(Get-ManagedProfilePathEntry)
+$missingPath = @(Get-MissingUserPathEntry -PathValue (Read-UserPath -RegistryPath $RegistryPath) -Entries $managedEntries)
+if ($missingPath.Count) {
+    throw "Missing directories in the user Path: $($missingPath -join '; '). Run chezmoi apply."
+}
+$commands = @(
+    Get-MiseProfileCommand -ConfigPath $configPath -ShimsDirectory $managedEntries[0]
+    Confirm-EcosystemTool -GoManifest (Join-Path $manifestRoot 'ecosystem/go-tools.txt') `
+        -UvManifest (Join-Path $manifestRoot 'ecosystem/uv-tools.txt')
+)
+Confirm-ManagedProfile -ProfilePath $ProfilePath -Destination $Destination -Commands $commands -FixtureBin $ProbeFixtureBin
 
 $ssh = Get-PathApplication -Name ssh
 $version = Invoke-NativeCommand -Executable $ssh.Source -Arguments @('-V')
@@ -66,7 +84,6 @@ if (-not (Test-SshConfigRead -Diagnostic $result.Stderr -Path $sshConfig)) {
 }
 Write-Host "SSH read managed config: $sshConfig"
 
-$manifestRoot = Join-Path $PSScriptRoot '../manifests'
 if (-not $PSBoundParameters.ContainsKey('DesktopBaseline')) {
     $chezmoi = Get-PathApplication -Name chezmoi
     $data = Invoke-NativeCommand -Executable $chezmoi.Source -Arguments @('data', '--format=json')

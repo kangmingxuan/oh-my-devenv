@@ -6,7 +6,7 @@ Preview or remove managed Windows configuration.
 Close editors and wait for running Git commands to finish before uninstall because the pre-delete backup holds the content seen when it ran.
 
 .PARAMETER Apply
-Back up candidates, remove the managed configuration, and reset chezmoi script and entry state.
+Back up candidates, remove the managed configuration and recorded user Path entries, and reset chezmoi script and entry state.
 #>
 [CmdletBinding(SupportsShouldProcess)]
 param(
@@ -14,7 +14,9 @@ param(
     [string]$Config,
     [string]$Destination = $HOME,
     [string]$ProfilePath = $PROFILE.CurrentUserAllHosts,
-    [string]$BackupRoot
+    [string]$BackupRoot,
+    [string]$RegistryPath,
+    [string]$StatePath
 )
 
 Set-StrictMode -Version Latest
@@ -28,10 +30,18 @@ if (-not $IsWindows) {
 . (Join-Path $PSScriptRoot 'backup.ps1')
 . (Join-Path $PSScriptRoot 'profile.ps1')
 . (Join-Path $PSScriptRoot 'local-overlays.ps1')
+. (Join-Path $PSScriptRoot 'user-path.ps1')
 
 if ($PSVersionTable.PSVersion -lt [version]'7.6') {
     throw "PowerShell 7.6 or later is required. Running $($PSVersionTable.PSVersion)."
 }
+$pathTarget = if ($RegistryPath -or $StatePath) {
+    if (-not $RegistryPath -or -not $StatePath) { throw 'Specify both -RegistryPath and -StatePath.' }
+    @{ RegistryPath = $RegistryPath; StatePath = $StatePath }
+} else {
+    Get-HookUserPathTarget -Destination $Destination -HomeDirectory $HOME
+}
+$pathRemoval = Get-UserPathRemoval @pathTarget
 if ([IO.Path]::GetFullPath($Destination) -ne [IO.Path]::GetFullPath($HOME)) {
     if (-not $PSBoundParameters.ContainsKey('ProfilePath') -or ($Apply -and (-not $BackupRoot -or -not $Config))) {
         throw 'For alternate destinations, specify -ProfilePath. With -Apply, also pass -BackupRoot and the -Config used for apply.'
@@ -76,6 +86,12 @@ if (-not $Apply) {
     foreach ($path in $candidates) {
         Write-Host "Would remove '$path'."
     }
+    foreach ($entry in $pathRemoval.Entries) {
+        Write-Host "Would remove user Path entry '$entry'."
+    }
+    if ([IO.File]::Exists($pathTarget.StatePath)) {
+        Write-Host "Would delete user Path record '$($pathTarget.StatePath)'."
+    }
     foreach ($bucket in $stateBuckets) {
         Write-Host "Would reset chezmoi state bucket '$bucket'."
     }
@@ -104,6 +120,11 @@ if ($backupCandidates.Count) {
 foreach ($path in $candidates) {
     [IO.File]::Delete($path)
     Write-Host "Removed '$path'."
+}
+if ($pathTarget.RegistryPath -ne 'Environment') {
+    Remove-ManagedUserPath @pathTarget -Notify {}
+} else {
+    Remove-ManagedUserPath @pathTarget
 }
 
 # Use the state database selected by the apply configuration.

@@ -1,6 +1,6 @@
 # 技术设计：原生 Windows 平台
 
-状态：已接受。阶段 3（系统包和桌面基线）已通过托管 Windows smoke 和 apply 作业。阶段 4–5 尚未开始。
+状态：已接受。阶段 3 和阶段 4 已通过托管 Windows smoke 和 apply 作业。阶段 4 仍待在全新的标准用户 Windows 客户端上验证。阶段 5 尚未开始。
 
 ## 1. 概要
 
@@ -33,6 +33,11 @@ WSL 不属于本设计。WSL 是 Linux 环境，继续走现有的 Linux 路径�
 | 把受管目录持久化写入用户 `Path` | 用户于 2026-11-21 做出这一决定，让 PowerShell 之外启动的应用也能找到受管工具。Claude 在第 7 节设计了具体机制。 |
 
 本文其余决策均由 Claude 在上述范围内提出。第 16 节列出 Claude 采纳了哪些评审意见。用户于 2026-11-21 批准阶段 3，并将首次 Windows 实机 apply 安排在所有计划阶段完成后。Claude 在授权范围内确定了阶段 3 的安装范围、安装与检查行为、设备策略处理、桌面安装与验证，以及卸载边界。
+
+PR #66 合并后，用户于 2026-11-22 批准阶段 4。共享清单和持久化用户 `Path`
+落实上表中的用户决策。Claude 在阶段 4 授权范围内确定了 WinGet 命令、运行时
+hook 和哈希输入、共享工具的适用规则、生态安装器行为、用户 `Path` 归属、卸载、
+检查器、路径长度诊断和托管 CI 测试（实施 brief 的第 1–9 项）。
 
 ## 3. 目标与非目标
 
@@ -118,7 +123,10 @@ hook 和部署文件都通过 `.chezmoiignore` 做门控：
 
 哈希触发方式与 Unix 相同。每个 Windows `run_onchange_` hook 都包含其 manifest 和辅助脚本的哈希。
 
-hook 30 使用 winget，让 mise 与其他系统工具来自同一个包管理器，这与 macOS 上的 Homebrew 路线一致。mise 文档推荐的是它自己的 PowerShell 安装脚本：winget 上的版本可能滞后，而且 mise 对 winget 安装会关闭 `mise self-update`。用 `winget upgrade jdx.mise` 升级 mise。与 Unix hook 一样，`mise` 已在 `PATH` 上时，hook 30 跳过安装。
+hook 30 使用 winget，让 mise 与其他系统工具来自同一个包管理器，这与 macOS 上的 Homebrew 路线一致。mise 文档推荐的是它自己的 PowerShell 安装脚本：winget 上的版本可能滞后，而且 mise 对 winget 安装会关闭 `mise self-update`。用 `winget upgrade jdx.mise` 升级 mise。`mise` 已在 `PATH` 上时，hook 30 跳过安装。否则从 `winget` 源按精确 ID 以用户
+范围安装 `jdx.mise`，刷新 hook 环境后确认 `mise --version`。WinGet 报错时，按
+hook 20 的设备策略规则停止 apply。
+[WinGet 包清单](https://github.com/microsoft/winget-pkgs/blob/master/manifests/j/jdx/mise/2026.11.12/jdx.mise.installer.yaml)
 
 ## 7. PowerShell 规则
 
@@ -127,6 +135,7 @@ hook 30 使用 winget，让 mise 与其他系统工具来自同一个包管理�
 - Windows hook 和辅助脚本只面向 PowerShell 7.6 或更高版本编写。
 - 在 Windows 上，`.chezmoi.toml.tmpl` 将 `[interpreters.ps1]` 设为 `pwsh -NoLogo -NoProfile -File`。hook 独立于用户的 PowerShell profile 运行。hook 15 维护 profile 的受管行，hook 60 在单独的 shell 中验证启动。已有配置时，在 apply 前运行 `chezmoi init` 刷新配置。[chezmoi 解释器配置](https://www.chezmoi.io/reference/configuration-file/interpreters/)。
 - 在启动 chezmoi 前安装 `pwsh`，让每个 hook 都能从初始 `PATH` 找到解释器。
+- WinGet 的 `jdx.mise` 包需要与其架构（x64 或 ARM64）匹配的 Microsoft Visual C++ 2015+ Redistributable。该运行库在机器范围安装。标准用户设备缺少该运行库时，请在 apply 前由设备管理员预装。WinGet 失败时，hook 30 停止。
 - 正在运行的 PowerShell 版本低于 7.6 时，hook 00 失败。这只是兼容性下限；hook 00 不检查支持状态。与其他前置条件一样，由用户让 PowerShell 保持在受支持的版本并装上最新的服务更新。把最低版本写进 `AGENTS.md`，与 Bash 3.2 规则并列。
 - 每个脚本以 `Set-StrictMode -Version Latest` 和 `$ErrorActionPreference = 'Stop'` 开头。
 - 检查每个原生命令的退出码。默认情况下，原生命令失败时 `$ErrorActionPreference` 不会中止执行。
@@ -137,12 +146,12 @@ hook 30 使用 winget，让 mise 与其他系统工具来自同一个包管理�
 
 1. 读取当前的机器 `Path` 和用户 `Path`。
 2. 把受管目录放到最前面：`%LOCALAPPDATA%\mise` 下的 mise shims 目录、`~/.local/bin` 和 `$GOBIN`。
-3. 把 `GOPATH` 和 `GOBIN` 设为与 Unix env 模板相同的默认值（`~/go` 和 `$GOPATH/bin`）。
+3. 保留已有的 `GOPATH` 和 `GOBIN` 值。`GOPATH` 为空时设为 `~/go`。`GOBIN` 为空时设为第一个 `GOPATH` 条目下的 `bin` 目录。
 
 阶段 3 的 hook 辅助函数合并进程、机器和当前用户的 `Path`。WinGet 把用户级便携包路径写入
 `HKCU\Environment\Path`。支持符号链接时，使用
 `%LOCALAPPDATA%\Microsoft\WinGet\Links`。否则 WinGet 可以加入包目录。
-检查器在 hook 20 之后重读这些值。上面的阶段 4 步骤添加受管的 mise 和工具目录。
+检查器在 hook 20 之后重读这些值。hook 30、40、50 和检查器也会把受管目录放到本进程的 `PATH` 前面。它们保留已有的 `GOPATH` 和 `GOBIN` 值，只在变量为空时设置默认值。
 [WinGet 便携包安装器](https://github.com/microsoft/winget-cli/blob/master/src/AppInstallerCLICore/PortableInstaller.cpp)、
 [WinGet Path 注册表实现](https://github.com/microsoft/winget-cli/blob/master/src/AppInstallerCommonCore/PathVariable.cpp)。
 
@@ -153,20 +162,22 @@ hook 30 使用 winget，让 mise 与其他系统工具来自同一个包管理�
 - hook 15 在每次 apply 时，把 mise shims 目录、`~/.local/bin` 和 `$GOBIN` 加入 `HKCU\Environment` 中的用户 `Path`。这从阶段 4 开始，因为这些目录中的工具在阶段 4 才安装。
 - 只添加缺失的条目。绝不重复添加同一条目。保留其他所有条目及其顺序。
 - 写入解析后的目录路径。不要新增 `%GOBIN%` 引用，因为 `GOBIN` 不持久化。
-- 把基线实际添加的每个条目记录到 oh-my-devenv 数据目录下的一个状态文件中。重复 apply 保留这份记录。首次 apply 前已存在的条目不记录，也不受管。
+- 写入注册表前，把每个缺失条目记录到有效 LocalApplicationData 目录下的 `oh-my-devenv/user-path.json`。重复 apply 保留这份记录，并添加仍然缺失的条目。apply 时已存在的条目不会因此新增到记录中。如果用户 `Path` 中之后不再有该受管目录，下一次 apply 会添加它；如果记录中尚无该条目，也会记录它。
 - 保留注册表值的类型和未展开的条目，例如 `%USERPROFILE%` 引用。不要把展开后的值写回。
-- 通知正在运行的应用环境已变更。已经在运行、且不处理该通知的应用，要重启后才能看到变更。
+- 注册表值变更时，广播带有 `Environment` 的 `WM_SETTINGCHANGE`。已经在运行、且不处理该通知的应用，要重启后才能看到变更。
 - 不修改机器 `Path`，因为它需要提权。
 - 不持久化 `GOPATH` 或 `GOBIN`，因为它们的值与 Go 的默认值相同。
-- 卸载只移除已记录的条目。保留首次 apply 前已存在的同路径条目，以及所有其他条目。卸载不恢复整个 `Path` 的旧快照。
+- 卸载预览列出用户 `Path` 中仍存在的已记录条目。执行卸载时，每个记录只移除一条完全相同的条目，并删除记录文件。保留首次 apply 前已存在的同路径条目，以及所有其他条目。卸载不恢复整个 `Path` 的旧快照。
 - 用户 `Path` 缺少上述三个必需目录中的任意一个时，`check.ps1` 失败，包括首次 apply 前已有条目所指的目录。归属记录只决定卸载可以移除哪些条目，不决定要检查哪些目录。
 - `Path` 的写入、读取和卸载辅助函数把注册表目标作为显式参数。smoke test 传入 fixture 目标并模拟变更通知，因为临时 home 不会隔离 `HKCU`。真实 apply job 检查并恢复 runner 账户的用户 `Path`。
 - profile 保留自己的 `PATH` 设置。它决定 PowerShell 会话中的顺序，且不依赖持久化条目。
 
-`check.ps1` 还通过一个新启动、会加载 profile 的 PowerShell 检查命令解析。子进程会继承父进程的环境，所以检查从不含 hook 附加项的机器与用户环境构建子进程环境。在加载 profile 前，检查从合并后的子进程 `Path` 中移除受管目录的每一次出现，包括来自机器 `Path` 的条目。检查不修改持久化值。否则，hook 环境或已有条目可能掩盖 profile 没有把某个工具加入 `PATH` 的问题。一个负向测试从 fixture profile 中去掉一个必需路径，并期望检查失败。第二个负向测试通过 fixture 机器 `Path` 提供同一目录。
+`check.ps1` 通过一个新启动、会加载 profile 的 PowerShell 检查命令解析。它用持久化的机器和用户 `Path` 构建子进程的 `Path`。它移除 profile 会恢复的目录的所有条目，以便发现 profile 遗漏的必需目录。托管测试显式向探针传入 fixture 中 Oh My Posh 可执行文件所在的目录。
 
 在阶段 2，新进程检查受管 profile 主体是否运行完毕，以及它是否加入了受管目录。
 smoke fixture 要求两种情况报错：profile 在受管行之前返回，或者报告运行完毕却没有加入必需路径。
+阶段 4 还通过新进程验证所选的 mise 命令，以及共享清单中的 Go 和 uv 命令。
+按不带扩展名的命令名查找时，第一项结果必须是预期的应用程序。
 
 ### 首次运行备份
 
@@ -195,6 +206,7 @@ hook 10 在文件内容上沿用 Unix 的约定：首次 apply 覆盖目标之�
 
 - uv 工具环境的解释器位于 `Scripts\python.exe`，而不是 `bin/python`。
 - 可执行文件带 `.exe` 后缀。比较解析到的命令与安装器所属二进制的遮蔽检查要包含这个后缀。
+- 检查器用 `go version -m` 读取 Go 命令导入路径和模块版本，用 `uv tool list` 读取 uv 包版本。检查 uv 工具的解释器是否与记录版本及 mise 选定的 Python 一致。
 - Unix 辅助脚本在 `/` 下运行全局 mise 命令，使调用方工作目录的项目配置不生效。PowerShell 辅助脚本出于同样的原因，在系统盘根目录（`$env:SystemDrive\`）下运行这些命令。mise 从当前目录向上查找项目配置，直到盘符根目录，所以用户 profile 下的临时目录不能隔离这些命令：父目录中的配置文件仍会生效。根目录本身的配置文件在 Unix 和 Windows 上都仍会生效。用户全局配置（默认是 `%USERPROFILE%\.config\mise\config.toml`）与这一查找无关，始终生效。Unix 上的默认系统配置目录 `/etc/mise` 是绝对路径；Windows 上它解析到当前目录所在的盘，所以在系统盘根目录下运行时，使用的是该盘上的 `\etc\mise`。
 
 ## 8. 共享数据
@@ -241,7 +253,7 @@ chezmoi 可以通过 `.chezmoiexternal` 用配置数据计算目标路径。Clau
 - 控制台输入或输出被重定向时，脚本宿主跳过提示符初始化，仍加载 profile 的其他部分和本地 overlay。检查器在新 PowerShell 进程中显式启用提示符初始化，以验证同一条初始化路径。
 - 初始化脚本导出解析后的 `POSH_CONFIG` 和 `POSH_SESSION_ID`。生成的脚本注册提示符函数后，profile 在运行 overlay 前记录该配置路径。检查器在新 PowerShell 进程中清除继承值，并要求记录的路径与已部署主题一致。[会话变量](https://github.com/JanDeDobbeleer/oh-my-posh/blob/v33.0.0/src/shell/init.go#L315-L326)、[延迟渲染提示符](https://github.com/JanDeDobbeleer/oh-my-posh/blob/v33.0.0/src/shell/init.go#L270-L290)。
 - 本地 overlay `~/.config/oh-my-devenv/powershell/profile.local.ps1` 存在时加载它。overlay 可以覆盖提示符。
-- 运行 overlay 后，把缺失的受管目录放到 `PATH` 最前面，包括实际生效的 `GOBIN`。保留 overlay 中已有的 `PATH` 条目及其顺序。
+- 每次加载 profile 时，在可选的 overlay 步骤后，把缺失的受管目录放到 `PATH` 最前面，包括实际生效的 `GOBIN`。保留已有的 `PATH` 条目及其顺序。
 
 profile 只影响 PowerShell 会话。从 Windows shell 启动的应用（例如从开始菜单启动的 IDE）不会加载它。持久化的用户 `Path` 条目覆盖这些应用（第 7 节）。
 
@@ -331,9 +343,13 @@ WinGet 将清单要求的用户范围应用到 Oh My Posh MSIX。
 - 在托管 Windows runner 上运行 Windows smoke job：
   - 用 PSScriptAnalyzer 检查 PowerShell 代码。
   - 为辅助脚本运行 Pester 测试，包括共享 manifest 的测试用例。
-  - 在临时 home 中，用 WinGet stub 执行 apply 和 reapply。使用 fixture 中的 profile 路径。用模拟下载以及隔离的字体目录和注册表位置单独测试桌面安装器。
+  - 在临时 home 中，用 WinGet、mise、Go 和 uv stub 执行 apply 和 reapply。使用 fixture 中的 profile 路径和注册表项，并用同一个注册表项检查卸载。用模拟下载以及隔离的字体目录和注册表位置单独测试桌面安装器。
 - 托管 Windows apply job 要求 WinGet 和 Terminal 可用。它执行真实 WinGet 导入、桌面 hook 和检查器。托管 Windows Server 启动已注册的 Oh My Posh MSIX 时会卡住。fixture 将已安装的可执行文件复制到临时目录，再用副本验证真实提示符初始化。通过 Windows 应用执行别名启动仍待 Windows 客户端验收。测试后恢复字体文件和注册表值。
-- 真实安装的覆盖缺口要求在合并前完成实机签核。第 17 节记录托管作业的覆盖范围。用户将首次实机 apply 安排在所有计划阶段完成后。
+- 阶段 4 的 apply job 使用真实的 WinGet、mise、Go 和 uv。它检查首次 apply、
+  无输入变化的 reapply 和按归属记录卸载。测试结束后恢复 runner 用户 `Path`
+  的原始字节及注册表类型，并移除测试归属记录。作业记录每项 mise 工具的请求和
+  安装版本、识别出的路径长度错误，以及 mise 数据和 uv 工具目录中的最长路径。
+- 第 17 节记录托管作业的覆盖范围。托管作业没有验证干净客户端上的安装和 Oh My Posh 应用执行别名。用户将首次实机 apply 推迟到所有计划阶段完成后，并将 Oh My Posh MSIX 检查推迟到该次 apply。
 - 两个 Windows job 都在与 Unix job 相同的 `needs-checks` 条件下运行，并汇入现有的单一 required check。这样不需要第二个路径分类器，避免共享文件改动后 Windows CI 被跳过。
 - 在真实 Windows 机器上的实际安装，遵循与 Unix 平台相同的本地验证策略。
 
@@ -391,13 +407,22 @@ Windows OpenSSH 9.5p2 读取了受管的默认配置，并拒绝了顶层配置�
 
 `905d27a` 的阶段 3 托管运行通过了所有作业。Windows smoke 通过 74 项 Pester 测试，跳过 1 项。Windows apply 完成了用户范围的 WinGet 导入，包括 PowerToys。它使用已安装的 Oh My Posh 可执行文件副本验证了受管提示符。单独运行的普通 `pwsh -File` 加载了 profile 和 overlay，随后正常退出。用户设备上的首次 apply 和 Oh My Posh 应用执行别名检查仍待进行。[完整 CI 运行](https://github.com/kangmingxuan/oh-my-devenv/actions/runs/44912366118)、[Windows smoke](https://github.com/kangmingxuan/oh-my-devenv/actions/runs/44912366118/job/136870704931)、[Windows apply](https://github.com/kangmingxuan/oh-my-devenv/actions/runs/44912366118/job/136870704962)。
 
+`edde9e9` 的阶段 4 托管运行通过了所有作业。WinGet 在 x64 runner 上安装了 mise
+2026.11.12。mise 安装了共享配置中的全部六项工具：Go 1.27.1、golangci-lint v2.14.0、
+Node 24.21.0、Python 3.13.16、usage 6.12.0 和 uv 0.11.33。mise 数据目录和 uv 工具
+目录中观察到的最长路径分别为 165 和 203 个字符。采集到的 apply 日志中没有与诊断模式匹配的路径长度错误。这些 runner 路径不能说明更长的客户端路径的行为。
+[完整 CI 运行](https://github.com/kangmingxuan/oh-my-devenv/actions/runs/44985641100)、[Windows smoke](https://github.com/kangmingxuan/oh-my-devenv/actions/runs/44985641100/job/137095504120)、[Windows apply](https://github.com/kangmingxuan/oh-my-devenv/actions/runs/44985641100/job/137095504118)。
+
+全新的标准用户 Windows 客户端仍待验证。WinGet 的 mise 包需要在机器范围安装架构
+匹配的 Microsoft Visual C++ 2015+ Redistributable。缺少该运行库时，请在 apply 前
+由设备管理员预装。
+
 在依赖某一项的阶段开始前解决其余事项。
 
 | 事项 | 阶段 |
 | --- | --- |
 | 实际生效的脚本执行策略是否允许 chezmoi 运行 `.ps1` hook，以及不允许时的停止条件。不绕过设备策略。PowerShell 7 与 Windows PowerShell 5.1 分开存储执行策略设置。组策略可以让它使用 Windows PowerShell 的策略设置，所以要在 `pwsh` 下检查实际生效的策略。 | 2 |
-| mise 配置中的每个工具能否在 Windows 上安装 | 4 |
-| 运行时和工具安装是否会碰到 Windows 路径长度限制。不要假定 Windows 长路径支持（`LongPathsEnabled`）已开启；开启需要提权。仅有这个设置不能保证每个安装器或工具都支持长路径；要验证它们的实际行为。Git 另有独立的 `core.longpaths` 设置。 | 4 |
+| 在满足第 7 节前置条件的全新标准用户 Windows 客户端上完成首次 apply。 | 4 |
 
 ## 18. 来源
 

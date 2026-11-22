@@ -16,9 +16,15 @@ function Get-HookPath {
 function Update-HookPath {
     [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseShouldProcessForStateChangingFunctions', '',
         Justification = 'Changes the current hook process environment.')]
-    param()
+    param([switch]$Managed)
 
-    $env:PATH = (Get-HookPath) -join [IO.Path]::PathSeparator
+    $entries = @(Get-HookPath)
+    if ($Managed) {
+        if (-not $env:GOPATH) { $env:GOPATH = Join-Path $HOME 'go' }
+        if (-not $env:GOBIN) { $env:GOBIN = Get-DefaultGoBin }
+        $entries = @(Get-ManagedProfilePathEntry) + $entries
+    }
+    $env:PATH = ($entries | Select-Object -Unique) -join [IO.Path]::PathSeparator
 }
 
 function Get-HookBackupRoot {
@@ -61,6 +67,7 @@ function Invoke-NativeCommand {
         [Parameter(Mandatory)][string]$Executable,
         [Parameter(Mandatory)][string[]]$Arguments,
         [hashtable]$Environment = @{},
+        [string]$WorkingDirectory,
         [ValidateRange(0, 2147483)][int]$TimeoutSeconds = 0,
         [switch]$AllowFailure
     )
@@ -71,6 +78,7 @@ function Invoke-NativeCommand {
     $start.RedirectStandardError = $true
     $start.StandardOutputEncoding = [Text.Encoding]::UTF8
     $start.StandardErrorEncoding = [Text.Encoding]::UTF8
+    if ($WorkingDirectory) { $start.WorkingDirectory = $WorkingDirectory }
     foreach ($argument in $Arguments) {
         $start.ArgumentList.Add($argument)
     }
