@@ -33,9 +33,12 @@ managed robbyrussell theme from disk. The local PowerShell overlay runs after
 initialization and can override the prompt.
 
 Apply installs PowerShell completions for available commands in the shared
-completion inventory. It records a skip for commands without an installed
-application or a PowerShell completion source. Open a new PowerShell terminal
-to load the scripts in `%LOCALAPPDATA%\oh-my-devenv\completions\powershell`.
+completion inventory. It logs and skips a known command when its application
+is absent from `PATH`. Each inventory command must have a PowerShell generator
+adapter. If no shipped script exists, apply runs the generator and fails if it
+fails or returns empty or invalid PowerShell. Open a new interactive PowerShell
+7.6 or later (`pwsh`) terminal with profile loading enabled to load the scripts
+in `%LOCALAPPDATA%\oh-my-devenv\completions\powershell`.
 
 The desktop option requires Windows Terminal on `PATH` and the default
 LocalAppData location under your home directory. It installs PowerToys and the

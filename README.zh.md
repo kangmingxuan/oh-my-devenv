@@ -82,7 +82,7 @@ chezmoi init --apply https://github.com/kangmingxuan/oh-my-devenv.git
 系统基线安装 Git、GitHub CLI、ripgrep、jq 和 Oh My Posh。可选的桌面基线增加
 PowerToys、Maple Mono NF CN 和 Windows Terminal 设置。
 apply 也会安装 mise、共享运行时及 Go 和 uv 工具，并将受管目录加入用户 `Path`。
-apply 成功后，打开新的 PowerShell 终端加载 robbyrussell 提示符和 PowerShell 补全。
+apply 成功后，打开新的交互式 PowerShell 7.6 或更高版本（`pwsh`）终端，并启用 profile 加载，以加载 robbyrussell 提示符和 PowerShell 补全。
 卸载会移除受管配置、补全和字体，并保留已安装的软件包和工具。备份、overlay、校验和卸载见
 [Windows 上手说明](docs/01-onboarding.md#native-windows)。
 

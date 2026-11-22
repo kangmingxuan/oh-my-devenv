@@ -1,6 +1,6 @@
 # Technical Design: Native Windows Platform
 
-Status: accepted. Phases 3 and 4 passed hosted Windows smoke and apply. Phase 5 passed its initial hosted Windows apply job and awaits a rerun of both Windows jobs after fixes. A clean standard-user Windows client remains unverified.
+Status: accepted. Phases 3, 4, and 5 passed the hosted Windows smoke and apply jobs. A clean standard-user Windows client remains unverified.
 
 ## 1. Summary
 
@@ -354,7 +354,7 @@ On Windows, the desktop baseline includes PowerToys, Maple Mono NF CN, and the W
 - When `desktopBaseline` is false or omitted, the fragment template renders empty and chezmoi removes that file on apply. Uninstall also removes the managed fragment. [Chezmoi template behavior](https://www.chezmoi.io/reference/templates/)
 - Before hook 22 writes a font file or creates a registration, it records ownership of that item in `%LOCALAPPDATA%\oh-my-devenv\fonts.json`. Existing matching files and registrations stay under their prior ownership. A conflicting unowned file or registration stops the font installer. If an unowned file conflicts, remove or rename it and reapply. The checker validates the record when present. Install, check, and uninstall compare registry paths using the shared path normalization.
 - Uninstall previews and removes recorded font files and recorded HKCU values that still point to those files. It attempts file and registry cleanup independently. It removes the record once there are no owned items left. If any removal fails, it keeps only the remaining owned items in the record and reports the errors together. Close applications using a locked font and retry uninstall.
-- Uninstall keeps WinGet packages, mise, mise-managed runtimes, and Go and uv tools. This follows Unix, where packages such as Git can pre-exist and serve other applications. Windows deliberately keeps first-run backups. Unix archives them in its pre-delete backup and removes the original backup directory.
+- Uninstall keeps WinGet packages, mise, mise-managed runtimes, and Go and uv tools. This follows Unix, where packages such as Git can pre-exist and serve other applications. Windows deliberately keeps first-run backups. By default, confirmed Unix uninstall archives the original first-run backup directory in its pre-delete backup and then removes the original. With `--confirm --no-backup`, it removes the original without creating that archive.
 
 ## 12. Local Overlays
 
@@ -459,17 +459,15 @@ Resolve each remaining item before the phase that depends on it.
 | Whether the effective script execution policy lets chezmoi run the `.ps1` hooks, and the stop condition when it does not. Do not work around device policy. PowerShell 7 stores execution-policy settings separately from Windows PowerShell 5.1. Group Policy can make it use the Windows PowerShell policy settings, so check the effective policy under `pwsh`. | 2 |
 | First apply on a clean standard-user Windows client with the prerequisite described in section 7. | 4 |
 
-The initial phase 5 hosted Windows apply job at `2994631` installed seven
+The hosted phase 5 run on `4ed2234` passed all jobs. Windows smoke passed
+130 Pester tests and skipped one. The Windows apply job installed seven
 PowerShell completions. It skipped `bat` because the application was absent
 from `PATH`. Added completion load times in fresh PowerShell processes were
-278, 294, and 326 ms, with a median of 294 ms. An unredirected profile probe
+286, 295, and 346 ms, with a median of 295 ms. An unredirected profile probe
 loaded the managed completions. Uninstall removed the managed configuration,
 owned user `Path` entries, completions, and desktop font files and registrations.
 WinGet packages, mise, runtimes, and Go and uv tools remained installed.
-The initial smoke job failed on two completion-manifest file-lock tests.
-The Windows jobs for the fixes are pending.
-
-[Full CI run](RUN_LINK), [Windows smoke](SMOKE_LINK), [Windows apply](APPLY_LINK).
+[Full CI run](https://github.com/kangmingxuan/oh-my-devenv/actions/runs/44999549868), [Windows smoke](https://github.com/kangmingxuan/oh-my-devenv/actions/runs/44999549868/job/137137875263), [Windows apply](https://github.com/kangmingxuan/oh-my-devenv/actions/runs/44999549868/job/137137875282).
 
 ## 18. Sources
 

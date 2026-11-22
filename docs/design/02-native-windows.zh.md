@@ -1,6 +1,6 @@
 # 技术设计：原生 Windows 平台
 
-状态：已接受。阶段 3 和阶段 4 已通过托管 Windows smoke 和 apply 作业。阶段 5 已通过首次托管 Windows apply 作业，等待修复后重新运行两项 Windows 作业。全新的标准用户 Windows 客户端仍待验证。
+状态：已接受。阶段 3、阶段 4 和阶段 5 已通过托管 Windows smoke 和 apply 作业。全新的标准用户 Windows 客户端仍待验证。
 
 ## 1. 概要
 
@@ -344,7 +344,7 @@ WinGet 将清单要求的用户范围应用到 Oh My Posh MSIX。
 - `desktopBaseline` 为 false 或缺省时，fragment 模板渲染为空，chezmoi 在 apply 时删除该文件。卸载也会移除受管 fragment。[Chezmoi 模板行为](https://www.chezmoi.io/reference/templates/)
 - hook 22 在写入字体文件或新增注册值之前，将对应归属写入 `%LOCALAPPDATA%\oh-my-devenv\fonts.json`。已有的匹配文件和注册值保留原归属。遇到冲突的非受管文件或注册值时，字体安装停止。若非受管文件冲突，请删除或重命名该文件后重新 apply。检查器会校验已有的归属记录。安装、检查和卸载使用共享的路径规范化逻辑来比较注册表路径。
 - 卸载预览并移除已记录的字体文件，以及仍指向这些文件的已记录 HKCU 注册值。文件和注册值分别清理。没有剩余受管项时，删除归属记录。若有项移除失败，归属记录仅保留剩余的受管项，并汇总报告错误。若字体被占用，请关闭使用它的应用后重试卸载。
-- 卸载保留 WinGet 包、mise、mise 管理的运行时以及 Go 和 uv 工具。此规则沿用 Unix，因为 Git 等软件包可能已安装并由其他应用共享。Windows 保留首次运行备份。Unix 将这份备份归档到删除前备份，然后移除原始备份目录。
+- 卸载保留 WinGet 包、mise、mise 管理的运行时以及 Go 和 uv 工具。此规则沿用 Unix，因为 Git 等软件包可能已安装并由其他应用共享。Windows 保留首次运行备份。默认情况下，Unix 确认卸载时先将首次运行备份目录归档到删除前备份，再移除原目录。使用 `--confirm --no-backup` 时，卸载会移除原目录，但不创建该归档。
 
 ## 12. 本地 Overlay
 
@@ -444,14 +444,13 @@ Node 24.21.0、Python 3.13.16、usage 6.12.0 和 uv 0.11.33。mise 数据目录�
 | 实际生效的脚本执行策略是否允许 chezmoi 运行 `.ps1` hook，以及不允许时的停止条件。不绕过设备策略。PowerShell 7 与 Windows PowerShell 5.1 分开存储执行策略设置。组策略可以让它使用 Windows PowerShell 的策略设置，所以要在 `pwsh` 下检查实际生效的策略。 | 2 |
 | 在满足第 7 节前置条件的全新标准用户 Windows 客户端上完成首次 apply。 | 4 |
 
-阶段 5 在 `2994631` 的首次托管 Windows apply 作业中安装了七个 PowerShell 补全。
-由于 `bat` 不在 `PATH` 上，作业跳过了它。新 PowerShell 进程加载补全增加的耗时为
-278、294 和 326 毫秒，中位数为 294 毫秒。无重定向的 profile 探测加载了受管补全。
-卸载移除了受管配置、受管的用户 `Path` 条目、补全，以及桌面字体文件和注册值。
-WinGet 包、mise、运行时以及 Go 和 uv 工具都保留。首次 smoke 作业有两项补全清单测试
-因文件被占用而失败。修复后的 Windows 作业仍待运行。
-
-[完整 CI 运行](RUN_LINK)、[Windows smoke](SMOKE_LINK)、[Windows apply](APPLY_LINK)。
+阶段 5 在 `4ed2234` 上的托管运行通过了所有作业。Windows smoke 通过了 130 项 Pester
+测试，跳过一项。Windows apply 作业安装了七个 PowerShell 补全。由于 `bat` 不在
+`PATH` 上，作业跳过了它。新 PowerShell 进程加载补全增加的耗时为 286、295 和 346
+毫秒，中位数为 295 毫秒。无重定向的 profile 探测加载了受管补全。卸载移除了受管配置、
+受管的用户 `Path` 条目、补全，以及桌面字体文件和注册值。WinGet 包、mise、运行时
+以及 Go 和 uv 工具都保留。
+[完整 CI 运行](https://github.com/kangmingxuan/oh-my-devenv/actions/runs/44999549868)、[Windows smoke](https://github.com/kangmingxuan/oh-my-devenv/actions/runs/44999549868/job/137137875263)、[Windows apply](https://github.com/kangmingxuan/oh-my-devenv/actions/runs/44999549868/job/137137875282)。
 
 ## 18. 来源
 
