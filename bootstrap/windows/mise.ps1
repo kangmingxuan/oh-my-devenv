@@ -55,12 +55,16 @@ function Get-MiseProfileCommand {
     param([string]$ConfigPath, [string]$ShimsDirectory)
 
     $inventory = (Invoke-GlobalMise -Arguments @('ls', '--current', '--json')).Stdout | ConvertFrom-Json -AsHashtable
-    $configKey = ConvertTo-PathKey -Path $ConfigPath
+    # mise merges the machine-local overlay next to the managed config, and its values take precedence.
+    $configKeys = @(
+        ConvertTo-PathKey -Path $ConfigPath
+        ConvertTo-PathKey -Path (Join-Path ([IO.Path]::GetDirectoryName($ConfigPath)) 'config.local.toml')
+    )
     $found = $false
     foreach ($name in $inventory.Keys) {
         foreach ($version in $inventory[$name]) {
             $source = $version['source']
-            if ($version['active'] -and $source -and (ConvertTo-PathKey -Path $source['path']) -ceq $configKey) {
+            if ($version['active'] -and $source -and (ConvertTo-PathKey -Path $source['path']) -cin $configKeys) {
                 $found = $true
                 $path = Get-MiseToolExecutable -Name $name
                 $binary = [IO.Path]::GetFileName($path)

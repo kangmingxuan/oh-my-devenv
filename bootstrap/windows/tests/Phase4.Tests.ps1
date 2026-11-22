@@ -237,6 +237,25 @@ Describe 'Windows phase 4 helpers' -Skip:(-not $IsWindows) {
         }
     }
 
+    Context 'mise profile commands' {
+        It 'includes active tools selected by the managed config or its local overlay' {
+            $config = Join-Path $TestDrive 'mise/config.toml'
+            $local = Join-Path $TestDrive 'mise/config.local.toml'
+            $other = Join-Path $TestDrive 'project/mise.toml'
+            $inventory = @{
+                node = @(@{ active = $true; source = @{ path = $local } })
+                go = @(@{ active = $true; source = @{ path = $config } })
+                deno = @(@{ active = $true; source = @{ path = $other } })
+            } | ConvertTo-Json -Depth 5
+            Mock Invoke-GlobalMise { [pscustomobject]@{ Stdout = $inventory; Stderr = '' } }
+            Mock Get-MiseToolExecutable { Join-Path $TestDrive "bin/$Name.exe" }
+
+            $names = @(Get-MiseProfileCommand -ConfigPath $config -ShimsDirectory 'C:\shims' |
+                ForEach-Object { $_.Name }) | Sort-Object
+            $names | Should -BeExactly @('go.exe', 'node.exe')
+        }
+    }
+
     Context 'Persistent user Path ownership' {
         BeforeEach {
             $state = Join-Path $TestDrive 'config/user-path.json'
