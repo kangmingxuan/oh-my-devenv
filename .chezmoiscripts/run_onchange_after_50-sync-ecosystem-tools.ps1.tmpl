@@ -1,0 +1,18 @@
+# go-tools.txt: {{ include "bootstrap/manifests/ecosystem/go-tools.txt" | sha256sum }}
+# uv-tools.txt: {{ include "bootstrap/manifests/ecosystem/uv-tools.txt" | sha256sum }}
+# install-go-tools.ps1: {{ include "bootstrap/windows/install-go-tools.ps1" | sha256sum }}
+# install-uv-tools.ps1: {{ include "bootstrap/windows/install-uv-tools.ps1" | sha256sum }}
+# ecosystem.ps1: {{ include "bootstrap/windows/ecosystem.ps1" | sha256sum }}
+# common.ps1: {{ include "bootstrap/windows/common.ps1" | sha256sum }}
+# environment.ps1: {{ include "dot_config/oh-my-devenv/powershell/environment.ps1" | sha256sum }}
+# mise.ps1: {{ include "bootstrap/windows/mise.ps1" | sha256sum }}
+# mise config: {{ include "dot_config/mise/config.toml.tmpl" | sha256sum }}
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = 'Stop'
+
+if (-not $IsWindows) { throw 'This hook requires native Windows.' }
+
+$manifests = {{ includeTemplate "powershell-literal" (joinPath .chezmoi.sourceDir "bootstrap/manifests/ecosystem") }}
+& {{ includeTemplate "powershell-literal" (joinPath .chezmoi.sourceDir "bootstrap/windows/install-go-tools.ps1") }} -ManifestPath (Join-Path $manifests 'go-tools.txt')
+& {{ includeTemplate "powershell-literal" (joinPath .chezmoi.sourceDir "bootstrap/windows/install-uv-tools.ps1") }} -ManifestPath (Join-Path $manifests 'uv-tools.txt')

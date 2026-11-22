@@ -13,17 +13,27 @@ $helpers = Split-Path -Parent $PSScriptRoot
 . (Join-Path $helpers 'profile.ps1')
 . (Join-Path $helpers 'system-packages.ps1')
 . (Join-Path $helpers 'desktop.ps1')
+. (Join-Path $helpers 'user-path.ps1')
+. (Join-Path $helpers 'mise.ps1')
+. (Join-Path $helpers 'ecosystem.ps1')
 
 function Invoke-FixtureChezmoi {
-    param([string[]]$Arguments, [switch]$AllowFailure)
+    param([string[]]$Arguments, [switch]$AllowFailure, [int]$TimeoutSeconds = 0)
 
-    Invoke-NativeCommand -Executable $chezmoi.Source -Arguments ($chezmoiArgs + $Arguments) -AllowFailure:$AllowFailure
+    Invoke-NativeCommand -Executable $chezmoi.Source -Arguments ($chezmoiArgs + $Arguments) -AllowFailure:$AllowFailure -TimeoutSeconds $TimeoutSeconds
 }
 
 function Invoke-FixtureApply {
-    $result = Invoke-FixtureChezmoi -Arguments @('apply', '--force')
+    param([switch]$Reapply)
+
+    $result = Invoke-FixtureChezmoi -Arguments @('apply', '--force') -AllowFailure -TimeoutSeconds 900
     Write-Host $result.Stdout
     Write-Host $result.Stderr
+    $script:fixtureInstallLog += $result.Stdout + $result.Stderr
+    if ($result.ExitCode -ne 0) { throw "Windows fixture apply exited with code $($result.ExitCode)." }
+    if ($Reapply -and ($result.Stdout + $result.Stderr) -match 'Syncing mise-managed|Syncing Go tools|Syncing uv tools|Installing jdx.mise') {
+        throw 'Reapply ran a phase-4 installer.'
+    }
     if ($result.Stdout -notmatch 'All checks passed\.') {
         throw 'The Windows check did not run or did not pass.'
     }
@@ -65,7 +75,7 @@ function Assert-FixtureCheckFailure {
 
     try {
         & (Join-Path $helpers 'check.ps1') -Destination $destination -ProfilePath $profilePath `
-            -DesktopBaseline:$fixtureConfig.data.desktopBaseline
+            -DesktopBaseline:$fixtureConfig.data.desktopBaseline -RegistryPath $pathTarget.RegistryPath
     } catch {
         # Native stderr is part of the exception message before PowerShell formats it.
         $diagnostic = $_.Exception.Message
@@ -114,8 +124,8 @@ class Stub
             Console.WriteLine("WinGet fixture: " + action);
             return 0;
         }
-        if (program == "mise" && args.Length == 2 && args[0] == "activate" && args[1] == "pwsh")
-            return 0;
+        if (program == "mise" || program == "go" || program == "uv" || program == "python")
+            return Phase4Stub.Run(program, args);
         if (program == "oh-my-posh")
         {
             if (args.Length != 4 || args[0] != "init" || args[1] != "pwsh" ||
@@ -128,10 +138,7 @@ class Stub
             return 0;
         }
         if (program != "ssh")
-        {
-            File.AppendAllText(Environment.GetEnvironmentVariable("OH_MY_DEVENV_TEST_INSTALLERS"), "unexpected installer");
             return 97;
-        }
         if (args.Length == 1 && args[0] == "-V")
         {
             Console.Error.WriteLine("OpenSSH fixture");
@@ -145,15 +152,22 @@ class Stub
     }
 }
 '@
-    $null = Invoke-NativeCommand -Executable $compiler -Arguments @('/nologo', "/out:$shim", $stubSource)
-    foreach ($tool in @('ssh', 'mise', 'uv', 'winget', 'oh-my-posh')) {
+    $null = Invoke-NativeCommand -Executable $compiler -Arguments @(
+        '/nologo', "/out:$shim", $stubSource, (Join-Path $PSScriptRoot 'Phase4Stub.cs')
+    )
+    foreach ($tool in @('ssh', 'winget', 'oh-my-posh')) {
         Copy-Item -LiteralPath $shim -Destination (Join-Path $shimDirectory "$tool.exe")
     }
-    $env:OH_MY_DEVENV_TEST_INSTALLERS = Join-Path $fixture 'unexpected-installers'
+    $env:OH_MY_DEVENV_TEST_PHASE4 = $fixture
+    $env:GOBIN = Join-Path $fixture 'ecosystem-bin'
+    $env:UV_TOOL_BIN_DIR = $env:GOBIN
+    $env:UV_TOOL_DIR = Join-Path $fixture 'uv-tools'
     $env:OH_MY_DEVENV_TEST_HOME = $destination
     $env:OH_MY_DEVENV_TEST_WINGET_LOG = Join-Path $fixture 'winget.log'
     $env:OH_MY_DEVENV_TEST_WINGET_MANIFEST = $packageManifestPath
-    $env:PATH = "$shimDirectory;$env:PATH"
+    $miseBin = [IO.Directory]::CreateDirectory((Join-Path $fixture 'mise-bin')).FullName
+    Copy-Item -LiteralPath $shim -Destination (Join-Path $miseBin 'mise.exe')
+    $env:PATH = "$shimDirectory;$miseBin;$env:PATH"
 }
 
 function Assert-FixtureWinGet {
@@ -216,6 +230,155 @@ function Restore-FixtureFontState {
     }
 }
 
+function Initialize-FixturePathSnapshot {
+    if ('OhMyDevenv.FixtureRegistry' -as [type]) { return }
+
+    Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+using Microsoft.Win32.SafeHandles;
+
+namespace OhMyDevenv {
+    public static class FixtureRegistry {
+        [DllImport("advapi32.dll", CharSet = CharSet.Unicode)]
+        public static extern int RegQueryValueEx(SafeRegistryHandle key, string name, IntPtr reserved,
+            out uint type, [Out] byte[] data, ref uint size);
+
+        [DllImport("advapi32.dll", CharSet = CharSet.Unicode)]
+        public static extern int RegSetValueEx(SafeRegistryHandle key, string name, uint reserved,
+            uint type, byte[] data, uint size);
+    }
+}
+'@
+}
+
+function Get-FixturePathSnapshot {
+    param([string]$RegistryPath)
+
+    Initialize-FixturePathSnapshot
+    $key = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($RegistryPath)
+    try {
+        if ($null -eq $key) { return @{ Type = $null; Bytes = [byte[]]@() } }
+        $size = $kind = [uint32]0
+        $status = [OhMyDevenv.FixtureRegistry]::RegQueryValueEx($key.Handle, 'Path', [IntPtr]::Zero,
+            [ref]$kind, $null, [ref]$size)
+        if ($status -eq 2) { return @{ Type = $null; Bytes = [byte[]]@() } }
+        if ($status -ne 0) { throw "Could not read the hosted user Path size. Win32 error $status." }
+        $bytes = [byte[]]::new($size)
+        $status = [OhMyDevenv.FixtureRegistry]::RegQueryValueEx($key.Handle, 'Path', [IntPtr]::Zero,
+            [ref]$kind, $bytes, [ref]$size)
+        if ($status -ne 0 -or $size -ne $bytes.Length) { throw "Could not snapshot the hosted user Path. Win32 error $status." }
+        @{ Type = $kind; Bytes = $bytes }
+    } finally {
+        if ($null -ne $key) { $key.Dispose() }
+    }
+}
+
+function Restore-FixturePathSnapshot {
+    param([string]$RegistryPath, [hashtable]$Snapshot)
+
+    $key = [Microsoft.Win32.Registry]::CurrentUser.CreateSubKey($RegistryPath)
+    try {
+        if ($null -eq $Snapshot.Type) {
+            $key.DeleteValue('Path', $false)
+        } else {
+            $status = [OhMyDevenv.FixtureRegistry]::RegSetValueEx($key.Handle, 'Path', 0,
+                $Snapshot.Type, $Snapshot.Bytes, $Snapshot.Bytes.Length)
+            if ($status -ne 0) { throw "Could not restore the hosted user Path. Win32 error $status." }
+        }
+    } finally {
+        $key.Dispose()
+    }
+}
+
+function Assert-FixturePathSnapshot {
+    param([string]$RegistryPath, [hashtable]$Expected)
+
+    $actual = Get-FixturePathSnapshot -RegistryPath $RegistryPath
+    if ($actual.Type -ne $Expected.Type -or
+        -not [Linq.Enumerable]::SequenceEqual[byte]($actual.Bytes, $Expected.Bytes)) {
+        throw "The Path value type or raw registry bytes changed in HKCU\$RegistryPath."
+    }
+}
+
+function Assert-FixturePathUnchanged {
+    Assert-FixturePathSnapshot -RegistryPath $pathTarget.RegistryPath -Expected $afterPhase4
+    if ($recordedPath.Count) {
+        if (-not [Linq.Enumerable]::SequenceEqual[byte]([IO.File]::ReadAllBytes($pathTarget.StatePath), $recordBytes)) {
+            throw 'The user Path ownership record changed.'
+        }
+    } elseif ([IO.File]::Exists($pathTarget.StatePath)) {
+        throw 'The existing user Path did not require an ownership record.'
+    }
+}
+
+function Assert-FixturePathUninstall {
+    param([hashtable]$Options)
+
+    $before = Read-UserPath -RegistryPath $pathTarget.RegistryPath
+    $expected = ($before.Value -split ';' | Where-Object { $_ -cnotin $recordedPath }) -join ';'
+    $previewOptions = $Options.Clone()
+    $previewOptions.Remove('Apply')
+    $preview = (& $uninstall @previewOptions 6>&1 | Out-String)
+    foreach ($entry in $recordedPath) {
+        if (-not $preview.Contains("Would remove user Path entry '$entry'.")) {
+            throw "Uninstall preview omitted '$entry'."
+        }
+    }
+    Assert-FixturePathUnchanged
+    & $uninstall @Options
+    $after = Read-UserPath -RegistryPath $pathTarget.RegistryPath
+    if ($after.Value -cne $expected -or $after.Kind -ne $before.Kind -or [IO.File]::Exists($pathTarget.StatePath)) {
+        throw 'Uninstall did not remove exactly the recorded user Path entries and their record.'
+    }
+    Write-Host 'Uninstall removed exactly the recorded entries and preserved the pre-existing user Path entries.'
+}
+
+function Write-FixturePhase4Diagnostic {
+    $pathError = $fixtureInstallLog -match '(?i)path.{0,60}(too long|length limit)|filename.{0,60}too long|(?:os error|Win32 error) 206\b'
+    if ($fixtureInstallLog) {
+        Write-Host "Phase 4 installer log contains a path-length error: $pathError"
+    } else {
+        Write-Host 'Phase 4 installer path-length errors: unavailable without an apply log.'
+    }
+
+    Update-HookPath -Managed
+    $inventory = @{}
+    $directories = @{}
+    if (Get-PathApplication -Name mise.exe -Optional) {
+        try {
+            $inventory = (Invoke-GlobalMise -Arguments @('ls', '--current', '--json')).Stdout | ConvertFrom-Json -AsHashtable
+        } catch { Write-Warning "Could not read the installed mise inventory. $_" }
+        try {
+            $doctor = Invoke-GlobalMise -Arguments @('doctor', '--json') -AllowFailure
+            $directories['mise data'] = ($doctor.Stdout | ConvertFrom-Json -AsHashtable).dirs.data
+        } catch { Write-Warning "Could not resolve the mise data directory. $_" }
+        try {
+            $uv = Get-MiseToolExecutable -Name uv
+            $directories['uv tools'] = (Invoke-NativeCommand -Executable $uv -Arguments @('tool', 'dir')).Stdout.Trim()
+        } catch { Write-Warning "Could not resolve the uv tools directory. $_" }
+    }
+    foreach ($tool in $miseVersions.Keys | Sort-Object) {
+        $records = @($inventory[$tool] | Where-Object { $_ -and $_['installed'] })
+        $versions = if ($records.Count) { ($records | ForEach-Object { $_['version'] }) -join ', ' } else { 'unconfirmed' }
+        Write-Host "Phase 4 mise tool ${tool}: requested $($miseVersions[$tool]), installed $versions"
+    }
+    foreach ($name in 'mise data', 'uv tools') {
+        $directory = $directories[$name]
+        if (-not $directory -or -not [IO.Directory]::Exists($directory)) {
+            Write-Host "Phase 4 longest $name path: unavailable"
+            continue
+        }
+        try {
+            $length = 0
+            foreach ($entry in Get-ChildItem -LiteralPath $directory -Recurse -Force) {
+                $length = [Math]::Max($length, $entry.FullName.Length)
+            }
+            Write-Host "Phase 4 longest $name path: $length characters under '$directory'"
+        } catch { Write-Warning "Could not measure the $name paths. $_" }
+    }
+}
+
 $source = [IO.Path]::GetFullPath((Join-Path $helpers '../..'))
 $pwsh = Join-Path $PSHOME 'pwsh.exe'
 $uninstall = Join-Path $helpers 'uninstall.ps1'
@@ -235,6 +398,14 @@ $fixtureConfig = @{
 $originalGitGlobal = $env:GIT_CONFIG_GLOBAL
 $originalPath = $env:PATH
 $fontState = $null
+$pathSnapshot = $null
+$pathTarget = $null
+$fixtureInstallLog = ''
+$miseVersions = @{}
+$originalToolEnvironment = @{}
+foreach ($name in @('GOPATH', 'GOBIN', 'UV_TOOL_BIN_DIR', 'UV_TOOL_DIR')) {
+    $originalToolEnvironment[$name] = [Environment]::GetEnvironmentVariable($name)
+}
 try {
     Update-HookPath
     if ($Mode -eq 'smoke') {
@@ -242,7 +413,19 @@ try {
         $profilePath = Join-Path $fixture 'redirected Documents/PowerShell/profile.ps1'
         $fixtureConfig.scriptEnv.OH_MY_DEVENV_WINDOWS_PROFILE_PATH = $profilePath
         Initialize-FixtureStub
+        $pathTarget = @{
+            RegistryPath = "Software/oh-my-devenv-fixture-$([Guid]::NewGuid())".Replace('/', '\')
+            StatePath = Join-Path $fixture 'user-path.json'
+        }
+        $fixtureConfig.scriptEnv.OH_MY_DEVENV_WINDOWS_PATH_REGISTRY = $pathTarget.RegistryPath
+        $fixtureConfig.scriptEnv.OH_MY_DEVENV_WINDOWS_PATH_STATE = $pathTarget.StatePath
     } else {
+        $pathTarget = Get-HookUserPathTarget -Destination $HOME -HomeDirectory $HOME
+        if ([IO.File]::Exists($pathTarget.StatePath)) {
+            throw 'The hosted runner already has a managed user Path ownership record.'
+        }
+        $pathSnapshot = Get-FixturePathSnapshot -RegistryPath $pathTarget.RegistryPath
+        Write-Host "Hosted image mise before apply: $((Get-PathApplication -Name mise.exe -Optional | Select-Object -ExpandProperty Source))"
         $winget = Get-WinGetApplication
         Write-Host "Hosted image: $env:ImageOS $env:ImageVersion"
         Write-Host "Hosted image WinGet path: $($winget.Source)"
@@ -297,6 +480,17 @@ try {
     }
     $gitOverlay = Join-Path $destination '.config/oh-my-devenv/git/config'
     $miseConfig = Join-Path $destination '.config/mise/config.toml'
+    $miseTools = '{{ (include "dot_config/mise/config.toml.tmpl" | fromToml).tools | toJson }}'
+    $miseVersions = (Invoke-FixtureChezmoi -Arguments @('execute-template', $miseTools)).Stdout | ConvertFrom-Json -AsHashtable
+    if ($Mode -eq 'smoke') {
+        $inventory = @{}
+        foreach ($name in $miseVersions.Keys) {
+            $inventory[$name] = @(@{ version = $miseVersions[$name]; active = $true; installed = $true; source = @{ path = $miseConfig } })
+        }
+        Set-FixtureText -Path (Join-Path $fixture 'mise-tools.txt') -Content ($miseVersions.Keys -join "`n")
+        Set-FixtureText -Path (Join-Path $fixture 'mise-inventory.json') -Content ($inventory | ConvertTo-Json -Depth 5)
+        Set-FixtureText -Path (Join-Path $fixture 'mise-python-version') -Content $miseVersions.python
+    }
     $profileBody = Join-Path $destination '.config/oh-my-devenv/powershell/profile.ps1'
     $profileEnvironment = Join-Path $destination '.config/oh-my-devenv/powershell/environment.ps1'
     $profileOverlay = Join-Path $destination '.config/oh-my-devenv/powershell/profile.local.ps1'
@@ -349,7 +543,9 @@ function prompt {{ 'overlay prompt> ' }}
             $findings | Format-List
             throw 'PSScriptAnalyzer found problems.'
         }
-        Invoke-Pester -Path $PSScriptRoot -Output Detailed -CI
+        Push-Location $fixture
+        try { Invoke-Pester -Path $PSScriptRoot -Output Detailed -CI }
+        finally { Pop-Location }
 
         # An alternate desktop destination must fail before writing the fragment or reaching the installer.
         $fixtureConfig.data.desktopBaseline = $true
@@ -384,6 +580,7 @@ function prompt {{ 'overlay prompt> ' }}
         $uninstallOptions = @{
             Apply = $true; Config = $config; Destination = $destination
             ProfilePath = $profilePath; BackupRoot = $uninstallBackupRoot
+            RegistryPath = $pathTarget.RegistryPath; StatePath = $pathTarget.StatePath
         }
         Set-Acl -LiteralPath $gitConfig -AclObject $blockedAcl
         try {
@@ -435,7 +632,24 @@ function prompt {{ 'overlay prompt> ' }}
         [IO.Directory]::Move($backupRoot, (Join-Path $fixture 'failed-backup'))
     }
 
+    $managedPath = @(Get-ManagedProfilePathEntry)
+    $seedPath = Read-UserPath -RegistryPath $pathTarget.RegistryPath
+    # Keep one managed directory as a user-owned entry to check ownership on uninstall.
+    if (@(Get-MissingUserPathEntry -PathValue $seedPath -Entries @($managedPath[-1])).Count) {
+        $key = [Microsoft.Win32.Registry]::CurrentUser.CreateSubKey($pathTarget.RegistryPath)
+        try {
+            $seed = if ($seedPath.Value) { "$($seedPath.Value);$($managedPath[-1])" } else { $managedPath[-1] }
+            $key.SetValue('Path', $seed, ($seedPath.Kind ?? [Microsoft.Win32.RegistryValueKind]::ExpandString))
+        } finally { $key.Dispose() }
+    }
+    $managedMissingBeforeApply = @(Get-MissingUserPathEntry -PathValue (Read-UserPath -RegistryPath $pathTarget.RegistryPath) -Entries $managedPath)
     Invoke-FixtureApply
+    $afterPhase4 = Get-FixturePathSnapshot -RegistryPath $pathTarget.RegistryPath
+    $recordedPath = @(Read-UserPathRecord -StatePath $pathTarget.StatePath)
+    if (($recordedPath -join ';') -cne ($managedMissingBeforeApply -join ';')) {
+        throw 'The user Path record did not contain exactly the newly inserted entries.'
+    }
+    [byte[]]$recordBytes = if ($recordedPath.Count) { [IO.File]::ReadAllBytes($pathTarget.StatePath) }
     foreach ($old in @(@{ Path = $miseConfig; Text = $oldMise }, @{ Path = $profilePath; Text = $oldProfile })) {
         $backupCopies = @(Get-ChildItem -LiteralPath $backupRoot -Directory | ForEach-Object {
             $copy = Get-BackupPath -Path $old.Path -RunDirectory $_.FullName
@@ -456,6 +670,15 @@ function prompt {{ 'overlay prompt> ' }}
     }
 
     if ($Mode -eq 'smoke') {
+        $key = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($pathTarget.RegistryPath, $true)
+        try {
+            $key.DeleteValue('Path', $true)
+            Assert-FixtureCheckFailure -Pattern 'Missing directories in the user Path'
+        } finally {
+            $key.Dispose()
+            Restore-FixturePathSnapshot -RegistryPath $pathTarget.RegistryPath -Snapshot $afterPhase4
+        }
+
         $alternateGitConfig = Join-Path $fixture 'alternate.gitconfig'
         Set-FixtureText -Path $alternateGitConfig -Content "# alternate global config`n"
         $env:GIT_CONFIG_GLOBAL = $alternateGitConfig
@@ -473,9 +696,7 @@ function prompt {{ 'overlay prompt> ' }}
         Set-FixtureText -Path $profilePath -Content $installedProfile
         $installedBody = [IO.File]::ReadAllText($profileBody)
         $originalProbePath = $env:PATH
-        $originalGoBin = $env:GOBIN
         try {
-            $env:GOBIN = Join-Path $fixture 'profile-go-bin'
             $probeEntries = @(
                 (Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'mise/shims')
                 (Join-Path $HOME '.local/bin')
@@ -495,7 +716,6 @@ $env:OH_MY_DEVENV_PROFILE_LOADED = '1'
             }
         } finally {
             $env:PATH = $originalProbePath
-            $env:GOBIN = $originalGoBin
             Set-FixtureText -Path $profileBody -Content $installedBody
         }
         $alternateTheme = Join-Path (Split-Path -Parent $poshTheme) 'fixture.omp.json'
@@ -508,11 +728,20 @@ $env:OH_MY_DEVENV_PROFILE_LOADED = '1'
             [IO.File]::Delete($alternateTheme)
         }
         Set-FixtureText -Path $profilePath -Content $oldProfile
-        Invoke-FixtureApply
+        Invoke-FixtureApply -Reapply
         Assert-FixtureWinGet
-        if ([IO.File]::Exists($env:OH_MY_DEVENV_TEST_INSTALLERS)) {
-            throw 'A hook attempted to install mise or ecosystem tools.'
+        Assert-FixturePathUnchanged
+        $phase4Calls = @(Get-Content -LiteralPath (Join-Path $fixture 'phase4.log'))
+        $manifestDirectory = Join-Path $source 'bootstrap/manifests/ecosystem'
+        $expectedCalls = @(
+            'mise install'
+            Read-GoToolManifest -Path (Join-Path $manifestDirectory 'go-tools.txt') | ForEach-Object { "go install $($_.Spec.Trim())" }
+            Read-UvToolManifest -Path (Join-Path $manifestDirectory 'uv-tools.txt') | ForEach-Object { "uv install $($_.Spec)" }
+        )
+        if (($phase4Calls -join "`n") -cne ($expectedCalls -join "`n")) {
+            throw "Unexpected stub install calls across apply and reapply: $phase4Calls"
         }
+        Assert-FixturePathUninstall -Options $uninstallOptions
         return
     }
 
@@ -539,12 +768,14 @@ if ($env:OH_MY_DEVENV_PROFILE_LOADED -cne '1' -or $env:OH_MY_DEVENV_POSH_CONFIG)
     }
     Write-Host 'Plain pwsh -File loaded the managed profile and overlay without initializing Oh My Posh.'
 
-    Invoke-FixtureApply
+    Invoke-FixtureApply -Reapply
+    Assert-FixturePathUnchanged
     if ([IO.File]::ReadAllText($profilePath) -cne $baselineProfile) {
         throw 'Reapply changed the profile.'
     }
     Set-FixtureText -Path $profilePath -Content $oldProfile
-    Invoke-FixtureApply
+    Invoke-FixtureApply -Reapply
+    Assert-FixturePathUnchanged
     if ([IO.File]::ReadAllText($profilePath) -cne $baselineProfile) {
         throw 'Reapply did not repair the managed profile line.'
     }
@@ -569,7 +800,8 @@ if ($env:OH_MY_DEVENV_PROFILE_LOADED -cne '1' -or $env:OH_MY_DEVENV_POSH_CONFIG)
     if ([IO.File]::ReadAllText($profilePath) -cne $baselineProfile -or -not [IO.File]::Exists($profileBody)) {
         throw 'The uninstall preview changed the destination.'
     }
-    & $uninstall -Apply -Config $config -BackupRoot $uninstallBackupRoot
+    Assert-FixturePathUnchanged
+    Assert-FixturePathUninstall -Options @{ Apply = $true; Config = $config; BackupRoot = $uninstallBackupRoot }
     $state = (Invoke-FixtureChezmoi -Arguments @('state', 'dump')).Stdout | ConvertFrom-Json -AsHashtable
     if ($state.scriptState.Count -or $state.entryState.Count) {
         throw 'Uninstall did not reset the chezmoi script and entry state.'
@@ -609,12 +841,30 @@ if ($env:OH_MY_DEVENV_PROFILE_LOADED -cne '1' -or $env:OH_MY_DEVENV_POSH_CONFIG)
     }
 } finally {
     try {
-        if ($null -ne $fontState) {
-            Restore-FixtureFontState -State $fontState -RegistryPath $fontTarget.RegistryPath
+        try {
+            # Retain WinGet's executable directory in this process for diagnostics.
+            if ($Mode -eq 'apply') { Update-HookPath -Managed }
+        } finally {
+            if ($null -ne $pathSnapshot) {
+                Restore-FixturePathSnapshot -RegistryPath $pathTarget.RegistryPath -Snapshot $pathSnapshot
+                Assert-FixturePathSnapshot -RegistryPath $pathTarget.RegistryPath -Expected $pathSnapshot
+                if ([IO.File]::Exists($pathTarget.StatePath)) { [IO.File]::Delete($pathTarget.StatePath) }
+                Send-UserPathChange
+            } elseif ($pathTarget -and $Mode -eq 'smoke') {
+                [Microsoft.Win32.Registry]::CurrentUser.DeleteSubKeyTree($pathTarget.RegistryPath, $false)
+            }
         }
     } finally {
-        $env:GIT_CONFIG_GLOBAL = $originalGitGlobal
-        $env:PATH = $originalPath
-        [IO.Directory]::Delete($fixture, $true)
+        try {
+            if ($null -ne $fontState) { Restore-FixtureFontState -State $fontState -RegistryPath $fontTarget.RegistryPath }
+            if ($Mode -eq 'apply') { Write-FixturePhase4Diagnostic }
+        } finally {
+            $env:GIT_CONFIG_GLOBAL = $originalGitGlobal
+            $env:PATH = $originalPath
+            foreach ($name in $originalToolEnvironment.Keys) {
+                [Environment]::SetEnvironmentVariable($name, $originalToolEnvironment[$name])
+            }
+            [IO.Directory]::Delete($fixture, $true)
+        }
     }
 }

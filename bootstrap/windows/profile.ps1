@@ -162,12 +162,14 @@ function Write-ProfileReplacement {
 }
 
 function Get-ProfileProbePath {
-    $managed = @(Get-ManagedProfilePathEntry | ForEach-Object { ConvertTo-PathKey -Path $_ })
+    param([string[]]$ToolDirectories)
+
+    $managed = @(@(Get-ManagedProfilePathEntry) + $ToolDirectories | ForEach-Object { ConvertTo-PathKey -Path $_ })
     (Get-HookPath | Where-Object { (ConvertTo-PathKey -Path $_) -cnotin $managed }) -join [IO.Path]::PathSeparator
 }
 
 function Confirm-ManagedProfile {
-    param([string]$ProfilePath, [string]$Destination)
+    param([string]$ProfilePath, [string]$Destination, [hashtable[]]$Commands = @())
 
     $arguments = @('-NoLogo', '-NonInteractive')
     $fixtureProfile = (ConvertTo-PathKey -Path $ProfilePath) -cne
@@ -181,8 +183,10 @@ function Confirm-ManagedProfile {
     if ($fixtureProfile) {
         $arguments += @('-FixtureProfilePath', $ProfilePath)
     }
+    $toolDirectories = @($Commands | ForEach-Object { [IO.Path]::GetDirectoryName($_.Path) } | Select-Object -Unique)
     $probeEnvironment = @{
-        PATH = Get-ProfileProbePath
+        PATH = Get-ProfileProbePath -ToolDirectories $toolDirectories
+        OH_MY_DEVENV_PROBE_COMMANDS = ConvertTo-Json -InputObject $Commands -Compress
         OH_MY_DEVENV_PROFILE_LOADED = $null
         OH_MY_DEVENV_PROBE_PROMPT = '1'
         OH_MY_DEVENV_POSH_CONFIG = $null
@@ -190,13 +194,15 @@ function Confirm-ManagedProfile {
         POSH_SESSION_ID = $null
     }
     $pwsh = Join-Path $PSHOME $(if ($IsWindows) { 'pwsh.exe' } else { 'pwsh' })
+    $root = if ($IsWindows) { "$env:SystemDrive\" }
     try {
-        $result = Invoke-NativeCommand -Executable $pwsh -Arguments $arguments -Environment $probeEnvironment -TimeoutSeconds 90
+        $result = Invoke-NativeCommand -Executable $pwsh -Arguments $arguments -Environment $probeEnvironment `
+            -WorkingDirectory $root -TimeoutSeconds 90
         if (($result.Stdout -split '\r?\n') -cnotcontains $successMarker) {
             throw 'The child PowerShell did not report the profile probe success marker.'
         }
     } catch {
         throw "PowerShell profile check failed for '$ProfilePath'. $_"
     }
-    Write-Host 'PowerShell loaded the managed profile, restored its PATH entries, and initialized Oh My Posh with the managed theme.'
+    Write-Host 'PowerShell loaded the managed profile, restored its PATH entries, resolved the managed commands, and initialized Oh My Posh with the managed theme.'
 }

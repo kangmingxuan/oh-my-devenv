@@ -866,6 +866,10 @@ for hook_platform in "${hook_platforms[@]}" "windows|$windows_chezmoi_data"; do
       assert_file_contains "$tmp_dir/windows-check-disabled.ps1" '-DesktopBaseline:$false'
     done
     # Native syntax and lint checks of the rendered hooks run in Windows CI.
+    for runtime_hook in 30-install-mise 40-install-runtimes 50-sync-ecosystem-tools; do
+      grep -Fxq ".chezmoiscripts/$runtime_hook.ps1" <<<"$managed_platform" \
+        || fail_test "Windows does not manage the phase-4 hook $runtime_hook"
+    done
     for hook_template in "$repo_root"/.chezmoiscripts/*.ps1.tmpl; do
       rendered_hook="$tmp_dir/hook-windows-$(basename "$hook_template" .tmpl)"
       chezmoi --source="$repo_root" --destination="$HOME" --override-data "$platform_override" \

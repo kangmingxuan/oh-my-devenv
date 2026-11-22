@@ -1,6 +1,6 @@
 # Technical Design: Native Windows Platform
 
-Status: accepted. Phase 3 (system packages and desktop baseline) passed the hosted Windows smoke and apply jobs. Phases 4–5 have not started.
+Status: accepted. Phase 3 (system packages and desktop baseline) passed the hosted Windows smoke and apply jobs. Phase 4 is implemented and awaits hosted Windows validation. Phase 5 has not started.
 
 ## 1. Summary
 
@@ -33,6 +33,13 @@ The user made these decisions on 2026-11-20, except where another date is stated
 | Persist the managed directories in the user `Path` | The user decided this on 2026-11-21, so that applications started outside PowerShell find the managed tools. Claude designed the mechanism in section 7. |
 
 Claude proposed every other decision in this document within the scope above. Section 16 lists which review findings Claude adopted. The user approved phase 3 on 2026-11-21 and deferred the first live Windows apply until after all planned phases. Claude decided the installation scope, installer and checker behavior, device-policy handling, desktop installation and validation, and the phase-3 uninstall boundary within that approval.
+
+The user approved phase 4 on 2026-11-22 after PR #66 merged. The shared inventories
+and persistent user `Path` implement the user's decisions above. Within the
+phase-4 approval, Claude chose the WinGet command, runtime hook and hash
+inputs, shared tool eligibility, ecosystem installer behavior, user `Path`
+ownership, uninstall, checker, path-length diagnostics, and hosted CI tests
+(items 1–9 in the implementation brief).
 
 ## 3. Goals and Non-Goals
 
@@ -118,7 +125,11 @@ Keep the Unix hook numbers, so the order of the layers is the same on every plat
 
 Hash triggers work as on Unix. Each `run_onchange_` Windows hook includes the hashes of its manifest and its helper scripts.
 
-Hook 30 uses winget, so mise comes from the same package manager as the other system tools. This matches the Homebrew route on macOS. The mise documentation recommends its own PowerShell install script instead: winget releases can lag, and mise turns off `mise self-update` for winget installs. Upgrade mise with `winget upgrade jdx.mise`. Like the Unix hook, hook 30 skips the install when `mise` is already on `PATH`.
+Hook 30 uses winget, so mise comes from the same package manager as the other system tools. This matches the Homebrew route on macOS. The mise documentation recommends its own PowerShell install script instead: winget releases can lag, and mise turns off `mise self-update` for winget installs. Upgrade mise with `winget upgrade jdx.mise`. Hook 30 skips the install when `mise` is already on `PATH`. Otherwise it installs the
+exact `jdx.mise` package from the `winget` source with user scope and confirms
+`mise --version` after refreshing the hook environment. A WinGet error stops
+apply under the same device-policy rule as hook 20.
+[WinGet package manifest](https://github.com/microsoft/winget-pkgs/blob/master/manifests/j/jdx/mise/2026.11.12/jdx.mise.installer.yaml)
 
 ## 7. PowerShell Rules
 
@@ -144,7 +155,7 @@ In phase 3, the hook helper merges the process, machine, and current user
 `HKCU\Environment\Path`. With symlink support, it uses
 `%LOCALAPPDATA%\Microsoft\WinGet\Links`. Without it, WinGet can
 add the package directory. The checker reads those values again after
-hook 20. The phase-4 steps above add the managed mise and tool directories.
+hook 20. Hooks 30, 40, 50, and the checker also prepend the managed directories and set the Go defaults for their own process.
 [WinGet portable installer](https://github.com/microsoft/winget-cli/blob/master/src/AppInstallerCLICore/PortableInstaller.cpp),
 [WinGet Path registry implementation](https://github.com/microsoft/winget-cli/blob/master/src/AppInstallerCommonCore/PathVariable.cpp).
 
@@ -155,12 +166,12 @@ The user decided to add the managed directories to the persistent user `Path` (s
 - Hook 15 adds the mise shims directory, `~/.local/bin`, and `$GOBIN` to the user `Path` in `HKCU\Environment` on every apply. This starts in phase 4, when the tools in these directories arrive.
 - Add only missing entries. Never add an entry twice. Keep every other entry and its order.
 - Write the resolved directory paths. Do not add a new `%GOBIN%` reference, because `GOBIN` is not persisted.
-- Record each entry that the baseline inserts in a state file in the oh-my-devenv data directory. Reapply keeps this record. An entry that existed before the first apply is not recorded and is not managed.
+- Record each entry that the baseline inserts in `oh-my-devenv/user-path.json` under the effective LocalApplicationData folder. Reapply keeps this record. An entry that existed before the first apply is not recorded and is not managed.
 - Keep the registry value type and the unexpanded entries, such as `%USERPROFILE%` references. Do not write the expanded value back.
-- Notify running applications of the change. Applications that are already running and do not handle the notification see the change only after a restart.
+- Broadcast `WM_SETTINGCHANGE` with `Environment` when the registry value changes. Applications that are already running and do not handle the notification see the change only after a restart.
 - Do not change the machine `Path`. It needs elevation.
 - Do not persist `GOPATH` or `GOBIN`. Their values match the Go defaults.
-- The uninstall removes only the recorded entries. It keeps matching entries that existed before the first apply and all other entries. It does not restore an old snapshot of the whole `Path`.
+- The uninstall preview lists recorded entries still in the user `Path`. Apply removes one exact occurrence per recorded entry and deletes the record. It keeps matching entries that existed before the first apply and all other entries. It does not restore an old snapshot of the whole `Path`.
 - `check.ps1` fails when the user `Path` lacks any of the three required directories listed above, including a directory whose entry existed before the first apply. The ownership record controls uninstall removal, not the set of directories to check.
 - The `Path` writer, reader, and uninstaller take the registry target as an explicit parameter. Smoke tests pass a fixture target and mock the change notification, because a temporary home does not isolate `HKCU`. The real apply job checks and restores the runner account's user `Path`.
 - The profile keeps its own `PATH` setup. It sets the order in PowerShell sessions and works without the persistent entries.
@@ -170,7 +181,9 @@ The user decided to add the managed directories to the persistent user `Path` (s
 In phase 2, the fresh process checks that the managed profile body completed
 and that it added the managed directories. The smoke fixtures reject a profile
 that returns before the managed line and a profile that signals completion
-without adding the required paths.
+without adding the required paths. Phase 4 also verifies that the fresh profile
+resolves the selected mise commands and the Go and uv commands from their shared
+manifests.
 
 ### First-run backup
 
@@ -199,6 +212,7 @@ Tests:
 
 - A uv tool environment keeps its interpreter at `Scripts\python.exe`, not `bin/python`.
 - Executables have an `.exe` suffix. The shadow check that compares the resolved command with the installer-owned binary includes the suffix.
+- The checker reads the Go module version with `go version -m` and the uv package version with `uv tool list`. It checks the uv tool interpreter against its recorded version and the mise-selected Python.
 - The Unix helpers run global mise commands from `/`, so the project config of the caller's working directory does not apply. The PowerShell helpers run them from the root of the system drive (`$env:SystemDrive\`) for the same reason. mise searches for project config from the current directory up to the drive root, so a temporary directory under the user profile does not isolate the commands: a config file in a parent directory still applies. A config file in the root directory itself still applies, on Unix and on Windows. The user-global config, by default `%USERPROFILE%\.config\mise\config.toml`, applies independently of that search. On Unix the default system config directory `/etc/mise` is absolute; on Windows it resolves on the drive of the current directory, so running from the system drive root selects `\etc\mise` on that drive.
 
 ## 8. Shared Data
@@ -335,8 +349,14 @@ Add one Windows overlay, `profile.local.ps1` (section 9), in phase 2 together wi
 - Windows smoke job on a hosted Windows runner:
   - Lint the PowerShell code with PSScriptAnalyzer.
   - Run the Pester tests for the helpers, including the shared-manifest test cases.
-  - Apply and reapply the main source in a temporary home with a WinGet stub. Use a fixture profile path. Test the desktop installer separately with stubbed downloads and isolated font and registry targets.
+  - Apply and reapply the main source in a temporary home with WinGet, mise, Go, and uv stubs. Use a fixture profile path and registry key. Check uninstall with the same key. Test the desktop installer separately with stubbed downloads and isolated font and registry targets.
 - The hosted Windows apply job requires WinGet and Terminal. It runs the real WinGet import, desktop hook, and checker. The hosted Windows Server stalls when launching the registered Oh My Posh MSIX. The fixture copies the installed executable to a temporary directory and uses that copy for the real prompt probe. Launch through the Windows app execution alias still needs a Windows client signoff. The job restores the font files and registry values after testing.
+- The phase-4 apply job runs the real WinGet, mise, Go, and uv paths. It checks
+  the first apply, unchanged reapply, and ownership-based uninstall. It
+  restores the original runner user `Path` bytes and registry type and removes
+  the test ownership record. The job logs requested and installed versions for
+  each mise tool, identified path-length errors, and the longest path found
+  under the mise data and uv tool directories.
 - A coverage gap in real installation requires live signoff before merge. Section 17 records hosted coverage. The user scheduled the first live apply after all planned phases.
 - Run both Windows jobs under the same `needs-checks` condition as the Unix jobs, and feed them into the existing single required check. This avoids a second path classifier that could skip Windows CI after a change to a shared file.
 - Live installs on a real Windows machine follow the same local validation policy as the Unix platforms.
@@ -396,13 +416,20 @@ Sections 2, 9, 10, and 11 record the approved phase-3 baseline and its verificat
 
 The hosted phase-3 run on `905d27a` passed all jobs. Windows smoke passed 74 Pester tests and skipped one. Windows apply completed the user-scope WinGet imports, including PowerToys. It verified the managed prompt using a copy of the installed Oh My Posh executable. A separate plain `pwsh -File` loaded the profile and overlay and exited. The first apply and Oh My Posh app execution alias check on a user device remain pending. [Full CI run](https://github.com/kangmingxuan/oh-my-devenv/actions/runs/44912366118), [Windows smoke](https://github.com/kangmingxuan/oh-my-devenv/actions/runs/44912366118/job/136870704931), [Windows apply](https://github.com/kangmingxuan/oh-my-devenv/actions/runs/44912366118/job/136870704962).
 
+The phase-4 implementation keeps every tool in the shared mise configuration.
+The hosted apply job will report the result for each requested tool. The job
+also reports whether the install log contains a path-length error and measures
+the longest installed paths under the effective mise data and uv tool directories.
+Both results await the first hosted phase-4 apply.
+<!-- Claude: link the phase-4 Windows smoke and apply jobs here. -->
+
 Resolve each remaining item before the phase that depends on it.
 
 | Item | Phase |
 | --- | --- |
 | Whether the effective script execution policy lets chezmoi run the `.ps1` hooks, and the stop condition when it does not. Do not work around device policy. PowerShell 7 stores execution-policy settings separately from Windows PowerShell 5.1. Group Policy can make it use the Windows PowerShell policy settings, so check the effective policy under `pwsh`. | 2 |
-| Whether every tool in the mise config installs on Windows | 4 |
-| Whether runtime and tool installs hit the Windows path-length limit. Do not assume that Windows long-path support (`LongPathsEnabled`) is on; turning it on needs elevation. That setting alone does not guarantee long-path support in each installer or tool; verify their actual behavior. Git has a separate `core.longpaths` setting. | 4 |
+| Windows installation result for each tool in the shared mise config. Pending hosted apply evidence. | 4 |
+| Runtime and tool installation path-length errors and maximum observed lengths. Pending hosted apply evidence. Do not assume that Windows long-path support (`LongPathsEnabled`) is on; turning it on needs elevation. That setting alone does not guarantee long-path support in each installer or tool; verify their actual behavior. Git has a separate `core.longpaths` setting. | 4 |
 
 ## 18. Sources
 
