@@ -1,6 +1,6 @@
 # 技术设计：原生 Windows 平台
 
-状态：已接受。阶段 3 和阶段 4 已通过托管 Windows smoke 和 apply 作业。阶段 4 仍待在全新的标准用户 Windows 客户端上验证。阶段 5 尚未开始。
+状态：已接受。阶段 3、阶段 4 和阶段 5 已通过托管 Windows smoke 和 apply 作业。全新的标准用户 Windows 客户端仍待验证。
 
 ## 1. 概要
 
@@ -39,6 +39,10 @@ PR #66 合并后，用户于 2026-11-22 批准阶段 4。共享清单和持久�
 hook 和哈希输入、共享工具的适用规则、生态安装器行为、用户 `Path` 归属、卸载、
 检查器、路径长度诊断和托管 CI 测试（实施 brief 的第 1–9 项）。
 
+PR #67 合并后，用户于 2026-11-22 批准阶段 5。Claude 在授权范围内确定了阶段 5
+实施简报中的第 1–6 项决策，涵盖卸载范围、字体归属、hook 55、profile 加载、
+检查器与卸载器的集成，以及 Windows CI 检查。
+
 ## 3. 目标与非目标
 
 ### 目标
@@ -52,7 +56,6 @@ hook 和哈希输入、共享工具的适用规则、生态安装器行为、用
 ### 非目标
 
 - 在 Windows 上使用 Bash、Zsh 或 oh-my-zsh，包括把 Git Bash、MSYS2、Cygwin 作为本仓库 Bash 脚本的运行环境。
-- 第一版不提供 Windows 的 shell 补全资产。
 - Windows 上的 Ghostty 和 OrbStack。
 - WSL 本身、Docker 或容器运行时的安装配置。
 - Windows PowerShell 5.1。
@@ -76,13 +79,13 @@ bootstrap/
 └── windows/                           # 新增；PowerShell 辅助脚本与测试
 dot_config/
 ├── mise/config.toml.tmpl              # 共享目标
-└── oh-my-devenv/powershell/           # 新增；PowerShell profile 主体和主题
+└── oh-my-devenv/powershell/           # PowerShell profile、环境辅助脚本、补全加载器和主题
 AppData/Local/Microsoft/Windows Terminal/Fragments/oh-my-devenv/  # 新增；仅桌面基线
 ```
 
 规则：
 
-- 所有 PowerShell 辅助脚本放在 `bootstrap/windows/` 下。
+- 引导阶段的 PowerShell 辅助脚本放在 `bootstrap/windows/` 下。profile 所需的辅助脚本与 profile 一起部署。
 - Bash 辅助脚本不调用 PowerShell 辅助脚本，PowerShell 辅助脚本也不调用 Bash 辅助脚本。
 - 新 manifest 放在现有的分层目录（`system/`、`desktop/`、`ecosystem/`）中，以保持跨平台设计的分层模型。
 - `bootstrap/` 仍然只存在于 source 中。现有的 `.chezmoiignore` 规则已经覆盖 `bootstrap/windows/`。
@@ -118,7 +121,7 @@ hook 和部署文件都通过 `.chezmoiignore` 做门控：
 | 30 | 安装 mise | `mise` 不在 `PATH` 上时，用 winget 安装 mise | 4 |
 | 40 | 运行时 | `mise install` | 4 |
 | 50 | 生态工具 | 按共享 manifest 安装 Go 和 uv 工具 | 4 |
-| 55 | Shell 补全 | 第一版无 | 5 |
+| 55 | Shell 补全 | `run_after_`，每次 apply。根据共享 shell 清单和当前 `PATH` 更新 PowerShell 补全。 | 5 |
 | 60 | 环境检查 | `check.ps1` | 2 |
 
 哈希触发方式与 Unix 相同。每个 Windows `run_onchange_` hook 都包含其 manifest 和辅助脚本的哈希。
@@ -127,6 +130,20 @@ hook 30 使用 winget，让 mise 与其他系统工具来自同一个包管理�
 范围安装 `jdx.mise`，刷新 hook 环境后确认 `mise --version`。WinGet 报错时，按
 hook 20 的设备策略规则停止 apply。
 [WinGet 包清单](https://github.com/microsoft/winget-pkgs/blob/master/manifests/j/jdx/mise/2026.11.12/jdx.mise.installer.yaml)
+
+每次 apply 时，hook 55 读取共享的逐行命令清单
+[`bootstrap/manifests/shell/completions.txt`](../../bootstrap/manifests/shell/completions.txt)。
+安装器创建缺失的脚本，并替换输入指纹已变化的受管脚本。输入指纹涵盖共享清单、安装器及
+辅助脚本、Windows 系统包清单、mise 配置，以及 Go 和 uv 清单。安装器将指纹写入每个
+脚本的归属标记。对于仍在清单中且在 `PATH` 上可用的命令，指纹相同时保留受管文件，也跳过对应的生成器。
+若 `PATH` 上的命令需要创建或替换补全脚本，优先使用上游安装位置
+`%LOCALAPPDATA%\PowerShell\completions` 中现有的 PowerShell 补全。无现有脚本时，
+使用该命令的生成器。安装和检查要求清单中的每个命令都有 PowerShell 生成器适配器。
+已知命令的应用程序不在 `PATH` 上时，记录原因。
+带归属标记的脚本存放在 `%LOCALAPPDATA%\oh-my-devenv\completions\powershell`。
+命令从清单移除或在 `PATH` 上变为不可用时，安装器清除对应的受管脚本。
+检查会报告缺失或过时的脚本。列表会为卸载返回所有受管脚本，包括过时条目。
+[mise 补全配置](https://mise.jdx.dev/shell-setup.html#completions)
 
 ## 7. PowerShell 规则
 
@@ -217,6 +234,7 @@ hook 10 在文件内容上沿用 Unix 的约定：首次 apply 覆盖目标之�
 | --- | --- |
 | `dot_config/mise/config.toml.tmpl` | 目标相同，版本相同。mise 在 Windows 上从 `%USERPROFILE%\.config\mise` 读取全局配置。某个工具在 Windows 上不可用时，在模板中用 `.chezmoi.os` 条件把它排除。 |
 | `ecosystem/go-tools.txt`、`ecosystem/uv-tools.txt` | Windows 安装器读取同一组文件，解析规则相同。 |
+| `shell/completions.txt` | hook 55 读取共享命令名。各平台自行解析对应的 shell 补全脚本和生成命令。 |
 | `dot_gitconfig.tmpl` | 同一个模板。出现具体需求时，在 Windows 分支中加入 Windows 专属设置。`check.ps1` 要求 Git 的全局配置路径包含受管的 `.gitconfig`。 |
 | `private_dot_ssh/private_config.tmpl` | 同一个模板。Windows 分支去掉 `ControlMaster`、`ControlPath` 和 `ControlPersist`。Windows OpenSSH 会解析它们，但它的连接复用函数是空实现，而且 Unix 的 `ControlPath` 含有 `:`，这在 Windows 文件名中无效。保留 `Include`、`IdentitiesOnly`、`TCPKeepAlive`、`ServerAliveInterval` 和 `SendEnv`。Windows OpenSSH 会检查配置文件的所有者和 ACL，不安全时失败。chezmoi 不会把 `private_` 转换成 Windows ACL。`check.ps1` 回读所用 `ssh` 可执行文件的路径和版本，并检查受管文件位于该可执行文件的默认用户配置路径。随后不带 `-F`、用一个测试主机名运行 `ssh -v -G`，检查退出码，并检查调试输出中有针对受管文件的 `Reading configuration data` 行。输出中的设置值不能证明其来源，因为默认值和其他配置文件也可能给出同样的值。macOS 上的 OpenSSH 10.5p1 会输出这一调试行；阶段 2 的原生 fixture 在 Windows 上确认这一点。检查过的源码中，用 `-F` 指定的顶层文件跳过所有者和 ACL 检查，默认配置文件缺失时也被忽略。本地 drop-in 是可选的；检查覆盖实际存在的 drop-in。不要自动改写 ACL。这些结论来自公开的 Win32-OpenSSH 9.5p1 和 10.4 源码。实际的 Windows `ssh` 可执行文件及其版本可能不同，例如来自 Git for Windows 的版本，所以阶段 2 在隔离的 home 中用原生 fixture 确认它们：不安全的顶层 ACL 和不安全的 drop-in ACL 都必须导致失败。 |
 | `desktop/maple-mono-nf-cn.env` | 相同的字体信息，包括钉死的 URL 和 SHA-256 摘要。显式解析带引号的值。 |
@@ -252,6 +270,7 @@ chezmoi 可以通过 `.chezmoiexternal` 用配置数据计算目标路径。Clau
 - 主题关闭自动升级和升级通知。它启用 `async`，因此即使设备缓存打开了升级功能，Oh My Posh 也会禁用它们。profile 使用 `init pwsh`。Oh My Posh 在 PowerShell 启动时注册提示符，在首次显示提示符时加载渲染模块。主题从磁盘加载，路径和 Git 段读取本地状态。[功能选择](https://github.com/JanDeDobbeleer/oh-my-posh/blob/v33.0.0/src/config/config.go#L144-L191)、[PowerShell 初始化脚本生成器](https://github.com/JanDeDobbeleer/oh-my-posh/blob/v33.0.0/src/shell/init.go#L47-L76)。
 - 控制台输入或输出被重定向时，脚本宿主跳过提示符初始化，仍加载 profile 的其他部分和本地 overlay。检查器在新 PowerShell 进程中显式启用提示符初始化，以验证同一条初始化路径。
 - 初始化脚本导出解析后的 `POSH_CONFIG` 和 `POSH_SESSION_ID`。生成的脚本注册提示符函数后，profile 在运行 overlay 前记录该配置路径。检查器在新 PowerShell 进程中清除继承值，并要求记录的路径与已部署主题一致。[会话变量](https://github.com/JanDeDobbeleer/oh-my-posh/blob/v33.0.0/src/shell/init.go#L315-L326)、[延迟渲染提示符](https://github.com/JanDeDobbeleer/oh-my-posh/blob/v33.0.0/src/shell/init.go#L270-L290)。
+- 在本地 overlay 之前，将受管 PowerShell 补全脚本 dot-source 到 profile 的会话作用域。补全运行时可以调用脚本定义的辅助函数。控制台输入和输出均未重定向，或 `OH_MY_DEVENV_PROBE_PROMPT=1` 时，加载补全脚本。检查器在有重定向的新 PowerShell 进程中设置此标志。profile 返回后，检查器用 `TabExpansion2` 验证 `chezmoi` 和 `uv` 的子命令补全。
 - 本地 overlay `~/.config/oh-my-devenv/powershell/profile.local.ps1` 存在时加载它。overlay 可以覆盖提示符。
 - 每次加载 profile 时，在可选的 overlay 步骤后，把缺失的受管目录放到 `PATH` 最前面，包括实际生效的 `GOBIN`。保留已有的 `PATH` 条目及其顺序。
 
@@ -325,7 +344,10 @@ WinGet 将清单要求的用户范围应用到 Oh My Posh MSIX。
 - 将字体复制到 `%LOCALAPPDATA%\Microsoft\Windows\Fonts`。在 `HKCU\Software\Microsoft\Windows NT\CurrentVersion\Fonts` 下为每个字面写入完整文件路径，值类型为字符串。字体为当前用户持久注册。如果当前会话无法使用字体，注销并重新登录。[Microsoft 字体安装器实现](https://github.com/microsoft/winget-cli/blob/master/src/AppInstallerCommonCore/Fonts.cpp)、[FontLab 用户级注册表实现](https://github.com/fontlaborg/fontlift-win-cli/blob/main/src/sys_utils.cpp)。
 - 启用 `desktopBaseline` 时，hook 00、hook 22 和检查器要求目标目录的 `AppData/Local` 与实际生效的 LocalAppData 一致。它们还要求在 `PATH` 上找到 `wt.exe` 或 `WindowsTerminal.exe`。Windows 11 通常自带 Terminal。禁用别名时，需在 `PATH` 上提供可执行文件。
 - 检查器要求每个字面的文件和注册项都存在。它解析已部署的 JSON，并验证 fragment 为 PowerShell 7 配置清单中的字体族。
-- `desktopBaseline` 为 false 或缺省时，fragment 模板渲染为空，chezmoi 在 apply 时删除该文件。阶段 3 的卸载也会移除受管 fragment。包和字体卸载属于阶段 5。[Chezmoi 模板行为](https://www.chezmoi.io/reference/templates/)。
+- `desktopBaseline` 为 false 或缺省时，fragment 模板渲染为空，chezmoi 在 apply 时删除该文件。卸载也会移除受管 fragment。[Chezmoi 模板行为](https://www.chezmoi.io/reference/templates/)
+- hook 22 在写入字体文件或新增注册值之前，将对应归属写入 `%LOCALAPPDATA%\oh-my-devenv\fonts.json`。已有的匹配文件和注册值保留原归属。遇到冲突的非受管文件或注册值时，字体安装停止。若非受管文件冲突，请删除或重命名该文件后重新 apply。检查器会校验已有的归属记录。安装、检查和卸载使用共享的路径规范化逻辑来比较注册表路径。
+- 卸载预览并移除已记录的字体文件，以及仍指向这些文件的已记录 HKCU 注册值。文件和注册值分别清理。没有剩余受管项时，删除归属记录。若有项移除失败，归属记录仅保留剩余的受管项，并汇总报告错误。若字体被占用，请关闭使用它的应用后重试卸载。
+- 卸载保留 WinGet 包、mise、mise 管理的运行时以及 Go 和 uv 工具。此规则沿用 Unix，因为 Git 等软件包可能已安装并由其他应用共享。Windows 保留首次运行备份。默认情况下，Unix 确认卸载时先将首次运行备份目录归档到删除前备份，再移除原目录。使用 `--confirm --no-backup` 时，卸载会移除原目录，但不创建该归档。
 
 ## 12. 本地 Overlay
 
@@ -349,6 +371,7 @@ WinGet 将清单要求的用户范围应用到 Oh My Posh MSIX。
   无输入变化的 reapply 和按归属记录卸载。测试结束后恢复 runner 用户 `Path`
   的原始字节及注册表类型，并移除测试归属记录。作业记录每项 mise 工具的请求和
   安装版本、识别出的路径长度错误，以及 mise 数据和 uv 工具目录中的最长路径。
+- 阶段 5 的 smoke 测试覆盖发行方补全脚本、生成补全、两次 apply 之间的命令可用性变化和字体归属。托管 apply 作业运行真实的 hook 55，并在新 PowerShell 进程中测量补全加载耗时。runner 提供无重定向控制台时，profile 探测使用 `TabExpansion2` 验证 `chezmoi` 和 `uv` 的子命令补全。作业检查卸载是否移除受管资产并保留已安装的软件包和工具，然后恢复 runner 的字体文件、字体注册值、用户 Path 和配置文件。
 - 第 17 节记录托管作业的覆盖范围。托管作业没有验证干净客户端上的安装和 Oh My Posh 应用执行别名。用户将首次实机 apply 推迟到所有计划阶段完成后，并将 Oh My Posh MSIX 检查推迟到该次 apply。
 - 两个 Windows job 都在与 Unix job 相同的 `needs-checks` 条件下运行，并汇入现有的单一 required check。这样不需要第二个路径分类器，避免共享文件改动后 Windows CI 被跳过。
 - 在真实 Windows 机器上的实际安装，遵循与 Unix 平台相同的本地验证策略。
@@ -361,7 +384,7 @@ WinGet 将清单要求的用户范围应用到 Oh My Posh MSIX。
 | 2 | 仅配置：平台分派，`.gitattributes`，hook 00、10、15、60，PowerShell profile 及其 overlay，共享的 Git、SSH、mise 目标，最小卸载（移除受管 profile 行和受管目标），Windows smoke 与 apply job，仓库规则 | 在 Windows 上 apply 能部署配置，`check.ps1` 对已交付的层通过；Unix 输出不变。 |
 | 3 | 系统包与桌面基线 | hook 20 和 22 安装各自的 manifest，`check.ps1` 检查它们。 |
 | 4 | mise、运行时与生态工具，以及持久化用户 `Path` 条目 | hook 30、40、50 安装共享清单。hook 15 添加用户 `Path` 条目，卸载移除它们。`check.ps1` 检查它们。 |
-| 5 | 完整生命周期与 PowerShell 补全 | Windows 卸载覆盖所有层。除非目标外，与 Unix 生命周期功能对等。 |
+| 5 | 完整生命周期与 PowerShell 补全 | hook 55 在每次 apply 时更新补全。hook 60 检查脚本及新 profile 的补全结果。卸载涵盖受管配置、归属记录中的 Path 条目、补全和字体。保留已安装的软件包、工具和首次运行备份。 |
 
 `check.ps1` 只检查当前阶段已交付的层。每个阶段加入其各层的检查。
 
@@ -423,6 +446,14 @@ Node 24.21.0、Python 3.13.16、usage 6.12.0 和 uv 0.11.33。mise 数据目录�
 | --- | --- |
 | 实际生效的脚本执行策略是否允许 chezmoi 运行 `.ps1` hook，以及不允许时的停止条件。不绕过设备策略。PowerShell 7 与 Windows PowerShell 5.1 分开存储执行策略设置。组策略可以让它使用 Windows PowerShell 的策略设置，所以要在 `pwsh` 下检查实际生效的策略。 | 2 |
 | 在满足第 7 节前置条件的全新标准用户 Windows 客户端上完成首次 apply。 | 4 |
+
+阶段 5 在 `c30194a` 上的托管运行通过了所有作业。Windows smoke 通过了 132 项 Pester
+测试，跳过一项。Windows apply 作业安装了七个 PowerShell 补全。由于 `bat` 不在
+`PATH` 上，作业跳过了它。新 PowerShell 进程加载补全增加的耗时为 227、233 和 238
+毫秒，中位数为 233 毫秒。无重定向的 profile 探测在 profile 返回后完成了 `chezmoi` 和 `uv` 命令的补全。卸载移除了受管配置、
+受管的用户 `Path` 条目、补全，以及桌面字体文件和注册值。WinGet 包、mise、运行时
+以及 Go 和 uv 工具都保留。
+[完整 CI 运行](https://github.com/kangmingxuan/oh-my-devenv/actions/runs/45017493063)、[Windows smoke](https://github.com/kangmingxuan/oh-my-devenv/actions/runs/45017493063/job/137192897238)、[Windows apply](https://github.com/kangmingxuan/oh-my-devenv/actions/runs/45017493063/job/137192897275)。
 
 ## 18. 来源
 

@@ -99,7 +99,7 @@ Ubuntu and Arch. macOS provides both tools.
 The installer scripts and platform checkers consume the following source manifests. Keep both sides in sync.
 
 - `bootstrap/manifests/shell/oh-my-zsh-plugins.txt`
-- `bootstrap/manifests/shell/completions.txt`
+- `bootstrap/manifests/shell/completions.txt` (Unix and Windows installers, checkers, and uninstallers)
 - `bootstrap/manifests/system/apt-packages.txt`
 - `bootstrap/manifests/system/pacman-packages.txt`
 - `bootstrap/manifests/system/Brewfile`
@@ -115,7 +115,7 @@ The installer scripts and platform checkers consume the following source manifes
 
 If you add, rename, or remove an entry, confirm that:
 
-- The corresponding installer script handles the new entry. A new completion command also needs a generator adapter in `install-shell-completions.sh` unless it reuses an existing one.
+- The corresponding installer handles the new entry. Add a generator adapter for each supported platform when the command needs one.
 - `run-smoke-tests.sh` still passes locally. Ordinary entry changes must not require test edits; the suite validates schemas, rendering, and behavior rather than current values.
 - The post-install environment check continues to recognize the tool.
 

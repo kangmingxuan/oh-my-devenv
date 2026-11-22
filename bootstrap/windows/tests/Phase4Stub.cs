@@ -121,4 +121,15 @@ static class Phase4Stub
         }
         return 94;
     }
+
+    public static bool TryCompletion(string program, string command)
+    {
+        if (command != "completion powershell" && command != "generate-shell-completion powershell" &&
+            command != "--generate-shell-completion powershell" && command != "--completion ps1")
+            return false;
+        File.AppendAllText(Path.Combine(Root, "completion-generators.log"), program + "\n");
+        string suggestion = program == "uv" ? "tool" : "fixture-result";
+        Console.WriteLine("Register-ArgumentCompleter -Native -CommandName '" + program + "' -ScriptBlock { '" + suggestion + "' }");
+        return true;
+    }
 }

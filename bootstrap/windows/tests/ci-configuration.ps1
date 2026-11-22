@@ -16,6 +16,7 @@ $helpers = Split-Path -Parent $PSScriptRoot
 . (Join-Path $helpers 'user-path.ps1')
 . (Join-Path $helpers 'mise.ps1')
 . (Join-Path $helpers 'ecosystem.ps1')
+. (Join-Path $helpers 'completions.ps1')
 
 function Invoke-FixtureChezmoi {
     param([string[]]$Arguments, [switch]$AllowFailure, [int]$TimeoutSeconds = 0)
@@ -31,8 +32,8 @@ function Invoke-FixtureApply {
     Write-Host $result.Stderr
     $script:fixtureInstallLog += $result.Stdout + $result.Stderr
     if ($result.ExitCode -ne 0) { throw "Windows fixture apply exited with code $($result.ExitCode)." }
-    if ($Reapply -and ($result.Stdout + $result.Stderr) -match 'Syncing mise-managed|Syncing Go tools|Syncing uv tools|Installing jdx.mise') {
-        throw 'Reapply ran a phase-4 installer.'
+    if ($Reapply -and ($result.Stdout + $result.Stderr) -match 'Syncing mise-managed|Syncing Go tools|Syncing uv tools|Installing jdx.mise|Installed PowerShell completion:') {
+        throw 'Reapply ran an unchanged runtime, tool, or completion installer.'
     }
     if ($result.Stdout -notmatch 'All checks passed\.') {
         throw 'The Windows check did not run or did not pass.'
@@ -105,6 +106,8 @@ class Stub
     {
         Console.OutputEncoding = System.Text.Encoding.UTF8;
         string program = Path.GetFileNameWithoutExtension(Environment.GetCommandLineArgs()[0]);
+        if (Phase4Stub.TryCompletion(program, String.Join(" ", args)))
+            return 0;
         if (program == "winget")
         {
             string action = null;
@@ -159,7 +162,8 @@ class Stub
     foreach ($tool in @('ssh', 'winget', 'oh-my-posh', 'mise')) {
         Copy-Item -LiteralPath $shim -Destination (Join-Path $shimDirectory "$tool.exe")
     }
-    $fixtureConfig.scriptEnv.OH_MY_DEVENV_WINDOWS_PROBE_BIN = $shimDirectory
+    # The fresh profile probe uses persistent PATH plus these fixture entries.
+    $fixtureConfig.scriptEnv.OH_MY_DEVENV_WINDOWS_PROBE_BIN = "$shimDirectory;$([IO.Path]::GetDirectoryName($chezmoi.Source))"
     $env:OH_MY_DEVENV_TEST_PHASE4 = $fixture
     $env:GOBIN = Join-Path $fixture 'ecosystem-bin'
     $env:UV_TOOL_BIN_DIR = $env:GOBIN
@@ -167,7 +171,7 @@ class Stub
     $env:OH_MY_DEVENV_TEST_HOME = $destination
     $env:OH_MY_DEVENV_TEST_WINGET_LOG = Join-Path $fixture 'winget.log'
     $env:OH_MY_DEVENV_TEST_WINGET_MANIFEST = $packageManifestPath
-    $env:PATH = "$shimDirectory;$env:PATH"
+    $env:PATH = "$shimDirectory;$(Join-Path $fixture 'runtime-bin');$env:PATH"
 }
 
 function Assert-FixtureWinGet {
@@ -181,13 +185,13 @@ function Assert-FixtureWinGet {
 }
 
 function Get-FixtureFontState {
-    param([hashtable]$Manifest, [string]$FontDirectory, [string]$RegistryPath)
+    param([hashtable]$Manifest, [hashtable]$Target)
 
-    $registry = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($RegistryPath)
+    $registry = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($Target.RegistryPath)
     try {
         $valueNames = if ($null -ne $registry) { $registry.GetValueNames() }
         foreach ($face in $Manifest.Faces) {
-            $file = Join-Path $FontDirectory "$face.ttf"
+            $file = Join-Path $Target.FontDirectory "$face.ttf"
             $copy = $null
             if ([IO.File]::Exists($file)) {
                 $copy = Join-Path $fixture "$face.previous.ttf"
@@ -206,15 +210,125 @@ function Get-FixtureFontState {
     }
 }
 
+function Assert-FixtureFontState {
+    param([hashtable[]]$State, [hashtable]$Target)
+
+    if ([IO.File]::Exists($Target.StatePath)) { throw 'Uninstall kept the desktop font ownership record.' }
+    $registry = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($Target.RegistryPath)
+    try {
+        foreach ($face in $State) {
+            if ([IO.File]::Exists($face.File) -ne [bool]$face.Copy -or ($face.Copy -and
+                -not [Linq.Enumerable]::SequenceEqual[byte]([IO.File]::ReadAllBytes($face.File), [IO.File]::ReadAllBytes($face.Copy)))) {
+                throw "Unexpected post-uninstall font bytes or presence at '$($face.File)'."
+            }
+            $value = if ($registry) { $registry.GetValue($face.Name, $null, 'DoNotExpandEnvironmentNames') }
+            if ($value -cne $face.Value -or ($null -ne $value -and $registry.GetValueKind($face.Name) -ne $face.Kind)) {
+                throw "Unexpected post-uninstall registration '$($face.Name)'."
+            }
+        }
+    } finally {
+        if ($registry) { $registry.Dispose() }
+    }
+}
+
+function Assert-FixtureCompletionUninstall {
+    param([string[]]$Owned, [string]$UserFile, [byte[]]$UserBytes)
+
+    foreach ($file in $Owned) {
+        if ([IO.File]::Exists($file)) { throw "Uninstall kept owned completion '$file'." }
+    }
+    if (-not [Linq.Enumerable]::SequenceEqual[byte]([IO.File]::ReadAllBytes($UserFile), $UserBytes)) {
+        throw "Uninstall changed the unowned completion '$UserFile'."
+    }
+    Write-Host 'Uninstall removed the owned completions and preserved the unowned script bytes.'
+}
+
+function Test-FixtureCompletionStartup {
+    param([string]$Loader, [string]$LocalData, [string]$Executable, [string]$PromptBin)
+
+    $probePath = Join-Path $fixture 'completion-startup.ps1'
+    $resultPath = Join-Path $fixture 'interactive-completion.json'
+    Set-FixtureText -Path $probePath -Content @'
+param([string]$Loader, [string]$LocalData, [string]$InteractiveResult, [string]$CompletionProbe)
+$ErrorActionPreference = 'Stop'
+if ($InteractiveResult) {
+    $redirected = [Console]::IsInputRedirected -or [Console]::IsOutputRedirected
+    $loaded = $env:OH_MY_DEVENV_COMPLETION_FIXTURE -ceq 'loaded'
+    if (-not $redirected -and $loaded) { & $CompletionProbe }
+    @{
+        Redirected = $redirected
+        Loaded = $loaded
+    } | ConvertTo-Json | Set-Content -LiteralPath $InteractiveResult
+    return
+}
+$elapsed = [Diagnostics.Stopwatch]::StartNew()
+. $Loader
+$directory = Get-PowerShellCompletionDirectory -LocalData $LocalData
+foreach ($file in Get-OwnedPowerShellCompletion -Directory $directory) {
+    . $file.FullName
+}
+$elapsed.Stop()
+if ($env:OH_MY_DEVENV_COMPLETION_FIXTURE -cne 'loaded') { throw 'The managed completion loader did not source the probe.' }
+[Console]::WriteLine($elapsed.ElapsedMilliseconds)
+'@
+    $times = @(1..3 | ForEach-Object {
+        $result = Invoke-NativeCommand -Executable $Executable -Arguments @(
+            '-NoLogo', '-NoProfile', '-File', $probePath, '-Loader', $Loader, '-LocalData', $LocalData
+        ) -Environment @{ OH_MY_DEVENV_COMPLETION_FIXTURE = $null } -TimeoutSeconds 30
+        [int]$result.Stdout.Trim()
+    } | Sort-Object)
+    Write-Host "Added completion load time in fresh Windows PowerShell processes: $($times -join ', ') ms, median $($times[1]) ms."
+    if ($times[1] -gt 300) {
+        Write-Warning 'Median completion loading exceeded 300 ms. Consider registering a lightweight completer that loads the command script on first use.'
+    }
+
+    # Launch an unredirected child with its own console if the runner allows it.
+    # The child writes a result file so reading the result does not redirect its streams.
+    $escapedProbe = $probePath.Replace("'", "''")
+    $escapedResult = $resultPath.Replace("'", "''")
+    $completionProbe = (Join-Path $helpers 'completion-probe.ps1').Replace("'", "''")
+    $command = '& ''{0}'' -InteractiveResult ''{1}'' -CompletionProbe ''{2}''' -f $escapedProbe, $escapedResult, $completionProbe
+    $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($command))
+    try {
+        $process = Start-Process -FilePath $Executable -ArgumentList @('-NoLogo', '-EncodedCommand', $encoded) `
+            -Environment @{ PATH = "$PromptBin;$env:PATH"; OH_MY_DEVENV_COMPLETION_FIXTURE = $null } `
+            -WindowStyle Hidden -PassThru
+    } catch {
+        Write-Warning "Interactive profile completion probe could not create a hosted console. $_"
+        return
+    }
+    try {
+        if (-not $process.WaitForExit(90000)) {
+            $process.Kill($true)
+            throw 'Interactive completion probe did not finish within 90 seconds.'
+        }
+        if ($process.ExitCode -ne 0 -or -not [IO.File]::Exists($resultPath)) {
+            throw "Interactive completion probe exited with code $($process.ExitCode) or did not write its result."
+        }
+        $result = Get-Content -LiteralPath $resultPath -Raw | ConvertFrom-Json -AsHashtable
+        if ($result.Redirected) {
+            if ($result.Loaded) { throw 'The profile loaded completions with redirected I/O.' }
+            Write-Warning 'Hosted child has redirected streams. Interactive profile startup is unverified.'
+        } elseif (-not $result.Loaded) {
+            throw 'The interactive profile did not load the managed completions.'
+        } else {
+            Write-Host 'An unredirected PowerShell profile completed chezmoi and uv commands.'
+        }
+    } finally {
+        $process.Dispose()
+    }
+}
+
 function Restore-FixtureFontState {
     param([hashtable[]]$State, [string]$RegistryPath)
 
     $registry = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($RegistryPath, $true)
     try {
         foreach ($face in $State) {
-            if ($face.Copy) {
+            if ($face.Copy -and (-not [IO.File]::Exists($face.File) -or
+                -not [Linq.Enumerable]::SequenceEqual[byte]([IO.File]::ReadAllBytes($face.File), [IO.File]::ReadAllBytes($face.Copy)))) {
                 [IO.File]::Copy($face.Copy, $face.File, $true)
-            } elseif ([IO.File]::Exists($face.File)) {
+            } elseif (-not $face.Copy -and [IO.File]::Exists($face.File)) {
                 [IO.File]::Delete($face.File)
             }
             if ($null -ne $registry) {
@@ -413,6 +527,8 @@ $fixtureConfig = @{
 $originalGitGlobal = $env:GIT_CONFIG_GLOBAL
 $originalPath = $env:PATH
 $fontState = $null
+$runnerFileState = @()
+$completionFilesTouched = $false
 $pathSnapshot = $null
 $pathTarget = $null
 $fixtureInstallLog = ''
@@ -454,7 +570,10 @@ try {
         $fixtureConfig.data.desktopBaseline = $true
         $fontManifest = Read-DesktopFontManifest -Path $fontManifestPath
         $fontTarget = Get-DesktopFontTarget -LocalData (Get-DesktopLocalData -Destination $destination)
-        $fontState = Get-FixtureFontState -Manifest $fontManifest @fontTarget
+        if ([IO.File]::Exists($fontTarget.StatePath)) {
+            throw 'The hosted runner already has a desktop font ownership record.'
+        }
+        $fontState = Get-FixtureFontState -Manifest $fontManifest -Target $fontTarget
 
         # The hosted Windows Server stalls when activating the installed MSIX.
         # Keep the real registration and run its binary from a fixture directory.
@@ -469,7 +588,7 @@ try {
         }
         $poshBin = [IO.Directory]::CreateDirectory((Join-Path $fixture 'posh-bin')).FullName
         Copy-Item -LiteralPath (Join-Path $installLocation 'oh-my-posh.exe') -Destination $poshBin
-        $fixtureConfig.scriptEnv.OH_MY_DEVENV_WINDOWS_PROBE_BIN = $poshBin
+        $fixtureConfig.scriptEnv.OH_MY_DEVENV_WINDOWS_PROBE_BIN = "$poshBin;$([IO.Path]::GetDirectoryName($chezmoi.Source))"
         Write-Host 'Hosted Oh My Posh probe uses the executable copied from the registered MSIX.'
     }
     $ssh = Get-PathApplication -Name ssh
@@ -508,6 +627,7 @@ try {
     }
     $profileBody = Join-Path $destination '.config/oh-my-devenv/powershell/profile.ps1'
     $profileEnvironment = Join-Path $destination '.config/oh-my-devenv/powershell/environment.ps1'
+    $profileCompletionLoader = Join-Path $destination '.config/oh-my-devenv/powershell/completions.ps1'
     $profileOverlay = Join-Path $destination '.config/oh-my-devenv/powershell/profile.local.ps1'
     $poshTheme = Join-Path $destination '.config/oh-my-devenv/powershell/robbyrussell.omp.json'
     $sshConfig = Join-Path $destination '.ssh/config'
@@ -526,6 +646,32 @@ $env:PATH = '{1};' + $env:PATH
 function prompt {{ 'overlay prompt> ' }}
 '@ -f $overlayGoBin.Replace("'", "''"), $overlayPath.Replace("'", "''")
     Set-FixtureText -Path $config -Content ($fixtureConfig | ConvertTo-Json -Depth 4)
+    $completionLocalData = Get-CompletionLocalData -Destination $destination
+    $completionDirectory = Get-PowerShellCompletionDirectory -LocalData $completionLocalData
+    $completionManifest = Join-Path $source 'bootstrap/manifests/shell/completions.txt'
+    $completionOptions = @{ ManifestPath = $completionManifest; LocalData = $completionLocalData }
+    $unownedCompletion = Join-Path $completionDirectory 'oh-my-devenv-user-fixture.ps1'
+    $completionProbe = Join-Path $completionDirectory 'oh-my-devenv-startup-fixture.ps1'
+    if ($Mode -eq 'apply') {
+        if (@(Get-OwnedPowerShellCompletion -Directory $completionDirectory).Count -or
+            [IO.File]::Exists($unownedCompletion) -or [IO.File]::Exists($completionProbe)) {
+            throw 'The hosted runner already has a completion fixture or ownership marker.'
+        }
+        $runnerFileState = @(foreach ($file in @(
+            Get-ManagedFile -Executable $chezmoi.Source -Config $config -Source $source -Destination $destination
+            $profilePath; $profileOverlay; $gitOverlay; $sshOverlay
+        ) | Sort-Object -Unique) {
+            $bytes = $acl = $null
+            if ([IO.File]::Exists($file)) {
+                $bytes = [IO.File]::ReadAllBytes($file)
+                $acl = Get-Acl -LiteralPath $file
+            }
+            @{ Path = $file; Bytes = $bytes; Acl = $acl }
+        })
+    }
+    $completionFilesTouched = $true
+    Set-FixtureText -Path $unownedCompletion -Content 'throw "Loaded a user-owned completion"'
+    $unownedCompletionBytes = [IO.File]::ReadAllBytes($unownedCompletion)
     Set-FixtureText -Path $miseConfig -Content $oldMise
     Set-FixtureText -Path $profilePath -Content $oldProfile
     Set-FixtureText -Path $profileOverlay -Content $overlayContent
@@ -659,6 +805,10 @@ function prompt {{ 'overlay prompt> ' }}
     }
     $managedMissingBeforeApply = @(Get-MissingUserPathEntry -PathValue (Read-UserPath -RegistryPath $pathTarget.RegistryPath) -Entries $managedPath)
     Invoke-FixtureApply
+    $ownedCompletions = @(Invoke-PowerShellCompletion @completionOptions -Action list)
+    if (-not $ownedCompletions.Count -or $fixtureInstallLog -notmatch 'Installed PowerShell completion:') {
+        throw 'The first apply did not install PowerShell completions through hook 55.'
+    }
     $afterPhase4 = Get-FixturePathSnapshot -RegistryPath $pathTarget.RegistryPath
     $recordedPath = @(Read-UserPathRecord -StatePath $pathTarget.StatePath)
     if (($recordedPath -join ';') -cne ($managedMissingBeforeApply -join ';')) {
@@ -685,6 +835,23 @@ function prompt {{ 'overlay prompt> ' }}
     }
 
     if ($Mode -eq 'smoke') {
+        $completion = $ownedCompletions[0]
+        $completionBytes = [IO.File]::ReadAllBytes($completion)
+        try {
+            [IO.File]::Delete($completion)
+            Assert-FixtureCheckFailure -Pattern '\[missing\] Owned PowerShell completion:'
+        } finally {
+            [IO.File]::WriteAllBytes($completion, $completionBytes)
+        }
+        try {
+            Set-FixtureText -Path $completion -Content @'
+# oh-my-devenv: generated by install-shell-completions.ps1
+throw 'Fixture completion could not load.'
+'@
+            Assert-FixtureCheckFailure -Pattern 'Fixture completion could not load\.'
+        } finally {
+            [IO.File]::WriteAllBytes($completion, $completionBytes)
+        }
         $key = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($pathTarget.RegistryPath, $true)
         try {
             $key.DeleteValue('Path', $true)
@@ -742,8 +909,27 @@ $env:OH_MY_DEVENV_PROFILE_LOADED = '1'
             Set-FixtureText -Path $profileBody -Content $installedBody
             [IO.File]::Delete($alternateTheme)
         }
+        $generatorLog = Join-Path $fixture 'completion-generators.log'
+        $generatorCalls = [IO.File]::ReadAllText($generatorLog)
+        $completionSnapshot = foreach ($file in $ownedCompletions) {
+            [IO.File]::SetLastWriteTimeUtc($file, [datetime]'2020-01-01Z')
+            @{
+                Path = $file
+                Time = [IO.File]::GetLastWriteTimeUtc($file)
+                Hash = (Get-FileHash -LiteralPath $file).Hash
+            }
+        }
         Set-FixtureText -Path $profilePath -Content $oldProfile
         Invoke-FixtureApply -Reapply
+        if ([IO.File]::ReadAllText($generatorLog) -cne $generatorCalls) {
+            throw 'An unchanged apply called a completion generator.'
+        }
+        foreach ($file in $completionSnapshot) {
+            if ([IO.File]::GetLastWriteTimeUtc($file.Path) -ne $file.Time -or
+                (Get-FileHash -LiteralPath $file.Path).Hash -cne $file.Hash) {
+                throw "An unchanged apply rewrote '$($file.Path)'."
+            }
+        }
         Assert-FixtureWinGet
         Assert-FixturePathUnchanged
         $phase4Calls = @(Get-Content -LiteralPath (Join-Path $fixture 'phase4.log'))
@@ -756,15 +942,40 @@ $env:OH_MY_DEVENV_PROFILE_LOADED = '1'
         if (($phase4Calls -join "`n") -cne ($expectedCalls -join "`n")) {
             throw "Unexpected stub install calls across apply and reapply: $phase4Calls"
         }
+        $batCompletion = Join-Path $completionDirectory 'bat.ps1'
+        if ([IO.File]::Exists($batCompletion)) {
+            throw 'The availability fixture requires bat to be absent from the runner.'
+        }
+        $batExecutable = Join-Path $fixture 'stub-bin/bat.exe'
+        try {
+            [IO.File]::Copy((Join-Path $fixture 'stub.exe'), $batExecutable)
+            Invoke-FixtureApply
+            if (-not (Test-OwnedPowerShellCompletion -Path $batCompletion) -or
+                [IO.File]::ReadAllText($generatorLog) -cne ($generatorCalls + "bat`n")) {
+                throw 'Apply did not generate exactly one completion for the newly available bat.'
+            }
+        } finally {
+            [IO.File]::Delete($batExecutable)
+        }
+        Invoke-FixtureApply -Reapply
+        if ([IO.File]::Exists($batCompletion) -or [IO.File]::ReadAllText($generatorLog) -cne ($generatorCalls + "bat`n")) {
+            throw 'Apply did not prune the completion for the newly absent bat without generating files.'
+        }
         Assert-FixturePathUninstall -Options $uninstallOptions
+        Assert-FixtureCompletionUninstall -Owned $ownedCompletions -UserFile $unownedCompletion -UserBytes $unownedCompletionBytes
         return
     }
 
+    Set-FixtureText -Path $completionProbe -Content @'
+# oh-my-devenv: generated by install-shell-completions.ps1
+$env:OH_MY_DEVENV_COMPLETION_FIXTURE = 'loaded'
+'@
+    Test-FixtureCompletionStartup -Loader $profileCompletionLoader -LocalData $completionLocalData -Executable $pwsh -PromptBin $poshBin
     $baselineProfile = [IO.File]::ReadAllText($profilePath)
     $plainScript = Join-Path $fixture 'plain-profile-startup.ps1'
     Set-FixtureText -Path $plainScript -Content @'
-if ($env:OH_MY_DEVENV_PROFILE_LOADED -cne '1' -or $env:OH_MY_DEVENV_POSH_CONFIG) {
-    throw 'Script startup must load the managed profile without initializing Oh My Posh.'
+if ($env:OH_MY_DEVENV_PROFILE_LOADED -cne '1' -or $env:OH_MY_DEVENV_POSH_CONFIG -or $env:OH_MY_DEVENV_COMPLETION_FIXTURE) {
+    throw 'Script startup must load the managed profile and skip Oh My Posh and completions.'
 }
 [Console]::WriteLine($env:OH_MY_DEVENV_PROFILE_FIXTURE)
 [Console]::WriteLine((prompt))
@@ -773,6 +984,7 @@ if ($env:OH_MY_DEVENV_PROFILE_LOADED -cne '1' -or $env:OH_MY_DEVENV_POSH_CONFIG)
     $probe = Invoke-NativeCommand -Executable $pwsh -Arguments @('-NoLogo', '-File', $plainScript) -TimeoutSeconds 90 -Environment @{
         OH_MY_DEVENV_PROFILE_LOADED = $null
         OH_MY_DEVENV_PROBE_PROMPT = $null
+        OH_MY_DEVENV_COMPLETION_FIXTURE = $null
     }
     $profileOutput = $probe.Stdout -split '\r?\n', 3
     if ($profileOutput.Count -ne 3 -or $profileOutput[0] -cne 'loaded' -or $profileOutput[1] -cne 'overlay prompt> ') {
@@ -781,7 +993,8 @@ if ($env:OH_MY_DEVENV_PROFILE_LOADED -cne '1' -or $env:OH_MY_DEVENV_POSH_CONFIG)
     if (-not ";$($profileOutput[2])".Contains(";$overlayGoBin;$overlayPath;", [StringComparison]::Ordinal)) {
         throw 'The new PowerShell process did not prepend the overlay GOBIN and preserve its PATH order.'
     }
-    Write-Host 'Plain pwsh -File loaded the managed profile and overlay without initializing Oh My Posh.'
+    Write-Host 'Plain pwsh -File loaded the managed profile and overlay and skipped Oh My Posh and completions.'
+    [IO.File]::Delete($completionProbe)
 
     Invoke-FixtureApply -Reapply
     Assert-FixturePathUnchanged
@@ -808,7 +1021,19 @@ if ($env:OH_MY_DEVENV_PROFILE_LOADED -cne '1' -or $env:OH_MY_DEVENV_POSH_CONFIG)
     }
 
     $beforePreview = (Invoke-FixtureChezmoi -Arguments @('state', 'dump')).Stdout
-    & $uninstall -Config $config
+    $preview = (& $uninstall -Config $config 6>&1 | Out-String)
+    Write-Host $preview
+    foreach ($file in $ownedCompletions) {
+        if (-not $preview.Contains("Would remove '$file'.") -or -not [IO.File]::Exists($file)) {
+            throw "Uninstall preview omitted or removed PowerShell completion '$file'."
+        }
+    }
+    foreach ($font in Get-OwnedDesktopFont @fontTarget) {
+        if (($font.File -and -not $preview.Contains("Would remove desktop font '$($font.Path)'.")) -or
+            ($font.Registry -and -not $preview.Contains("value '$($font.Name)'."))) {
+            throw "Uninstall preview omitted owned desktop font '$($font.Name)'."
+        }
+    }
     if ((Invoke-FixtureChezmoi -Arguments @('state', 'dump')).Stdout -cne $beforePreview) {
         throw 'The uninstall preview changed the chezmoi state.'
     }
@@ -816,12 +1041,28 @@ if ($env:OH_MY_DEVENV_PROFILE_LOADED -cne '1' -or $env:OH_MY_DEVENV_POSH_CONFIG)
         throw 'The uninstall preview changed the destination.'
     }
     Assert-FixturePathUnchanged
+    Update-HookPath -Managed
+    $installedTools = @(
+        Get-PathApplication -Name mise.exe | ForEach-Object Source
+        Get-MiseProfileCommand -ConfigPath $miseConfig -ShimsDirectory $managedPath[0] | ForEach-Object Path
+        Confirm-EcosystemTool -GoManifest (Join-Path $source 'bootstrap/manifests/ecosystem/go-tools.txt') `
+            -UvManifest (Join-Path $source 'bootstrap/manifests/ecosystem/uv-tools.txt') | ForEach-Object Path
+    )
+    $completionNames = @(Read-CompletionManifest -Path $completionManifest)
+    foreach ($tool in $installedTools) {
+        $name = [IO.Path]::GetFileNameWithoutExtension($tool)
+        if ($name -in $completionNames -and (Get-PowerShellCompletionArgument -Name $name) -and
+            (Join-Path $completionDirectory "$name.ps1") -notin $ownedCompletions) {
+            throw "Hook 55 missed the installed tool '$tool'."
+        }
+    }
     Assert-FixturePathUninstall -Options @{ Apply = $true; Config = $config; BackupRoot = $uninstallBackupRoot }
+    Assert-FixtureCompletionUninstall -Owned $ownedCompletions -UserFile $unownedCompletion -UserBytes $unownedCompletionBytes
     $state = (Invoke-FixtureChezmoi -Arguments @('state', 'dump')).Stdout | ConvertFrom-Json -AsHashtable
     if ($state.scriptState.Count -or $state.entryState.Count) {
         throw 'Uninstall did not reset the chezmoi script and entry state.'
     }
-    foreach ($target in @($gitConfig, $miseConfig, $profileBody, $profileEnvironment, $sshConfig)) {
+    foreach ($target in @($gitConfig, $miseConfig, $profileBody, $profileEnvironment, $profileCompletionLoader, $sshConfig)) {
         if ([IO.File]::Exists($target)) {
             throw "Uninstall kept managed target '$target'."
         }
@@ -829,7 +1070,12 @@ if ($env:OH_MY_DEVENV_PROFILE_LOADED -cne '1' -or $env:OH_MY_DEVENV_POSH_CONFIG)
     if ([IO.File]::Exists($terminalFragment)) {
         throw 'Uninstall kept the Terminal fragment.'
     }
-    Confirm-DesktopFont -Manifest $fontManifest @fontTarget
+    Assert-FixtureFontState -State $fontState -Target $fontTarget
+    Confirm-WinGetPackage -ManifestPath @($packageManifestPath, (Join-Path $source 'bootstrap/manifests/desktop/winget-packages.json'))
+    foreach ($tool in $installedTools) {
+        if (-not [IO.File]::Exists($tool)) { throw "Uninstall removed the installed tool '$tool'." }
+    }
+    Write-Host 'WinGet packages, mise, runtimes, and Go and uv tools remained installed.'
     if ([IO.File]::ReadAllText($profilePath) -cne $oldProfile -or
         [IO.File]::ReadAllText($profileOverlay) -cne $overlayContent -or
         -not [IO.File]::Exists($gitOverlay) -or -not [IO.File]::Exists($sshOverlay) -or
@@ -871,15 +1117,37 @@ if ($env:OH_MY_DEVENV_PROFILE_LOADED -cne '1' -or $env:OH_MY_DEVENV_POSH_CONFIG)
         }
     } finally {
         try {
-            if ($null -ne $fontState) { Restore-FixtureFontState -State $fontState -RegistryPath $fontTarget.RegistryPath }
+            if ($null -ne $fontState) {
+                Restore-FixtureFontState -State $fontState -RegistryPath $fontTarget.RegistryPath
+                if ([IO.File]::Exists($fontTarget.StatePath)) { [IO.File]::Delete($fontTarget.StatePath) }
+                Assert-FixtureFontState -State $fontState -Target $fontTarget
+            }
             if ($Mode -eq 'apply') { Write-FixturePhase4Diagnostic }
         } finally {
-            $env:GIT_CONFIG_GLOBAL = $originalGitGlobal
-            $env:PATH = $originalPath
-            foreach ($name in $originalToolEnvironment.Keys) {
-                [Environment]::SetEnvironmentVariable($name, $originalToolEnvironment[$name])
+            try {
+                if ($Mode -eq 'apply' -and $completionFilesTouched) {
+                    foreach ($file in Get-OwnedPowerShellCompletion -Directory $completionDirectory) {
+                        [IO.File]::Delete($file.FullName)
+                    }
+                    [IO.File]::Delete($unownedCompletion)
+                    [IO.File]::Delete($completionProbe)
+                }
+                foreach ($file in $runnerFileState) {
+                    if ($null -eq $file.Bytes) {
+                        if ([IO.File]::Exists($file.Path)) { [IO.File]::Delete($file.Path) }
+                    } else {
+                        [IO.File]::WriteAllBytes($file.Path, $file.Bytes)
+                        Set-Acl -LiteralPath $file.Path -AclObject $file.Acl
+                    }
+                }
+            } finally {
+                $env:GIT_CONFIG_GLOBAL = $originalGitGlobal
+                $env:PATH = $originalPath
+                foreach ($name in $originalToolEnvironment.Keys) {
+                    [Environment]::SetEnvironmentVariable($name, $originalToolEnvironment[$name])
+                }
+                [IO.Directory]::Delete($fixture, $true)
             }
-            [IO.Directory]::Delete($fixture, $true)
         }
     }
 }

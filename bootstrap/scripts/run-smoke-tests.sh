@@ -870,6 +870,12 @@ for hook_platform in "${hook_platforms[@]}" "windows|$windows_chezmoi_data"; do
       grep -Fxq ".chezmoiscripts/$runtime_hook.ps1" <<<"$managed_platform" \
         || fail_test "Windows does not manage the phase-4 hook $runtime_hook"
     done
+    grep -Fxq '.chezmoiscripts/55-install-shell-completions.ps1' <<<"$managed_platform" \
+      || fail_test 'Windows does not manage the PowerShell completion hook'
+    [[ -f "$repo_root/.chezmoiscripts/run_after_55-install-shell-completions.ps1.tmpl" ]] \
+      || fail_test 'The Windows completion hook must run on every apply'
+    grep -Fxq '.config/oh-my-devenv/powershell/completions.ps1' <<<"$managed_platform" \
+      || fail_test 'Windows does not manage the PowerShell completion loader'
     for hook_template in "$repo_root"/.chezmoiscripts/*.ps1.tmpl; do
       rendered_hook="$tmp_dir/hook-windows-$(basename "$hook_template" .tmpl)"
       chezmoi --source="$repo_root" --destination="$HOME" --override-data "$platform_override" \

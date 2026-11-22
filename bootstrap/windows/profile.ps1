@@ -176,7 +176,8 @@ function Get-ProfileProbePath {
 }
 
 function Confirm-ManagedProfile {
-    param([string]$ProfilePath, [string]$Destination, [hashtable[]]$Commands = @(), [string]$FixtureBin)
+    param([string]$ProfilePath, [string]$Destination, [hashtable[]]$Commands = @(), [string]$FixtureBin,
+        [string]$CompletionLocalData)
 
     $arguments = @('-NoLogo', '-NonInteractive')
     $fixtureProfile = (ConvertTo-PathKey -Path $ProfilePath) -cne
@@ -195,6 +196,8 @@ function Confirm-ManagedProfile {
         OH_MY_DEVENV_PROBE_COMMANDS = ConvertTo-Json -InputObject $Commands -Compress
         OH_MY_DEVENV_PROFILE_LOADED = $null
         OH_MY_DEVENV_PROBE_PROMPT = '1'
+        OH_MY_DEVENV_PROBE_COMPLETION_LOCAL_DATA = $CompletionLocalData
+        OH_MY_DEVENV_COMPLETIONS_LOADED = $null
         OH_MY_DEVENV_POSH_CONFIG = $null
         POSH_CONFIG = $null
         POSH_SESSION_ID = $null
@@ -210,5 +213,5 @@ function Confirm-ManagedProfile {
     } catch {
         throw "PowerShell profile check failed for '$ProfilePath'. $_"
     }
-    Write-Host 'PowerShell loaded the managed profile, restored its PATH entries, resolved the managed commands, and initialized Oh My Posh with the managed theme.'
+    Write-Host 'PowerShell loaded the managed profile, restored its PATH entries, resolved the managed commands, initialized Oh My Posh, and completed chezmoi and uv commands.'
 }
