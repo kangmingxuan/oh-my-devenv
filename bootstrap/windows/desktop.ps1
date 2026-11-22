@@ -142,6 +142,12 @@ function Test-DesktopFontFile {
     [bool]$file
 }
 
+function Test-DesktopFontRegistryPath {
+    param([object]$Value, [string]$Path)
+
+    $Value -is [string] -and (ConvertTo-PathKey -Path $Value) -ceq (ConvertTo-PathKey -Path $Path)
+}
+
 function Install-DesktopFont {
     param(
         [Parameter(Mandatory)][hashtable]$Manifest,
@@ -186,9 +192,9 @@ function Install-DesktopFont {
                 $writeValue = $null -eq $value
                 $owned = $record[$face] ?? @{ File = $false; Registry = $false }
                 if ($writeFile -and $exists -and -not $owned.File) {
-                    throw "A different unowned desktop font already exists at '$target'."
+                    throw "A different unowned desktop font already exists at '$target'. Remove or rename the existing file, then reapply."
                 }
-                if (-not $writeValue -and ($value -isnot [string] -or $value -ne $target)) {
+                if (-not $writeValue -and -not (Test-DesktopFontRegistryPath -Value $value -Path $target)) {
                     throw "HKCU\$RegistryPath value '$valueName' already points to '$value'. Expected '$target'."
                 }
                 if (($writeFile -and -not $owned.File) -or ($writeValue -and -not $owned.Registry)) {
@@ -231,7 +237,7 @@ function Confirm-DesktopFont {
         $missing = foreach ($face in $Manifest.Faces) {
             $path = [IO.Path]::GetFullPath((Join-Path $FontDirectory "$face.ttf"))
             if (-not [IO.File]::Exists($path) -or $null -eq $registry -or
-                $registry.GetValue("$face (TrueType)") -ne $path) {
+                -not (Test-DesktopFontRegistryPath -Value ($registry.GetValue("$face (TrueType)")) -Path $path)) {
                 $face
             }
         }
@@ -257,10 +263,11 @@ function Get-OwnedDesktopFont {
             $value = $null
             if ($registry) { $value = $registry.GetValue($name, $null, 'DoNotExpandEnvironmentNames') }
             [pscustomobject]@{
+                Face = $face
                 Path = $path
                 Name = $name
                 File = $record[$face].File -and (Test-DesktopFontFile -Path $path)
-                Registry = $record[$face].Registry -and $value -is [string] -and $value -eq $path
+                Registry = $record[$face].Registry -and (Test-DesktopFontRegistryPath -Value $value -Path $path)
             }
         }
     } finally {
@@ -274,28 +281,51 @@ function Remove-OwnedDesktopFont {
     param([string]$FontDirectory, [string]$RegistryPath, [string]$StatePath)
 
     $fonts = @(Get-OwnedDesktopFont @PSBoundParameters)
+    $remaining = @{}
+    $problems = [Collections.Generic.List[string]]::new()
     if ($fonts.Count) {
         $registry = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($RegistryPath, $true)
         try {
             foreach ($font in $fonts) {
+                $fileRemaining = $false
+                $registryRemaining = $false
                 if ($font.File) {
                     try {
                         [IO.File]::Delete($font.Path)
+                        Write-Host "Removed desktop font '$($font.Path)'."
                     } catch {
-                        throw "Could not remove desktop font '$($font.Path)'. Close applications using the font and retry uninstall. $_"
+                        $fileRemaining = [IO.File]::Exists($font.Path)
+                        $problems.Add("Could not remove desktop font '$($font.Path)'. Close applications using the font and retry uninstall. $_")
                     }
-                    Write-Host "Removed desktop font '$($font.Path)'."
                 }
-                $value = $null
-                if ($registry) { $value = $registry.GetValue($font.Name, $null, 'DoNotExpandEnvironmentNames') }
-                if ($font.Registry -and $value -is [string] -and $value -eq $font.Path) {
-                    $registry.DeleteValue($font.Name, $false)
-                    Write-Host "Removed HKCU\$RegistryPath value '$($font.Name)'."
+                if ($font.Registry -and $registry) {
+                    try {
+                        $value = $registry.GetValue($font.Name, $null, 'DoNotExpandEnvironmentNames')
+                        if (Test-DesktopFontRegistryPath -Value $value -Path $font.Path) {
+                            $registry.DeleteValue($font.Name, $false)
+                            Write-Host "Removed HKCU\$RegistryPath value '$($font.Name)'."
+                        }
+                    } catch {
+                        $registryRemaining = $true
+                        $problems.Add("Could not remove HKCU\$RegistryPath value '$($font.Name)'. $_")
+                    }
+                }
+                if ($fileRemaining -or $registryRemaining) {
+                    $remaining[$font.Face] = @{ File = $fileRemaining; Registry = $registryRemaining }
                 }
             }
         } finally {
             if ($null -ne $registry) { $registry.Dispose() }
         }
     }
-    if ([IO.File]::Exists($StatePath)) { [IO.File]::Delete($StatePath) }
+    try {
+        if ($remaining.Count) {
+            Write-DesktopFontRecord -StatePath $StatePath -Record $remaining
+        } elseif ([IO.File]::Exists($StatePath)) {
+            [IO.File]::Delete($StatePath)
+        }
+    } catch {
+        $problems.Add("Could not update desktop font ownership record '$StatePath'. $_")
+    }
+    if ($problems.Count) { throw ($problems -join "`n") }
 }

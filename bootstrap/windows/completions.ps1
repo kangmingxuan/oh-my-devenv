@@ -19,7 +19,8 @@ function Read-CompletionManifest {
     param([Parameter(Mandatory)][string]$Path)
 
     $seen = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
-    foreach ($line in [IO.File]::ReadLines($Path)) {
+    # Close the file before validation can throw.
+    foreach ($line in [IO.File]::ReadAllLines($Path)) {
         $name = ($line -replace '#.*$').Trim()
         if (-not $name) { continue }
         if ($name -cnotmatch '^[A-Za-z0-9][A-Za-z0-9_.+-]*$') {
@@ -38,12 +39,14 @@ function Get-PowerShellCompletionArgument {
         'uvx' { '--generate-shell-completion'; 'powershell' }
         { $_ -in 'chezmoi', 'golangci-lint', 'dlv', 'mise' } { 'completion'; 'powershell' }
         'bat' { '--completion'; 'ps1' }
+        default { throw "Unsupported completion generator: '$Name'." }
     }
 }
 
 function Get-PowerShellCompletionSource {
     param([string]$Name, [string]$LocalData)
 
+    $arguments = @(Get-PowerShellCompletionArgument -Name $Name)
     $command = Get-PathApplication -Name $Name -Optional
     if (-not $command) {
         Write-Host "Skipping PowerShell completion for '$Name': application is not on PATH."
@@ -54,11 +57,6 @@ function Get-PowerShellCompletionSource {
     $shipped = Join-Path $LocalData "PowerShell/completions/$Name.ps1"
     if (Test-Path -LiteralPath $shipped -PathType Leaf) {
         return @{ Shipped = $shipped }
-    }
-    $arguments = @(Get-PowerShellCompletionArgument -Name $Name)
-    if (-not $arguments.Count) {
-        Write-Host "Skipping PowerShell completion for '$Name': no shipped asset or generator."
-        return
     }
     @{ Application = $command; Arguments = $arguments }
 }

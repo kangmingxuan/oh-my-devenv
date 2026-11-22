@@ -1,6 +1,6 @@
 # Technical Design: Native Windows Platform
 
-Status: accepted. Phases 3 and 4 passed hosted Windows smoke and apply. Phase 5 is implemented and awaits hosted Windows CI. A clean standard-user Windows client remains unverified.
+Status: accepted. Phases 3 and 4 passed hosted Windows smoke and apply. Phase 5 passed its initial hosted Windows apply job and awaits a rerun of both Windows jobs after fixes. A clean standard-user Windows client remains unverified.
 
 ## 1. Summary
 
@@ -139,8 +139,9 @@ Hook 55 reads the one-command-per-line inventory in
 [`bootstrap/manifests/shell/completions.txt`](../../bootstrap/manifests/shell/completions.txt).
 For a command on `PATH`, it prefers an existing PowerShell completion in the
 upstream installation location `%LOCALAPPDATA%\PowerShell\completions` and
-otherwise uses the CLI's generator when supported. It logs and skips absent
-commands and commands with neither source. It writes marked copies or generated
+otherwise uses the CLI's generator. Install and check require a PowerShell
+generator adapter for every manifest command. They log and skip a known command
+when its application is absent from `PATH`. Install writes marked copies or generated
 scripts under `%LOCALAPPDATA%\oh-my-devenv\completions\powershell`. Install
 prunes obsolete marked scripts. Check reports missing or obsolete scripts.
 List returns owned scripts, including obsolete entries, for uninstall.
@@ -276,7 +277,7 @@ The body mirrors the Unix env templates where they apply on Windows:
 - The theme disables automatic upgrades and upgrade notices. It also enables `async` so Oh My Posh disables upgrade features even when its device cache enables them. The profile uses `init pwsh`. Oh My Posh registers its PowerShell prompt during startup and loads the rendering module on the first prompt draw. The theme loads from disk. Its path and Git segments use local state. [Feature selection](https://github.com/JanDeDobbeleer/oh-my-posh/blob/v33.0.0/src/config/config.go#L144-L191), [PowerShell init generator](https://github.com/JanDeDobbeleer/oh-my-posh/blob/v33.0.0/src/shell/init.go#L47-L76).
 - A script host with redirected console input or output skips prompt initialization. It still loads the rest of the profile and the local overlay. The checker explicitly enables prompt initialization in its fresh PowerShell process so it can verify the same init path.
 - The init script exports the resolved `POSH_CONFIG` and a `POSH_SESSION_ID`. After the generated script installs the prompt function, the profile records that config path before the overlay runs. The checker clears inherited values in its fresh PowerShell process and requires that recorded path to match the deployed theme. [Session variables](https://github.com/JanDeDobbeleer/oh-my-posh/blob/v33.0.0/src/shell/init.go#L315-L326), [deferred prompt](https://github.com/JanDeDobbeleer/oh-my-posh/blob/v33.0.0/src/shell/init.go#L270-L290).
-- Load owned PowerShell completion scripts before the overlay when both console input and output are unredirected.
+- Load owned PowerShell completion scripts before the overlay when both console input and output are unredirected. The checker sets `OH_MY_DEVENV_PROBE_PROMPT=1` in a fresh PowerShell process to exercise both prompt initialization and completion loading with redirected streams. The probe requires the completion loader to finish successfully.
 - Load the local overlay at `~/.config/oh-my-devenv/powershell/profile.local.ps1` when it exists. It can override the prompt.
 - After the optional overlay, prepend any missing managed directories, including the effective `GOBIN`, on every profile load. Preserve the existing `PATH` order and entries.
 
@@ -351,8 +352,8 @@ On Windows, the desktop baseline includes PowerToys, Maple Mono NF CN, and the W
 - With `desktopBaseline` enabled, hooks 00 and 22 and the checker require the destination's `AppData/Local` to match the effective LocalAppData. They also require Windows Terminal discoverable as `wt.exe` or `WindowsTerminal.exe` on `PATH`. Windows 11 normally provides Terminal. An installation with its alias disabled must expose its executable on `PATH`.
 - The checker requires every face's file and registration. It parses the deployed JSON and verifies that the fragment sets the manifest family on the PowerShell 7 profile.
 - When `desktopBaseline` is false or omitted, the fragment template renders empty and chezmoi removes that file on apply. Uninstall also removes the managed fragment. [Chezmoi template behavior](https://www.chezmoi.io/reference/templates/)
-- Before hook 22 writes a font file or creates a registration, it records ownership of that item in `%LOCALAPPDATA%\oh-my-devenv\fonts.json`. Existing matching files and registrations stay under their prior ownership. A conflicting unowned file or registration stops the font installer. The checker validates the record when present.
-- Uninstall previews and removes recorded font files and recorded HKCU values that still point to those files. It removes the record after successful cleanup. Close applications using a locked font and retry uninstall.
+- Before hook 22 writes a font file or creates a registration, it records ownership of that item in `%LOCALAPPDATA%\oh-my-devenv\fonts.json`. Existing matching files and registrations stay under their prior ownership. A conflicting unowned file or registration stops the font installer. If an unowned file conflicts, remove or rename it and reapply. The checker validates the record when present. Install, check, and uninstall compare registry paths using the shared path normalization.
+- Uninstall previews and removes recorded font files and recorded HKCU values that still point to those files. It attempts file and registry cleanup independently. It removes the record once there are no owned items left. If any removal fails, it keeps only the remaining owned items in the record and reports the errors together. Close applications using a locked font and retry uninstall.
 - Uninstall keeps WinGet packages, mise, mise-managed runtimes, and Go and uv tools. This follows Unix, where packages such as Git can pre-exist and serve other applications. Windows deliberately keeps first-run backups. Unix archives them in its pre-delete backup and removes the original backup directory.
 
 ## 12. Local Overlays
@@ -458,8 +459,16 @@ Resolve each remaining item before the phase that depends on it.
 | Whether the effective script execution policy lets chezmoi run the `.ps1` hooks, and the stop condition when it does not. Do not work around device policy. PowerShell 7 stores execution-policy settings separately from Windows PowerShell 5.1. Group Policy can make it use the Windows PowerShell policy settings, so check the effective policy under `pwsh`. | 2 |
 | First apply on a clean standard-user Windows client with the prerequisite described in section 7. | 4 |
 
-Phase 5 hosted evidence is pending. Record the completion startup measurements
-and the interactive probe result with the CI evidence.
+The initial phase 5 hosted Windows apply job at `2994631` installed seven
+PowerShell completions. It skipped `bat` because the application was absent
+from `PATH`. Added completion load times in fresh PowerShell processes were
+278, 294, and 326 ms, with a median of 294 ms. An unredirected profile probe
+loaded the managed completions. Uninstall removed the managed configuration,
+owned user `Path` entries, completions, and desktop font files and registrations.
+WinGet packages, mise, runtimes, and Go and uv tools remained installed.
+The initial smoke job failed on two completion-manifest file-lock tests.
+The Windows jobs for the fixes are pending.
+
 [Full CI run](RUN_LINK), [Windows smoke](SMOKE_LINK), [Windows apply](APPLY_LINK).
 
 ## 18. Sources

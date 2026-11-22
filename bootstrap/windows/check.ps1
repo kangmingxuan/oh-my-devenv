@@ -66,9 +66,11 @@ $commands = @(
     Confirm-EcosystemTool -GoManifest (Join-Path $manifestRoot 'ecosystem/go-tools.txt') `
         -UvManifest (Join-Path $manifestRoot 'ecosystem/uv-tools.txt')
 )
-Confirm-ManagedProfile -ProfilePath $ProfilePath -Destination $Destination -Commands $commands -FixtureBin $ProbeFixtureBin
+$completionLocalData = Get-CompletionLocalData -Destination $Destination
+Confirm-ManagedProfile -ProfilePath $ProfilePath -Destination $Destination -Commands $commands -FixtureBin $ProbeFixtureBin `
+    -CompletionLocalData $completionLocalData
 Invoke-PowerShellCompletion -Action check -ManifestPath (Join-Path $manifestRoot 'shell/completions.txt') `
-    -LocalData (Get-CompletionLocalData -Destination $Destination)
+    -LocalData $completionLocalData
 
 $ssh = Get-PathApplication -Name ssh
 $version = Invoke-NativeCommand -Executable $ssh.Source -Arguments @('-V')

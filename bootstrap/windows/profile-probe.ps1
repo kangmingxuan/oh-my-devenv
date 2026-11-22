@@ -41,4 +41,7 @@ if ($env:OH_MY_DEVENV_PROBE_COMMANDS) {
         }
     }
 }
+if ($env:OH_MY_DEVENV_COMPLETIONS_LOADED -cne '1') {
+    throw 'The managed PowerShell profile did not load owned completions. Run chezmoi apply.'
+}
 [Console]::WriteLine("`n$SuccessMarker")

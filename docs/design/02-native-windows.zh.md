@@ -1,6 +1,6 @@
 # 技术设计：原生 Windows 平台
 
-状态：已接受。阶段 3 和阶段 4 已通过托管 Windows smoke 和 apply 作业。阶段 5 已实现，等待托管 Windows CI 验证。全新的标准用户 Windows 客户端仍待验证。
+状态：已接受。阶段 3 和阶段 4 已通过托管 Windows smoke 和 apply 作业。阶段 5 已通过首次托管 Windows apply 作业，等待修复后重新运行两项 Windows 作业。全新的标准用户 Windows 客户端仍待验证。
 
 ## 1. 概要
 
@@ -135,7 +135,8 @@ hook 55 读取共享的逐行命令清单
 [`bootstrap/manifests/shell/completions.txt`](../../bootstrap/manifests/shell/completions.txt)。
 若 `PATH` 上有对应命令，优先使用上游安装位置
 `%LOCALAPPDATA%\PowerShell\completions` 中现有的 PowerShell 补全。无现有脚本时，
-使用该命令支持的生成器。缺少命令，或两种补全来源均不可用时，记录原因并跳过。
+使用该命令的生成器。安装和检查要求清单中的每个命令都有 PowerShell 生成器适配器。
+已知命令的应用程序不在 `PATH` 上时，记录原因并跳过。
 复制或生成的脚本带有归属标记，存放在
 `%LOCALAPPDATA%\oh-my-devenv\completions\powershell`。安装会清除过时的已标记脚本。
 检查会报告缺失或过时的脚本。列表会为卸载返回所有受管脚本，包括过时条目。
@@ -266,7 +267,7 @@ chezmoi 可以通过 `.chezmoiexternal` 用配置数据计算目标路径。Clau
 - 主题关闭自动升级和升级通知。它启用 `async`，因此即使设备缓存打开了升级功能，Oh My Posh 也会禁用它们。profile 使用 `init pwsh`。Oh My Posh 在 PowerShell 启动时注册提示符，在首次显示提示符时加载渲染模块。主题从磁盘加载，路径和 Git 段读取本地状态。[功能选择](https://github.com/JanDeDobbeleer/oh-my-posh/blob/v33.0.0/src/config/config.go#L144-L191)、[PowerShell 初始化脚本生成器](https://github.com/JanDeDobbeleer/oh-my-posh/blob/v33.0.0/src/shell/init.go#L47-L76)。
 - 控制台输入或输出被重定向时，脚本宿主跳过提示符初始化，仍加载 profile 的其他部分和本地 overlay。检查器在新 PowerShell 进程中显式启用提示符初始化，以验证同一条初始化路径。
 - 初始化脚本导出解析后的 `POSH_CONFIG` 和 `POSH_SESSION_ID`。生成的脚本注册提示符函数后，profile 在运行 overlay 前记录该配置路径。检查器在新 PowerShell 进程中清除继承值，并要求记录的路径与已部署主题一致。[会话变量](https://github.com/JanDeDobbeleer/oh-my-posh/blob/v33.0.0/src/shell/init.go#L315-L326)、[延迟渲染提示符](https://github.com/JanDeDobbeleer/oh-my-posh/blob/v33.0.0/src/shell/init.go#L270-L290)。
-- 仅在控制台输入和输出均未重定向时加载受管 PowerShell 补全，然后加载本地 overlay。
+- 控制台输入和输出均未重定向时，在本地 overlay 之前加载受管 PowerShell 补全。检查器在新 PowerShell 进程中设置 `OH_MY_DEVENV_PROBE_PROMPT=1`，在重定向时验证提示符初始化和补全加载。探测要求补全加载器成功运行。
 - 本地 overlay `~/.config/oh-my-devenv/powershell/profile.local.ps1` 存在时加载它。overlay 可以覆盖提示符。
 - 每次加载 profile 时，在可选的 overlay 步骤后，把缺失的受管目录放到 `PATH` 最前面，包括实际生效的 `GOBIN`。保留已有的 `PATH` 条目及其顺序。
 
@@ -341,8 +342,8 @@ WinGet 将清单要求的用户范围应用到 Oh My Posh MSIX。
 - 启用 `desktopBaseline` 时，hook 00、hook 22 和检查器要求目标目录的 `AppData/Local` 与实际生效的 LocalAppData 一致。它们还要求在 `PATH` 上找到 `wt.exe` 或 `WindowsTerminal.exe`。Windows 11 通常自带 Terminal。禁用别名时，需在 `PATH` 上提供可执行文件。
 - 检查器要求每个字面的文件和注册项都存在。它解析已部署的 JSON，并验证 fragment 为 PowerShell 7 配置清单中的字体族。
 - `desktopBaseline` 为 false 或缺省时，fragment 模板渲染为空，chezmoi 在 apply 时删除该文件。卸载也会移除受管 fragment。[Chezmoi 模板行为](https://www.chezmoi.io/reference/templates/)
-- hook 22 在写入字体文件或新增注册值之前，将对应归属写入 `%LOCALAPPDATA%\oh-my-devenv\fonts.json`。已有的匹配文件和注册值保留原归属。遇到冲突的非受管文件或注册值时，字体安装停止。检查器会校验已有的归属记录。
-- 卸载预览并移除已记录的字体文件，以及仍指向这些文件的已记录 HKCU 注册值。清理成功后删除归属记录。若字体被占用，请关闭使用它的应用后重试卸载。
+- hook 22 在写入字体文件或新增注册值之前，将对应归属写入 `%LOCALAPPDATA%\oh-my-devenv\fonts.json`。已有的匹配文件和注册值保留原归属。遇到冲突的非受管文件或注册值时，字体安装停止。若非受管文件冲突，请删除或重命名该文件后重新 apply。检查器会校验已有的归属记录。安装、检查和卸载使用共享的路径规范化逻辑来比较注册表路径。
+- 卸载预览并移除已记录的字体文件，以及仍指向这些文件的已记录 HKCU 注册值。文件和注册值分别清理。没有剩余受管项时，删除归属记录。若有项移除失败，归属记录仅保留剩余的受管项，并汇总报告错误。若字体被占用，请关闭使用它的应用后重试卸载。
 - 卸载保留 WinGet 包、mise、mise 管理的运行时以及 Go 和 uv 工具。此规则沿用 Unix，因为 Git 等软件包可能已安装并由其他应用共享。Windows 保留首次运行备份。Unix 将这份备份归档到删除前备份，然后移除原始备份目录。
 
 ## 12. 本地 Overlay
@@ -443,7 +444,13 @@ Node 24.21.0、Python 3.13.16、usage 6.12.0 和 uv 0.11.33。mise 数据目录�
 | 实际生效的脚本执行策略是否允许 chezmoi 运行 `.ps1` hook，以及不允许时的停止条件。不绕过设备策略。PowerShell 7 与 Windows PowerShell 5.1 分开存储执行策略设置。组策略可以让它使用 Windows PowerShell 的策略设置，所以要在 `pwsh` 下检查实际生效的策略。 | 2 |
 | 在满足第 7 节前置条件的全新标准用户 Windows 客户端上完成首次 apply。 | 4 |
 
-阶段 5 的托管验证仍待进行。记录 CI 证据时一并填写补全启动耗时和交互探测结果。
+阶段 5 在 `2994631` 的首次托管 Windows apply 作业中安装了七个 PowerShell 补全。
+由于 `bat` 不在 `PATH` 上，作业跳过了它。新 PowerShell 进程加载补全增加的耗时为
+278、294 和 326 毫秒，中位数为 294 毫秒。无重定向的 profile 探测加载了受管补全。
+卸载移除了受管配置、受管的用户 `Path` 条目、补全，以及桌面字体文件和注册值。
+WinGet 包、mise、运行时以及 Go 和 uv 工具都保留。首次 smoke 作业有两项补全清单测试
+因文件被占用而失败。修复后的 Windows 作业仍待运行。
+
 [完整 CI 运行](RUN_LINK)、[Windows smoke](SMOKE_LINK)、[Windows apply](APPLY_LINK)。
 
 ## 18. 来源

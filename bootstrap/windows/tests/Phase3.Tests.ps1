@@ -275,6 +275,33 @@ Describe 'The Windows desktop layer' {
         [IO.File]::Exists($statePath) | Should -BeFalse
     }
 
+    It 'matches equivalent registry paths on apply, check, and uninstall' -Skip:(-not $IsWindows) {
+        $target = @{ FontDirectory = $fontDirectory; RegistryPath = $registryPath; StatePath = $statePath }
+        Install-DesktopFont -Manifest $manifest @target
+        $file = Join-Path $fontDirectory 'Example-Regular.ttf'
+        $registry = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($registryPath, $true)
+        try {
+            $alternate = $file.ToLowerInvariant().Replace('\', '/')
+            $registry.SetValue('Example-Regular (TrueType)', $alternate, 'String')
+            Install-DesktopFont -Manifest $manifest @target
+            Confirm-DesktopFont -Manifest $manifest @target
+            $registry.GetValue('Example-Regular (TrueType)') | Should -BeExactly $alternate
+            (Get-OwnedDesktopFont @target).Registry | Should -BeTrue
+            Remove-OwnedDesktopFont @target
+            $registry.GetValue('Example-Regular (TrueType)') | Should -BeNullOrEmpty
+        } finally { $registry.Dispose() }
+    }
+
+    It 'explains how to resolve a conflicting unowned font file' -Skip:(-not $IsWindows) {
+        [void][IO.Directory]::CreateDirectory($fontDirectory)
+        $file = Join-Path $fontDirectory 'Example-Regular.ttf'
+        [IO.File]::WriteAllText($file, 'user font')
+        $target = @{ FontDirectory = $fontDirectory; RegistryPath = $registryPath; StatePath = $statePath }
+        { Install-DesktopFont -Manifest $manifest @target } | Should -Throw '*Remove or rename the existing file, then reapply*'
+        [IO.File]::ReadAllText($file) | Should -BeExactly 'user font'
+        [IO.File]::Exists($statePath) | Should -BeFalse
+    }
+
     It 'removes a recorded file and keeps a registry value that now points elsewhere' -Skip:(-not $IsWindows) {
         $target = @{ FontDirectory = $fontDirectory; RegistryPath = $registryPath; StatePath = $statePath }
         Install-DesktopFont -Manifest $manifest @target
@@ -301,18 +328,36 @@ Describe 'The Windows desktop layer' {
         finally { $registry.Dispose() }
     }
 
-    It 'keeps ownership when a font is in use and succeeds after closing it' -Skip:(-not $IsWindows) {
+    It 'keeps only the second, locked font file in the record and removes it on retry' -Skip:(-not $IsWindows) {
         $target = @{ FontDirectory = $fontDirectory; RegistryPath = $registryPath; StatePath = $statePath }
+        $manifest.Faces += 'Example-Bold'
+        [IO.File]::WriteAllBytes((Join-Path $sourceDirectory 'Example-Bold.ttf'), $fontBytes)
+        [IO.File]::Delete($archive)
+        [IO.Compression.ZipFile]::CreateFromDirectory($sourceDirectory, $archive, 'Fastest', $true)
+        $manifest.Sha256 = (Get-FileHash -LiteralPath $archive).Hash
         Install-DesktopFont -Manifest $manifest @target
-        $file = Join-Path $fontDirectory 'Example-Regular.ttf'
-        $recordBytes = [IO.File]::ReadAllBytes($statePath)
-        $locked = [IO.File]::Open($file, 'Open', 'Read', 'Read')
+        $first, $second = @(Get-OwnedDesktopFont @target)
+        $lockedFace = [IO.Path]::GetFileNameWithoutExtension($second.Path)
+        $locked = [IO.File]::Open($second.Path, 'Open', 'Read', 'Read')
+        $registry = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($registryPath)
         try {
-            { Remove-OwnedDesktopFont @target } | Should -Throw '*Close applications using the font and retry uninstall*'
-            [Linq.Enumerable]::SequenceEqual[byte]([IO.File]::ReadAllBytes($statePath), $recordBytes) | Should -BeTrue
-        } finally { $locked.Dispose() }
+            { Remove-OwnedDesktopFont @target } | Should -Throw "*$lockedFace.ttf*Close applications using the font and retry uninstall*"
+            [IO.File]::Exists($first.Path) | Should -BeFalse
+            [IO.File]::Exists($second.Path) | Should -BeTrue
+            $registry.GetValue($first.Name) | Should -BeNullOrEmpty
+            $registry.GetValue($second.Name) | Should -BeNullOrEmpty
+            $record = Read-DesktopFontRecord -StatePath $statePath
+            $record.Count | Should -Be 1
+            $record[$lockedFace].File | Should -BeTrue
+            $record[$lockedFace].Registry | Should -BeFalse
+        } finally {
+            $registry.Dispose()
+            $locked.Dispose()
+        }
+        [IO.File]::WriteAllText($first.Path, 'user font restored after partial uninstall')
         Remove-OwnedDesktopFont @target
-        [IO.File]::Exists($file) | Should -BeFalse
+        [IO.File]::ReadAllText($first.Path) | Should -BeExactly 'user font restored after partial uninstall'
+        [IO.File]::Exists($second.Path) | Should -BeFalse
         [IO.File]::Exists($statePath) | Should -BeFalse
     }
 }

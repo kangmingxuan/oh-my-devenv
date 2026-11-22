@@ -71,10 +71,18 @@ if ($ohMyDevenvPoshActivation) {
 }
 Remove-Variable -Name ohMyDevenvPoshActivation
 
-if (-not [Console]::IsInputRedirected -and -not [Console]::IsOutputRedirected) {
+$env:OH_MY_DEVENV_COMPLETIONS_LOADED = $null
+if ($env:OH_MY_DEVENV_PROBE_PROMPT -ceq '1' -or
+    (-not [Console]::IsInputRedirected -and -not [Console]::IsOutputRedirected)) {
     & {
         . (Join-Path $PSScriptRoot 'completions.ps1')
-        Import-OwnedPowerShellCompletion -LocalData ([Environment]::GetFolderPath('LocalApplicationData'))
+        $localData = if ($env:OH_MY_DEVENV_PROBE_PROMPT -ceq '1' -and $env:OH_MY_DEVENV_PROBE_COMPLETION_LOCAL_DATA) {
+            $env:OH_MY_DEVENV_PROBE_COMPLETION_LOCAL_DATA
+        } else {
+            [Environment]::GetFolderPath('LocalApplicationData')
+        }
+        Import-OwnedPowerShellCompletion -LocalData $localData
+        $env:OH_MY_DEVENV_COMPLETIONS_LOADED = '1'
     }
 }
 
