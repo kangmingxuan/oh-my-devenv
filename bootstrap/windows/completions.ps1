@@ -1,0 +1,137 @@
+Set-StrictMode -Version Latest
+$ErrorActionPreference = 'Stop'
+
+. (Join-Path $PSScriptRoot '../../dot_config/oh-my-devenv/powershell/completions.ps1')
+
+function Get-CompletionLocalData {
+    param([string]$Destination, [string]$HomeDirectory = $HOME)
+
+    # A disposable apply uses its own LocalAppData tree, including shipped assets.
+    if ((ConvertTo-PathKey $Destination) -cne (ConvertTo-PathKey $HomeDirectory)) {
+        return Join-Path $Destination 'AppData/Local'
+    }
+    $localData = [Environment]::GetFolderPath('LocalApplicationData')
+    if (-not $localData) { throw 'Windows did not resolve the LocalApplicationData known folder.' }
+    $localData
+}
+
+function Read-CompletionManifest {
+    param([Parameter(Mandatory)][string]$Path)
+
+    $seen = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+    foreach ($line in [IO.File]::ReadLines($Path)) {
+        $name = ($line -replace '#.*$').Trim()
+        if (-not $name) { continue }
+        if ($name -cnotmatch '^[A-Za-z0-9][A-Za-z0-9_.+-]*$') {
+            throw "Invalid completion command name in '$Path': '$name'."
+        }
+        if (-not $seen.Add($name)) { throw "Duplicate completion command in '$Path': '$name'." }
+        $name
+    }
+}
+
+function Get-PowerShellCompletionArgument {
+    param([string]$Name)
+
+    switch ($Name) {
+        { $_ -in 'uv', 'ruff' } { 'generate-shell-completion'; 'powershell' }
+        'uvx' { '--generate-shell-completion'; 'powershell' }
+        { $_ -in 'chezmoi', 'golangci-lint', 'dlv', 'mise' } { 'completion'; 'powershell' }
+        'bat' { '--completion'; 'ps1' }
+    }
+}
+
+function Get-PowerShellCompletionSource {
+    param([string]$Name, [string]$LocalData)
+
+    $command = Get-PathApplication -Name $Name -Optional
+    if (-not $command) {
+        Write-Host "Skipping PowerShell completion for '$Name': application is not on PATH."
+        return
+    }
+    # This is the upstream mise --install location on Windows. PowerShell
+    # needs an explicit loader, so copy the asset to the owned directory.
+    $shipped = Join-Path $LocalData "PowerShell/completions/$Name.ps1"
+    if (Test-Path -LiteralPath $shipped -PathType Leaf) {
+        return @{ Shipped = $shipped }
+    }
+    $arguments = @(Get-PowerShellCompletionArgument -Name $Name)
+    if (-not $arguments.Count) {
+        Write-Host "Skipping PowerShell completion for '$Name': no shipped asset or generator."
+        return
+    }
+    @{ Application = $command; Arguments = $arguments }
+}
+
+function Invoke-PowerShellCompletion {
+    param(
+        [Parameter(Mandatory)][ValidateSet('install', 'check', 'list')][string]$Action,
+        [Parameter(Mandatory)][string]$ManifestPath,
+        [Parameter(Mandatory)][string]$LocalData
+    )
+
+    $names = @(Read-CompletionManifest -Path $ManifestPath)
+    $directory = Get-PowerShellCompletionDirectory -LocalData $LocalData
+    if ($Action -eq 'list') {
+        Get-OwnedPowerShellCompletion -Directory $directory | ForEach-Object FullName
+        return
+    }
+
+    $targets = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+    $problems = [Collections.Generic.List[string]]::new()
+    foreach ($name in $names) {
+        $source = Get-PowerShellCompletionSource -Name $name -LocalData $LocalData
+        if (-not $source) { continue }
+        $target = Join-Path $directory "$name.ps1"
+        [void]$targets.Add($target)
+        if ($Action -eq 'check') {
+            if ((Test-OwnedPowerShellCompletion -Path $target) -and
+                (Get-Content -LiteralPath $target -TotalCount 2 | Select-Object -Skip 1)) {
+                Write-Host "[ok] PowerShell completion: $target"
+            } else {
+                $problems.Add("[missing] Owned PowerShell completion: $target")
+            }
+            continue
+        }
+        $item = Get-Item -LiteralPath $target -Force -ErrorAction SilentlyContinue
+        if ($item -and -not (Test-OwnedPowerShellCompletion -Path $target)) {
+            throw "Refusing to overwrite unowned PowerShell completion '$target'."
+        }
+
+        $content = if ($source.ContainsKey('Shipped')) {
+            [IO.File]::ReadAllText($source.Shipped)
+        } else {
+            (Invoke-NativeCommand -Executable $source.Application.Source -Arguments $source.Arguments `
+                -WorkingDirectory "$env:SystemDrive/" -TimeoutSeconds 30).Stdout
+        }
+        if ([string]::IsNullOrWhiteSpace($content)) {
+            throw "Empty PowerShell completion for '$name'."
+        }
+        $tokens = $parseErrors = $null
+        $null = [Management.Automation.Language.Parser]::ParseInput($content, [ref]$tokens, [ref]$parseErrors)
+        if ($parseErrors.Count) {
+            throw "Invalid PowerShell completion for '$name': $($parseErrors[0].Message)"
+        }
+
+        [void][IO.Directory]::CreateDirectory($directory)
+        $temporary = Join-Path $directory ([IO.Path]::GetRandomFileName())
+        try {
+            $content = $content.TrimStart()
+            [IO.File]::WriteAllText($temporary, "# oh-my-devenv: generated by install-shell-completions.ps1`n$content")
+            [IO.File]::Move($temporary, $target, [bool]$item)
+        } finally {
+            [IO.File]::Delete($temporary)
+        }
+        Write-Host "Installed PowerShell completion: $target"
+    }
+    foreach ($file in Get-OwnedPowerShellCompletion -Directory $directory) {
+        if ($targets.Contains($file.FullName)) { continue }
+        if ($Action -eq 'check') {
+            $problems.Add("[stale] PowerShell completion: $($file.FullName)")
+        } elseif (Test-OwnedPowerShellCompletion -Path $file.FullName) {
+            [IO.File]::Delete($file.FullName)
+            Write-Host "Removed obsolete PowerShell completion: $($file.FullName)"
+        }
+    }
+    if ($problems.Count) { throw ($problems -join "`n") }
+}

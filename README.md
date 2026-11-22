@@ -85,8 +85,10 @@ stop and contact the device administrator. The system baseline installs Git,
 GitHub CLI, ripgrep, jq, and Oh My Posh. The optional desktop baseline adds
 PowerToys, Maple Mono NF CN, and Windows Terminal settings. Apply also installs
 mise, the shared runtimes, and the Go and uv tools. It adds their managed
-directories to the user `Path`. After apply succeeds, open a new `pwsh`
-session to load the robbyrussell prompt. See the
+directories to the user `Path`. After apply succeeds, open a new PowerShell
+terminal to load the robbyrussell prompt and PowerShell completions.
+Uninstall removes owned configuration, completions, and fonts. It keeps
+installed packages and tools. See the
 [Windows onboarding notes](docs/01-onboarding.md#native-windows) for backups, overlays, checks, and uninstall.
 
 ### macOS and Linux

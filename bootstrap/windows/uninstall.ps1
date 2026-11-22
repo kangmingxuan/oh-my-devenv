@@ -6,7 +6,7 @@ Preview or remove managed Windows configuration.
 Close editors and wait for running Git commands to finish before uninstall because the pre-delete backup holds the content seen when it ran.
 
 .PARAMETER Apply
-Back up candidates, remove the managed configuration and recorded user Path entries, and reset chezmoi script and entry state.
+Back up candidates, remove the managed configuration and recorded assets and user Path entries, and reset chezmoi script and entry state.
 #>
 [CmdletBinding(SupportsShouldProcess)]
 param(
@@ -16,7 +16,8 @@ param(
     [string]$ProfilePath = $PROFILE.CurrentUserAllHosts,
     [string]$BackupRoot,
     [string]$RegistryPath,
-    [string]$StatePath
+    [string]$StatePath,
+    [hashtable]$FontTarget
 )
 
 Set-StrictMode -Version Latest
@@ -31,6 +32,8 @@ if (-not $IsWindows) {
 . (Join-Path $PSScriptRoot 'profile.ps1')
 . (Join-Path $PSScriptRoot 'local-overlays.ps1')
 . (Join-Path $PSScriptRoot 'user-path.ps1')
+. (Join-Path $PSScriptRoot 'desktop.ps1')
+. (Join-Path $PSScriptRoot 'completions.ps1')
 
 if ($PSVersionTable.PSVersion -lt [version]'7.6') {
     throw "PowerShell 7.6 or later is required. Running $($PSVersionTable.PSVersion)."
@@ -53,6 +56,13 @@ $source = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
 $manifest = Join-Path $source 'bootstrap/manifests/local-overlays.tsv'
 $overlays = @(Read-LocalOverlay -Manifest $manifest)
 $root = [IO.Path]::TrimEndingDirectorySeparator([IO.Path]::GetFullPath($Destination))
+$localData = Get-CompletionLocalData -Destination $root
+$completionManifest = Join-Path $source 'bootstrap/manifests/shell/completions.txt'
+$completionFiles = @(Invoke-PowerShellCompletion -Action list -ManifestPath $completionManifest -LocalData $localData)
+if (-not $FontTarget -and (ConvertTo-PathKey $root) -ceq (ConvertTo-PathKey $HOME)) {
+    $FontTarget = Get-DesktopFontTarget -LocalData $localData
+}
+$fonts = @(if ($FontTarget) { Get-OwnedDesktopFont @FontTarget })
 $prefix = $root + [IO.Path]::DirectorySeparatorChar
 $paths = @(Get-ManagedFile -Executable $chezmoi.Source -Config $Config -Source $source -Destination $root)
 
@@ -83,8 +93,15 @@ $candidates = foreach ($path in $paths) {
 $stateBuckets = @('scriptState', 'entryState')
 if (-not $Apply) {
     Write-Host "Would remove the managed line from '$ProfilePath' if present."
-    foreach ($path in $candidates) {
+    foreach ($path in @($candidates; $completionFiles)) {
         Write-Host "Would remove '$path'."
+    }
+    foreach ($font in $fonts) {
+        if ($font.File) { Write-Host "Would remove desktop font '$($font.Path)'." }
+        if ($font.Registry) { Write-Host "Would remove HKCU\$($FontTarget.RegistryPath) value '$($font.Name)'." }
+    }
+    if ($FontTarget -and [IO.File]::Exists($FontTarget.StatePath)) {
+        Write-Host "Would delete desktop font record '$($FontTarget.StatePath)'."
     }
     foreach ($entry in $pathRemoval.Entries) {
         Write-Host "Would remove user Path entry '$entry'."
@@ -100,7 +117,8 @@ if (-not $Apply) {
 $profileFile = Resolve-RegularFile -Path $ProfilePath
 $removeProfileLine = $null -ne $profileFile -and
     (Read-ProfileFile -Path $profileFile.FullName).Content -cmatch (Get-ManagedProfilePattern -Destination $root)
-$backupCandidates = @($candidates | Where-Object { $_ })
+$backupCandidates = @($candidates | Where-Object { $_ }) + $completionFiles +
+    @($fonts | Where-Object File | ForEach-Object Path)
 if ($removeProfileLine) {
     $backupCandidates += $ProfilePath
 }
@@ -121,6 +139,13 @@ foreach ($path in $candidates) {
     [IO.File]::Delete($path)
     Write-Host "Removed '$path'."
 }
+foreach ($path in $completionFiles) {
+    if (Test-OwnedPowerShellCompletion -Path $path) {
+        [IO.File]::Delete($path)
+        Write-Host "Removed '$path'."
+    }
+}
+if ($FontTarget) { Remove-OwnedDesktopFont @FontTarget }
 if ($pathTarget.RegistryPath -ne 'Environment') {
     Remove-ManagedUserPath @pathTarget -Notify {}
 } else {

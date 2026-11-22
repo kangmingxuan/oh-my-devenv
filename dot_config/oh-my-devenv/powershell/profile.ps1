@@ -71,6 +71,13 @@ if ($ohMyDevenvPoshActivation) {
 }
 Remove-Variable -Name ohMyDevenvPoshActivation
 
+if (-not [Console]::IsInputRedirected -and -not [Console]::IsOutputRedirected) {
+    & {
+        . (Join-Path $PSScriptRoot 'completions.ps1')
+        Import-OwnedPowerShellCompletion -LocalData ([Environment]::GetFolderPath('LocalApplicationData'))
+    }
+}
+
 $ohMyDevenvLocalProfile = Join-Path $PSScriptRoot 'profile.local.ps1'
 if (Test-Path -LiteralPath $ohMyDevenvLocalProfile -PathType Leaf) {
     . $ohMyDevenvLocalProfile

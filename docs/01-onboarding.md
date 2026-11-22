@@ -32,6 +32,11 @@ The system baseline installs Oh My Posh. A new PowerShell terminal loads its
 managed robbyrussell theme from disk. The local PowerShell overlay runs after
 initialization and can override the prompt.
 
+Apply installs PowerShell completions for available commands in the shared
+completion inventory. It records a skip for commands without an installed
+application or a PowerShell completion source. Open a new PowerShell terminal
+to load the scripts in `%LOCALAPPDATA%\oh-my-devenv\completions\powershell`.
+
 The desktop option requires Windows Terminal on `PATH` and the default
 LocalAppData location under your home directory. It installs PowerToys and the
 Maple Mono NF CN faces for the current user. It also deploys a Windows Terminal
@@ -39,8 +44,8 @@ fragment for the PowerShell profile. Sign out and back in if Windows Terminal ca
 font. To disable the desktop option, set `desktopBaseline = false` in your
 chezmoi configuration and apply again. This removes the project's Terminal
 fragment and keeps the installed packages and fonts. Apply prints `All checks passed.` after
-the configuration, packages, runtimes, tools, user `Path`, and any enabled
-desktop assets pass inspection.
+the configuration, packages, runtimes, tools, user `Path`, PowerShell
+completions, and any enabled desktop assets pass inspection.
 
 On the first apply, review any backup under
 `%LOCALAPPDATA%\oh-my-devenv\chezmoi-first-run-backup`. The path follows the
@@ -74,11 +79,14 @@ because the pre-delete backup holds the content seen when it ran.
 Uninstall backs up the files it will remove and the profile it will edit.
 Review the verified backup under `%LOCALAPPDATA%\oh-my-devenv\chezmoi-uninstall-backup`.
 If backup fails, uninstall stops before it changes the profile or removes
-files. The uninstall preview lists the recorded user `Path` entries it can
-remove. Uninstall removes those entries and the managed Terminal fragment. It
-keeps installed packages, fonts, runtimes, and tools. After removal, uninstall resets
-chezmoi's script and entry state so that the next `chezmoi apply` backs up any
-files that already exist at managed targets.
+files. The preview lists managed configuration, recorded user `Path` entries,
+owned completion scripts and fonts, and recorded font registrations that still
+point to those files. Uninstall removes those items and keeps the first-run
+backups, installed packages, mise, runtimes, Go tools, and uv tools. It also
+keeps unowned completion scripts and pre-existing matching fonts. Close applications
+that are using a font if uninstall reports that it cannot delete the file.
+After removal, uninstall resets chezmoi's script and entry state so that the
+next `chezmoi apply` backs up any files that already exist at managed targets.
 If apply used a custom configuration file, pass the same file to uninstall with
 `-Config`.
 

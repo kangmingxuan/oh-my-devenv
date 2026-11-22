@@ -23,6 +23,7 @@ if ($PSVersionTable.PSVersion -lt [version]'7.6') {
 . (Join-Path $PSScriptRoot 'user-path.ps1')
 . (Join-Path $PSScriptRoot 'mise.ps1')
 . (Join-Path $PSScriptRoot 'ecosystem.ps1')
+. (Join-Path $PSScriptRoot 'completions.ps1')
 
 Update-HookPath -Managed
 $git = Get-PathApplication -Name git
@@ -30,7 +31,7 @@ $result = Invoke-NativeCommand -Executable $git.Source -Arguments @('--version')
 Write-Host $result.Stdout.Trim()
 
 foreach ($relativePath in @('.gitconfig', '.config/mise/config.toml', '.config/oh-my-devenv/powershell/profile.ps1',
-    '.config/oh-my-devenv/powershell/environment.ps1')) {
+    '.config/oh-my-devenv/powershell/environment.ps1', '.config/oh-my-devenv/powershell/completions.ps1')) {
     $target = Join-Path $Destination $relativePath
     if ($null -eq (Resolve-RegularFile -Path $target)) {
         throw "Missing managed file '$target'. Run chezmoi apply."
@@ -66,6 +67,8 @@ $commands = @(
         -UvManifest (Join-Path $manifestRoot 'ecosystem/uv-tools.txt')
 )
 Confirm-ManagedProfile -ProfilePath $ProfilePath -Destination $Destination -Commands $commands -FixtureBin $ProbeFixtureBin
+Invoke-PowerShellCompletion -Action check -ManifestPath (Join-Path $manifestRoot 'shell/completions.txt') `
+    -LocalData (Get-CompletionLocalData -Destination $Destination)
 
 $ssh = Get-PathApplication -Name ssh
 $version = Invoke-NativeCommand -Executable $ssh.Source -Arguments @('-V')
