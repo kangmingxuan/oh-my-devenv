@@ -131,6 +131,7 @@ Describe 'Windows phase 4 helpers' -Skip:(-not $IsWindows) {
                 $stdout = switch ($Arguments -join ' ') {
                     'tool list' { "fixture v1.2.3`n- fixture" }
                     'tool dir' { $TestDrive }
+                    'env GOARCH' { "amd64`n" }
                     default { '' }
                 }
                 @{ ExitCode = 0; Stdout = $stdout; Stderr = '' }
@@ -169,12 +170,21 @@ Describe 'Windows phase 4 helpers' -Skip:(-not $IsWindows) {
             }
         }
 
-        It 'adds the experimental Delve tag only on <Architecture>' -ForEach @(
-            @{ Architecture = 'Arm64'; Expected = @('install', '-tags=exp.winarm64', 'example.com/tool@v1.2.3') }
-            @{ Architecture = 'X64'; Expected = @('install', 'example.com/tool@v1.2.3') }
+        It 'builds <Spec> for GOARCH <Arch> with <Expected>' -ForEach @(
+            @{ Arch = 'arm64'; Spec = 'github.com/go-delve/delve/cmd/dlv@v1.27.2'; Expected = @('install', '-tags=exp.winarm64', 'github.com/go-delve/delve/cmd/dlv@v1.27.2') }
+            @{ Arch = 'arm64'; Spec = 'example.com/tool@v1.2.3'; Expected = @('install', 'example.com/tool@v1.2.3') }
+            @{ Arch = 'amd64'; Spec = 'github.com/go-delve/delve/cmd/dlv@v1.27.2'; Expected = @('install', 'github.com/go-delve/delve/cmd/dlv@v1.27.2') }
         ) {
-            $actual = Get-GoInstallArgument -Spec 'example.com/tool@v1.2.3' -Architecture $Architecture
-            $actual | Should -BeExactly $Expected
+            [IO.File]::WriteAllText($manifest, $Spec)
+            $script:fixtureGoArch = $Arch
+            $script:fixtureGoInstall = $Expected -join ' '
+            Mock Invoke-NativeCommand {
+                @{ ExitCode = 0; Stdout = "$script:fixtureGoArch`n"; Stderr = '' }
+            } -ParameterFilter { $Executable -eq 'managed-go.exe' -and ($Arguments -join ' ') -ceq 'env GOARCH' }
+            Install-GoTool -ManifestPath $manifest
+            Should -Invoke Invoke-NativeCommand -Times 1 -Exactly -ParameterFilter {
+                $Executable -eq 'managed-go.exe' -and ($Arguments -join ' ') -ceq $script:fixtureGoInstall
+            }
         }
 
         It 'skips an exact uv pin on the selected Python' {

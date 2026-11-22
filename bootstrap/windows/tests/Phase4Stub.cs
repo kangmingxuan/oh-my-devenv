@@ -73,6 +73,11 @@ static class Phase4Stub
                 Log("go install " + spec);
                 return 0;
             }
+            if (args.Length == 2 && args[0] == "env" && args[1] == "GOARCH")
+            {
+                Console.WriteLine("amd64");
+                return 0;
+            }
             if (args.Length == 3 && args[0] == "version" && args[1] == "-m" && File.Exists(args[2]))
             {
                 Console.Write(File.ReadAllText(Path.ChangeExtension(args[2], ".fixture-build-info")));
