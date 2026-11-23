@@ -389,7 +389,7 @@ Add one Windows overlay, `profile.local.ps1` (section 9), in phase 2 together wi
   the test ownership record. The job logs requested and installed versions for
   each mise tool, identified path-length errors, and the longest path found
   under the mise data and uv tool directories.
-- A second hosted apply job runs the same fixture on a native ARM64 Windows 11 runner. The ARM64 image lacks WinGet and the ARM64 VC++ runtime. Its preinstalled Windows Terminal has no `wt.exe` alias for the runner user. Before the fixture runs, the workflow installs WinGet through the `Microsoft.WinGet.Client` module, installs the runtime and the ARM64 chezmoi with WinGet, and registers Terminal again for the runner user. The smoke job runs on x64 only.
+- A second hosted apply job runs the same fixture on a native ARM64 Windows 11 runner. Before provisioning, WinGet was not on the ARM64 runner's `PATH`, and the ARM64 VC++ runtime was not installed. The preinstalled Windows Terminal had no `wt.exe` alias for the runner user. Before the fixture runs, the workflow installs WinGet through the `Microsoft.WinGet.Client` module and the runtime and the ARM64 chezmoi with WinGet, each only when missing. It then registers Terminal again for the runner user. The smoke job runs on x64 only.
 - Phase 5 smoke tests cover shipped and generated completions, changes in command availability between applies, and font ownership. The hosted apply job runs the real hook 55 and measures completion load time in fresh PowerShell processes. When the runner provides an unredirected console, the profile probe uses `TabExpansion2` to require subcommand results for `chezmoi` and `uv`. The job verifies that uninstall removes owned assets while installed packages and tools remain, then restores the runner's font files, font registry values, user Path, and configuration files.
 - Section 17 records hosted coverage. The hosted jobs leave the clean-client install and the Oh My Posh app execution alias unverified. Section 17 also records the first live apply, which ran after all planned phases and covered the alias.
 - Run both Windows jobs under the same `needs-checks` condition as the Unix jobs, and feed them into the existing single required check. This avoids a second path classifier that could skip Windows CI after a change to a shared file.
@@ -494,7 +494,7 @@ already present at machine scope.
 - After PR #70, startup times were means of three runs. A `pwsh` without a profile took 251 ms. With the profile and redirected output, which skips the prompt and completions, it took 620 ms. With prompt and completion loading forced through `OH_MY_DEVENV_PROBE_PROMPT=1`, it took 1,403 ms. The user judged this acceptable.
 - Completion of a partial `mise` subcommand worked. After a trailing space, `mise <Tab>` offered file names, because the upstream generated completer drops the trailing space. [jdx/usage#1671](https://github.com/jdx/usage/issues/1671)
 
-The first hosted ARM64 apply job ran on `b46276c` and passed. The runner image
+The first successful hosted ARM64 apply job ran on `b46276c`. The runner image
 was `win11-vs2026-arm64` 20261115.219.1 with PowerShell 7.6.10. The workflow
 installed WinGet v1.29.380 and the ARM64 chezmoi v2.74.1. WinGet installed mise
 2026.11.12 for `windows-arm64`. mise installed Go 1.27.1 for `windows/arm64`,

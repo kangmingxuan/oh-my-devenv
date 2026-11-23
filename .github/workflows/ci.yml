@@ -217,22 +217,27 @@ jobs:
       - name: Provision the ARM64 image
         if: runner.arch == 'ARM64'
         run: |
-          $module = '1.29.380'
-          Install-Module -Name Microsoft.WinGet.Client -RequiredVersion $module -Scope CurrentUser -Force
-          Import-Module -Name Microsoft.WinGet.Client -RequiredVersion $module
-          # Without a wildcard, the cmdlet uses the version as the release tag.
-          Repair-WinGetPackageManager -AllUsers -Version "v$module" -Force
           $paths = @(
             (Join-Path $env:LOCALAPPDATA 'Microsoft/WindowsApps')
             (Join-Path $env:LOCALAPPDATA 'Microsoft/WinGet/Links')
           )
           $env:PATH = (@($paths) + $env:PATH) -join ';'
           Add-Content -LiteralPath $env:GITHUB_PATH -Value $paths
+          # Each item installs only when missing, so a later image that ships it still passes.
+          if (-not (Get-Command -Name winget.exe -CommandType Application -ErrorAction Ignore)) {
+            $module = '1.29.380'
+            Install-Module -Name Microsoft.WinGet.Client -RequiredVersion $module -Scope CurrentUser -Force
+            Import-Module -Name Microsoft.WinGet.Client -RequiredVersion $module
+            # Without a wildcard, the cmdlet uses the version as the release tag.
+            Repair-WinGetPackageManager -AllUsers -Version "v$module" -Force
+          }
           winget --version
           if ($LASTEXITCODE -ne 0) { throw "WinGet exited with code $LASTEXITCODE." }
           foreach ($id in @('Microsoft.VCRedist.2015+.arm64', 'twpayne.chezmoi')) {
-            winget install --id $id --exact --source winget --accept-package-agreements `
-              --accept-source-agreements --disable-interactivity
+            $common = @('--id', $id, '--exact', '--source', 'winget', '--accept-source-agreements', '--disable-interactivity')
+            winget list @common
+            if ($LASTEXITCODE -eq 0) { continue }
+            winget install @common --architecture arm64 --accept-package-agreements
             if ($LASTEXITCODE -ne 0) { throw "WinGet exited with code $LASTEXITCODE for $id." }
           }
           # The Appx cmdlets run in Windows PowerShell, as in the CI fixture.
@@ -247,7 +252,8 @@ jobs:
           '@
           if ($LASTEXITCODE -ne 0) { throw "Windows PowerShell exited with code $LASTEXITCODE." }
           Get-ChildItem -LiteralPath (Join-Path $env:LOCALAPPDATA 'Microsoft/WindowsApps') -Filter *.exe | Select-Object -ExpandProperty Name
-          Get-Command -Name wt.exe -CommandType Application
+          # Fail here instead of falling back to the x64 Chocolatey chezmoi.
+          Get-Command -Name chezmoi.exe, wt.exe -CommandType Application
       - name: Prepare the Windows tools
         run: |
           if ($PSVersionTable.PSVersion -lt [version]'7.6') {
