@@ -7,6 +7,8 @@ versioning and release policy lives in
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-23
+
 ### Breaking
 
 - Manage mise, Ghostty, and Fontconfig through the main `dot_config/` source at
@@ -255,6 +257,7 @@ Before the next apply, migrate manually:
   again when the mise configuration changes, and the environment check reports
   stale uv tool environments.
 
-[Unreleased]: https://github.com/kangmingxuan/oh-my-devenv/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/kangmingxuan/oh-my-devenv/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/kangmingxuan/oh-my-devenv/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/kangmingxuan/oh-my-devenv/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/kangmingxuan/oh-my-devenv/releases/tag/v0.1.0
