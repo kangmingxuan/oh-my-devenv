@@ -383,10 +383,9 @@ the pull request cannot merge.
   under the hosted runner user's home. It uses native OpenSSH and checks rejection
   of unsafe ACLs on a managed config and a local drop-in.
 - `apply-arm64-windows` runs the same round trip on the native ARM64
-  `windows-11-arm` runner. A prior step installs WinGet when `winget.exe` is
-  not on `PATH`. It installs the ARM64 Visual C++ runtime and the ARM64 chezmoi
-  when `winget list` does not find the package, checks that the resolved
-  chezmoi reports `arm64`, and registers Windows Terminal for the runner user.
+  `windows-11-arm` runner. A prior step provisions WinGet, the ARM64 Visual C++
+  runtime, and the ARM64 chezmoi. It registers Windows Terminal again for the
+  runner user, then checks that the resolved chezmoi reports `arm64`.
 - All Windows jobs log the effective PowerShell execution policy, rendered home
   paths, and the Git include origin.
 
