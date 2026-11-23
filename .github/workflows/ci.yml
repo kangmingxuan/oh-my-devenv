@@ -210,7 +210,8 @@ jobs:
         shell: pwsh
     steps:
       - uses: actions/checkout@v7
-      # The ARM64 image lacks WinGet and the ARM64 Visual C++ runtime that mise needs.
+      # The ARM64 image lacks WinGet and the ARM64 Visual C++ runtime that mise needs,
+      # and its Windows Terminal package has no wt.exe alias for the runner user.
       # Provision them as a client device has them, and use the native ARM64
       # chezmoi instead of the x64 Chocolatey package.
       - name: Provision the ARM64 image
@@ -234,6 +235,19 @@ jobs:
               --accept-source-agreements --disable-interactivity
             if ($LASTEXITCODE -ne 0) { throw "WinGet exited with code $LASTEXITCODE for $id." }
           }
+          # The Appx cmdlets run in Windows PowerShell, as in the CI fixture.
+          $windowsPowerShell = Join-Path $env:WINDIR 'System32/WindowsPowerShell/v1.0/powershell.exe'
+          & $windowsPowerShell -NoProfile -NonInteractive -Command @'
+          $ErrorActionPreference = 'Stop'
+          Get-AppxPackage -AllUsers -Name Microsoft.WindowsTerminal | Format-List Name, Version, Architecture, InstallLocation
+          if (-not (Get-AppxPackage -Name Microsoft.WindowsTerminal)) {
+            $package = Get-AppxPackage -AllUsers -Name Microsoft.WindowsTerminal | Select-Object -First 1
+            if (-not $package) { throw 'The image has no Windows Terminal package.' }
+            Add-AppxPackage -Register (Join-Path $package.InstallLocation 'AppxManifest.xml') -DisableDevelopmentMode
+          }
+          '@
+          if ($LASTEXITCODE -ne 0) { throw "Windows PowerShell exited with code $LASTEXITCODE." }
+          Get-Command -Name wt.exe -CommandType Application
       - name: Prepare the Windows tools
         run: |
           if ($PSVersionTable.PSVersion -lt [version]'7.6') {
