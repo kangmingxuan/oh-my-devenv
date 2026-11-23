@@ -489,7 +489,7 @@ already present at machine scope.
 - After these changes, hook 60 printed `All checks passed.`
 - `oh-my-posh` resolved to the app execution alias under `%LOCALAPPDATA%\Microsoft\WindowsApps`, and the profile loaded the managed theme through it.
 - With `async` enabled, each new terminal drew the default PowerShell prompt first. The theme now loads synchronously. [PR #70](https://github.com/kangmingxuan/oh-my-devenv/pull/70)
-- Startup times were means of three runs. A `pwsh` without a profile took 251 ms. With the profile and redirected output, which skips the prompt and completions, it took 620 ms. With prompt and completion loading forced through `OH_MY_DEVENV_PROBE_PROMPT=1`, it took 1,403 ms. The user judged this acceptable.
+- After PR #70, startup times were means of three runs. A `pwsh` without a profile took 251 ms. With the profile and redirected output, which skips the prompt and completions, it took 620 ms. With prompt and completion loading forced through `OH_MY_DEVENV_PROBE_PROMPT=1`, it took 1,403 ms. The user judged this acceptable.
 - Completion of a partial `mise` subcommand worked. After a trailing space, `mise <Tab>` offered file names, because the upstream generated completer drops the trailing space. [jdx/usage#1671](https://github.com/jdx/usage/issues/1671)
 
 ## 18. Sources

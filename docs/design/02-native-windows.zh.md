@@ -459,7 +459,7 @@ Node 24.21.0、Python 3.13.16、usage 6.12.0 和 uv 0.11.33。mise 数据目录�
 首次实机 apply 于 2026-11-22 至 2026-11-23 在一台 Windows Enterprise ARM64
 客户端上进行，使用 PowerShell 7.7.0 和 chezmoi v2.74.1。该账户属于
 Administrators 组，以非提升权限运行，因此全新的标准用户客户端仍待验证。
-`pwsh` 的执行策略是来自 `LocalMachine` 的 `RemoteSigned`，chezmoi 能运行
+`pwsh` 的执行策略是来自 `LocalMachine` 的 `RemoteSigned`，chezmoi 运行了
 `.ps1` hook。与架构匹配的 VC++ 运行库已在机器范围安装。
 
 - hook 50 首次在构建 Delve 时停止。加入 Delve 标签后，它在原生 ARM64 上装好了 Go 工具。[PR #69](https://github.com/kangmingxuan/oh-my-devenv/pull/69)
@@ -467,7 +467,7 @@ Administrators 组，以非提升权限运行，因此全新的标准用户客�
 - 完成这些修改后，hook 60 输出 `All checks passed.`
 - `oh-my-posh` 解析为 `%LOCALAPPDATA%\Microsoft\WindowsApps` 下的应用执行别名，profile 通过它加载了受管主题。
 - 启用 `async` 时，每个新终端都先显示 PowerShell 默认提示符。主题现在同步加载。[PR #70](https://github.com/kangmingxuan/oh-my-devenv/pull/70)
-- 启动耗时取三次运行的平均值。不加载 profile 的 `pwsh` 用时 251 ms。加载 profile 且输出被重定向时，会跳过提示符和补全，用时 620 ms。通过 `OH_MY_DEVENV_PROBE_PROMPT=1` 强制加载提示符和补全时，用时 1,403 ms。用户认为可以接受。
+- 合并 PR #70 后，启动耗时取三次运行的平均值。不加载 profile 的 `pwsh` 用时 251 ms。加载 profile 且输出被重定向时，会跳过提示符和补全，用时 620 ms。通过 `OH_MY_DEVENV_PROBE_PROMPT=1` 强制加载提示符和补全时，用时 1,403 ms。用户认为可以接受。
 - 补全部分输入的 `mise` 子命令正常。在末尾空格之后，`mise <Tab>` 列出的是文件名，因为上游生成的补全脚本丢掉了末尾空格。[jdx/usage#1671](https://github.com/jdx/usage/issues/1671)
 
 ## 18. 来源
