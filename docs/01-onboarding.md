@@ -38,8 +38,9 @@ default = true
 uv does not read `pip.ini` or `PIP_INDEX_URL`. If the public package file host
 is blocked, the index must serve the package files as well as the package list.
 Apply installs uv before the uv tools. If apply stops while it installs the uv
-tools, open a new PowerShell session and run `uvx --no-cache ruff --version` to
-check that uv can download and run a package, then apply again.
+tools, open a new PowerShell session and run
+`uvx --isolated --no-cache ruff --version` to check that uv can download and
+run a package, then apply again. `--isolated` ignores an installed Ruff.
 [uv configuration files](https://docs.astral.sh/uv/concepts/configuration-files/),
 [uv indexes](https://docs.astral.sh/uv/concepts/indexes/),
 [pip compatibility](https://docs.astral.sh/uv/pip/compatibility/#configuration-files-and-environment-variables)
