@@ -2,6 +2,14 @@
     Justification = 'Apply PowerShell initialization emitted by the installed mise and Oh My Posh executables.')]
 param()
 
+# Interactive hosts import PSReadLine before the profile runs; script hosts skip this.
+# Match the Emacs line editing and menu completion of the Unix Oh My Zsh baseline. Set the edit
+# mode first, because changing it resets key handlers that later initialization adds.
+if (Get-Module -Name PSReadLine) {
+    Set-PSReadLineOption -EditMode Emacs
+    Set-PSReadLineKeyHandler -Chord Tab -Function MenuComplete
+}
+
 $ohMyDevenvMiseActivation = & {
     Set-StrictMode -Version Latest
     $ErrorActionPreference = 'Stop'

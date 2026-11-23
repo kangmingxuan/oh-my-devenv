@@ -263,6 +263,7 @@ chezmoi 可以通过 `.chezmoiexternal` 用配置数据计算目标路径。Clau
 
 主体在适用于 Windows 的范围内对齐 Unix env 模板：
 
+- 已加载 PSReadLine 时，先于其他初始化把编辑模式设为 Emacs，并把 Tab 绑定到 `MenuComplete`。交互式宿主在运行 profile 前加载 PSReadLine；脚本宿主跳过这一步。PSReadLine 在 Windows 上默认使用 Windows 编辑模式。Unix 基线使用 Oh My Zsh，它选用 Emacs 键位和菜单式补全。用户于 2026-11-23 做出这个选择。本地 overlay 可以覆盖这两项设置。[PSReadLine 选项](https://learn.microsoft.com/powershell/module/psreadline/set-psreadlineoption)、[PSReadLine 按键处理](https://learn.microsoft.com/powershell/module/psreadline/set-psreadlinekeyhandler)、[Oh My Zsh 键位](https://github.com/ohmyzsh/ohmyzsh/blob/master/lib/key-bindings.zsh)、[Oh My Zsh 补全](https://github.com/ohmyzsh/ohmyzsh/blob/master/lib/completion.zsh)
 - `GOPATH` 默认为 `~/go`。`GOBIN` 默认为 `GOPATH` 中第一个分号分隔条目下的 `bin` 目录。
 - 把 mise shims 目录、`~/.local/bin` 和 `$GOBIN` 放到 `PATH` 最前面。
 - 把 `BAT_THEME` 设为与 Unix env 模板相同的值。

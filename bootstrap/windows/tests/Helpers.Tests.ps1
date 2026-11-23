@@ -304,6 +304,61 @@ $global:LASTEXITCODE = 0
         $result.Stdout | Should -BeExactly 'fixture-shims;fixture-local-bin;fixture-go-bin;activation-left-this-entry'
     }
 
+    It 'applies the profile PSReadLine settings only when PSReadLine is loaded' -ForEach @(
+        @{ Import = $true }
+        @{ Import = $false }
+    ) {
+        $source = Join-Path $PSScriptRoot '../../../dot_config/oh-my-devenv/powershell/profile.ps1'
+        # Read the configured values from the profile so the test follows configuration changes.
+        $ast = [Management.Automation.Language.Parser]::ParseFile((Resolve-Path $source), [ref]$null, [ref]$null)
+        $commands = $ast.FindAll({ $args[0] -is [Management.Automation.Language.CommandAst] }, $true)
+        $argument = {
+            param([string]$Command, [string]$Parameter)
+            $elements = @($commands | Where-Object { $_.GetCommandName() -eq $Command } |
+                Select-Object -First 1 -ExpandProperty CommandElements)
+            for ($i = 0; $i -lt $elements.Count - 1; $i++) {
+                if ($elements[$i] -is [Management.Automation.Language.CommandParameterAst] -and
+                    $elements[$i].ParameterName -eq $Parameter) {
+                    return $elements[$i + 1].Extent.Text
+                }
+            }
+        }
+        $editMode = & $argument 'Set-PSReadLineOption' 'EditMode'
+        $chord = & $argument 'Set-PSReadLineKeyHandler' 'Chord'
+        $function = & $argument 'Set-PSReadLineKeyHandler' 'Function'
+        $editMode | Should -Not -BeNullOrEmpty
+        $chord | Should -Not -BeNullOrEmpty
+        $function | Should -Not -BeNullOrEmpty
+        # Start from another edit mode so the assertion holds whatever the host default is.
+        $startMode = if ($editMode -eq 'Windows') { 'Emacs' } else { 'Windows' }
+        $expected = if ($Import) { "loaded $editMode $function" } else { 'not-loaded' }
+
+        $body = Join-Path $TestDrive 'profile.ps1'
+        [IO.File]::Copy($source, $body, $true)
+        [IO.File]::WriteAllText((Join-Path $TestDrive 'environment.ps1'), @'
+function Get-ManagedProfilePathEntry {}
+function Get-DefaultGoBin { 'fixture-go-bin' }
+function ConvertTo-PathKey { param([string]$Path) $Path.ToUpperInvariant() }
+function Get-PathApplication { param([string]$Name, [switch]$Optional) }
+'@)
+        $runner = Join-Path $TestDrive 'run-psreadline-profile.ps1'
+        $importLine = if ($Import) { "Import-Module PSReadLine; Set-PSReadLineOption -EditMode $startMode" } else { '' }
+        [IO.File]::WriteAllText($runner, @"
+Set-StrictMode -Version Latest
+`$ErrorActionPreference = 'Stop'
+$importLine
+. (Join-Path `$PSScriptRoot 'profile.ps1')
+if (Get-Module -Name PSReadLine) {
+    [Console]::Write("loaded `$((Get-PSReadLineOption).EditMode) `$((Get-PSReadLineKeyHandler -Chord '$chord').Function)")
+} else {
+    [Console]::Write('not-loaded')
+}
+"@)
+        $pwsh = Join-Path $PSHOME $(if ($IsWindows) { 'pwsh.exe' } else { 'pwsh' })
+        $result = Invoke-NativeCommand -Executable $pwsh -Arguments @('-NoProfile', '-File', $runner)
+        $result.Stdout | Should -BeExactly $expected
+    }
+
     It 'rejects a function that shadows the expected application when invoked by its bare name' {
         $probe = Join-Path $PSScriptRoot '../profile-probe.ps1'
         $fixtureProfile = Join-Path $TestDrive 'shadowing-profile.ps1'
