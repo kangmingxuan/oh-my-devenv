@@ -220,6 +220,25 @@ jobs:
             choco install chezmoi --yes --no-progress
             if ($LASTEXITCODE -ne 0) { throw "Chocolatey exited with code $LASTEXITCODE." }
           }
+      # The ARM64 image lacks WinGet, the ARM64 Visual C++ runtime that mise needs,
+      # and Windows Terminal. Provision them the way a client device would have them.
+      - name: Provision the ARM64 image
+        if: runner.arch == 'ARM64'
+        run: |
+          $version = '1.29.380'
+          Install-Module -Name Microsoft.WinGet.Client -RequiredVersion $version -Scope CurrentUser -Force
+          Import-Module -Name Microsoft.WinGet.Client -RequiredVersion $version
+          Repair-WinGetPackageManager -AllUsers -Version $version -Force
+          $windowsApps = Join-Path $env:LOCALAPPDATA 'Microsoft/WindowsApps'
+          $env:PATH = "$windowsApps;$env:PATH"
+          Add-Content -LiteralPath $env:GITHUB_PATH -Value $windowsApps
+          winget --version
+          if ($LASTEXITCODE -ne 0) { throw "WinGet exited with code $LASTEXITCODE." }
+          foreach ($id in @('Microsoft.VCRedist.2015+.arm64', 'Microsoft.WindowsTerminal')) {
+            winget install --id $id --exact --source winget --accept-package-agreements `
+              --accept-source-agreements --disable-interactivity
+            if ($LASTEXITCODE -ne 0) { throw "WinGet exited with code $LASTEXITCODE for $id." }
+          }
       - name: Validate the Windows configuration
         run: |
           if ('${{ matrix.mode }}' -eq 'smoke') {
