@@ -131,6 +131,7 @@ Describe 'Windows phase 4 helpers' -Skip:(-not $IsWindows) {
                 $stdout = switch ($Arguments -join ' ') {
                     'tool list' { "fixture v1.2.3`n- fixture" }
                     'tool dir' { $TestDrive }
+                    'env GOARCH' { "amd64`n" }
                     default { '' }
                 }
                 @{ ExitCode = 0; Stdout = $stdout; Stderr = '' }
@@ -165,7 +166,25 @@ Describe 'Windows phase 4 helpers' -Skip:(-not $IsWindows) {
             Install-GoTool -ManifestPath $manifest
             Should -Invoke Invoke-NativeCommand -Times 1 -Exactly -ParameterFilter {
                 $Executable -eq 'managed-go.exe' -and $Arguments[0] -ceq 'install' -and
-                $Arguments[1] -ceq 'example.com/first@v1.2.3'
+                $Arguments[-1] -ceq 'example.com/first@v1.2.3'
+            }
+        }
+
+        It 'builds <Spec> for GOARCH <Arch> with <Expected>' -ForEach @(
+            @{ Arch = 'arm64'; Spec = 'github.com/go-delve/delve/cmd/dlv@v1.27.2'; Expected = @('install', '-tags=exp.winarm64', 'github.com/go-delve/delve/cmd/dlv@v1.27.2') }
+            @{ Arch = 'arm64'; Spec = 'example.com/tool@v1.2.3'; Expected = @('install', 'example.com/tool@v1.2.3') }
+            @{ Arch = 'amd64'; Spec = 'github.com/go-delve/delve/cmd/dlv@v1.27.2'; Expected = @('install', 'github.com/go-delve/delve/cmd/dlv@v1.27.2') }
+        ) {
+            [IO.File]::WriteAllText($manifest, $Spec)
+            $script:fixtureGoArch = $Arch
+            $script:fixtureGoInstall = $Expected
+            Mock Invoke-NativeCommand {
+                @{ ExitCode = 0; Stdout = "$script:fixtureGoArch`n"; Stderr = '' }
+            } -ParameterFilter { $Executable -eq 'managed-go.exe' -and ($Arguments -join ' ') -ceq 'env GOARCH' }
+            Install-GoTool -ManifestPath $manifest
+            Should -Invoke Invoke-NativeCommand -Times 1 -Exactly -ParameterFilter {
+                $Executable -eq 'managed-go.exe' -and $Arguments.Count -eq $script:fixtureGoInstall.Count -and
+                -not (Compare-Object -ReferenceObject $script:fixtureGoInstall -DifferenceObject $Arguments -SyncWindow 0 -CaseSensitive)
             }
         }
 
