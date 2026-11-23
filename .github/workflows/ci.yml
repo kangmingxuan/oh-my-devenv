@@ -239,14 +239,14 @@ jobs:
           $windowsPowerShell = Join-Path $env:WINDIR 'System32/WindowsPowerShell/v1.0/powershell.exe'
           & $windowsPowerShell -NoProfile -NonInteractive -Command @'
           $ErrorActionPreference = 'Stop'
-          Get-AppxPackage -AllUsers -Name Microsoft.WindowsTerminal | Format-List Name, Version, Architecture, InstallLocation
-          if (-not (Get-AppxPackage -Name Microsoft.WindowsTerminal)) {
-            $package = Get-AppxPackage -AllUsers -Name Microsoft.WindowsTerminal | Select-Object -First 1
-            if (-not $package) { throw 'The image has no Windows Terminal package.' }
-            Add-AppxPackage -Register (Join-Path $package.InstallLocation 'AppxManifest.xml') -DisableDevelopmentMode
-          }
+          $package = Get-AppxPackage -AllUsers -Name Microsoft.WindowsTerminal | Select-Object -First 1
+          if (-not $package) { throw 'The image has no Windows Terminal package.' }
+          $package | Format-List Name, Version, Architecture, InstallLocation
+          # Registering again for this user creates the missing app execution alias.
+          Add-AppxPackage -Register (Join-Path $package.InstallLocation 'AppxManifest.xml') -DisableDevelopmentMode -ForceApplicationShutdown
           '@
           if ($LASTEXITCODE -ne 0) { throw "Windows PowerShell exited with code $LASTEXITCODE." }
+          Get-ChildItem -LiteralPath (Join-Path $env:LOCALAPPDATA 'Microsoft/WindowsApps') -Filter *.exe | Select-Object -ExpandProperty Name
           Get-Command -Name wt.exe -CommandType Application
       - name: Prepare the Windows tools
         run: |
