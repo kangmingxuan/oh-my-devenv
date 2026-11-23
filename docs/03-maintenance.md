@@ -381,9 +381,13 @@ the pull request cannot merge.
   with fixture profile and backup paths.
 - `apply-windows` applies, reapplies, uninstalls, and restores the configuration
   under the hosted runner user's home. It uses native OpenSSH and checks rejection
-  of unsafe ACLs on a managed config and a local drop-in. Both Windows jobs log
-  the effective PowerShell execution policy, rendered home paths, and the Git
-  include origin.
+  of unsafe ACLs on a managed config and a local drop-in.
+- `apply-arm64-windows` runs the same round trip on the native ARM64
+  `windows-11-arm` runner. A prior step provisions WinGet, the ARM64 Visual C++
+  runtime, and the ARM64 chezmoi. It registers Windows Terminal again for the
+  runner user, then checks that the resolved chezmoi reports `arm64`.
+- All Windows jobs log the effective PowerShell execution policy, rendered home
+  paths, and the Git include origin.
 
 `ci-apply.sh` runs the following round trip on macOS and Linux.
 
