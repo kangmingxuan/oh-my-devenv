@@ -381,7 +381,7 @@ Add one Windows overlay, `profile.local.ps1` (section 9), in phase 2 together wi
   - Lint the PowerShell code with PSScriptAnalyzer.
   - Run the Pester tests for the helpers, including the shared-manifest test cases.
   - Apply and reapply the main source in a temporary home with WinGet, mise, Go, and uv stubs. Use a fixture profile path and registry key. Check uninstall with the same key. Test the desktop installer separately with stubbed downloads and isolated font and registry targets.
-- The hosted Windows apply job requires WinGet and Terminal. It runs the real WinGet import, desktop hook, and checker. The hosted Windows Server stalls when launching the registered Oh My Posh MSIX. The fixture copies the installed executable to a temporary directory and uses that copy for the real prompt probe. Launch through the Windows app execution alias still needs a Windows client signoff. The job restores the font files and registry values after testing.
+- The hosted Windows apply job requires WinGet and Terminal. It runs the real WinGet import, desktop hook, and checker. The hosted Windows Server stalls when launching the registered Oh My Posh MSIX. The fixture copies the installed executable to a temporary directory and uses that copy for the real prompt probe. The first live apply confirmed launch through the Windows app execution alias on a client; section 17 records it. The job restores the font files and registry values after testing.
 - The phase-4 apply job runs the real WinGet, mise, Go, and uv paths. It checks
   the first apply, unchanged reapply, and ownership-based uninstall. It
   restores the original runner user `Path` bytes and registry type and removes
@@ -389,7 +389,7 @@ Add one Windows overlay, `profile.local.ps1` (section 9), in phase 2 together wi
   each mise tool, identified path-length errors, and the longest path found
   under the mise data and uv tool directories.
 - Phase 5 smoke tests cover shipped and generated completions, changes in command availability between applies, and font ownership. The hosted apply job runs the real hook 55 and measures completion load time in fresh PowerShell processes. When the runner provides an unredirected console, the profile probe uses `TabExpansion2` to require subcommand results for `chezmoi` and `uv`. The job verifies that uninstall removes owned assets while installed packages and tools remain, then restores the runner's font files, font registry values, user Path, and configuration files.
-- Section 17 records hosted coverage. The hosted jobs leave the clean-client install and the Oh My Posh app execution alias unverified. Section 17 also records the first live apply, which ran after all planned phases.
+- Section 17 records hosted coverage. The hosted jobs leave the clean-client install and the Oh My Posh app execution alias unverified. Section 17 also records the first live apply, which ran after all planned phases and covered the alias.
 - Run both Windows jobs under the same `needs-checks` condition as the Unix jobs, and feed them into the existing single required check. This avoids a second path classifier that could skip Windows CI after a change to a shared file.
 - Live installs on a real Windows machine follow the same local validation policy as the Unix platforms.
 
@@ -487,6 +487,7 @@ already present at machine scope.
 - Hook 50 first stopped while it built Delve. After the Delve tag change, it installed the Go tools on native ARM64. [PR #69](https://github.com/kangmingxuan/oh-my-devenv/pull/69)
 - Device network policy blocked the public Python package file host, so the uv tool installs stopped. A user-level uv index that points to the organization's package mirror resolved it. The [onboarding guide](../01-onboarding.md#native-windows) describes this setting.
 - After these changes, hook 60 printed `All checks passed.`
+- `oh-my-posh` resolved to the app execution alias under `%LOCALAPPDATA%\Microsoft\WindowsApps`, and the profile loaded the managed theme through it.
 - With `async` enabled, each new terminal drew the default PowerShell prompt first. The theme now loads synchronously. [PR #70](https://github.com/kangmingxuan/oh-my-devenv/pull/70)
 - Startup times were means of three runs. A `pwsh` without a profile took 251 ms. With the profile and redirected output, which skips the prompt and completions, it took 620 ms. With prompt and completion loading forced through `OH_MY_DEVENV_PROBE_PROMPT=1`, it took 1,403 ms. The user judged this acceptable.
 - Completion of a partial `mise` subcommand worked. After a trailing space, `mise <Tab>` offered file names, because the upstream generated completer drops the trailing space. [jdx/usage#1671](https://github.com/jdx/usage/issues/1671)
