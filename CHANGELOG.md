@@ -42,6 +42,30 @@ Before the next apply, migrate manually:
 
 ### Added
 
+- Support native Windows as a fourth platform with PowerShell 7.6 or later. See
+  the [Windows quick start](README.md#native-windows-quick-start) and the
+  [design](docs/design/02-native-windows.en.md). WSL keeps the Linux path.
+  - Apply deploys the shared Git, OpenSSH, and mise configuration and a managed
+    PowerShell profile with the robbyrussell Oh My Posh prompt and a
+    `profile.local.ps1` overlay. It backs up existing files on the first run.
+  - Apply imports Git, GitHub CLI, ripgrep, jq, and Oh My Posh from the `winget`
+    source at user scope. The optional desktop baseline adds PowerToys, Maple
+    Mono NF CN for the current user, and a Windows Terminal profile fragment.
+  - Apply installs mise with WinGet when it is missing, installs the shared
+    runtimes, and installs the Go and uv tools from the shared manifests. It
+    adds the mise shims directory, `~/.local/bin`, and the Go binary directory to
+    the user `Path`. On Windows ARM64, Delve builds with its experimental
+    `exp.winarm64` tag.
+  - Apply installs PowerShell completions for available commands in the shared
+    completion inventory. The profile loads them in interactive sessions.
+  - `bootstrap/windows/check.ps1` checks every delivered layer, and apply runs it
+    last. `bootstrap/windows/uninstall.ps1` previews by default; with `-Apply`, it
+    removes owned configuration, the profile line, recorded user `Path` entries,
+    completions, and fonts, and keeps installed packages and tools.
+  - Windows hooks do not read `bootstrap.env`. On a restricted network,
+    configure each tool's own user settings, for example the uv index in
+    `%APPDATA%\uv\uv.toml`.
+  - CI runs Windows smoke and apply jobs under the single required check.
 - Fail the environment check when PATH selects an executable for a Go or uv
   manifest entry other than the one owned by its installer.
 

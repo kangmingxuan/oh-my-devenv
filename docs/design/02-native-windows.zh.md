@@ -1,6 +1,6 @@
 # 技术设计：原生 Windows 平台
 
-状态：已接受。阶段 3、阶段 4 和阶段 5 已通过托管 Windows smoke 和 apply 作业。全新的标准用户 Windows 客户端仍待验证。
+状态：已接受。阶段 3、阶段 4 和阶段 5 已通过托管 Windows smoke 和 apply 作业。首次实机 apply 已在一台 Windows ARM64 客户端上通过（第 17 节）。全新的标准用户 Windows 客户端仍待验证。
 
 ## 1. 概要
 
