@@ -1,6 +1,5 @@
 {
   "$schema": "https://raw.githubusercontent.com/JanDeDobbeleer/oh-my-posh/v33.0.0/themes/schema.json",
-  "async": true,
   "upgrade": {
     "auto": false,
     "notice": false
