@@ -210,9 +210,9 @@ jobs:
         shell: pwsh
     steps:
       - uses: actions/checkout@v7
-      # The ARM64 image lacks WinGet, the ARM64 Visual C++ runtime that mise needs,
-      # and Windows Terminal. Provision them as a client device has them, and use
-      # the native ARM64 chezmoi instead of the x64 Chocolatey package.
+      # The ARM64 image lacks WinGet and the ARM64 Visual C++ runtime that mise needs.
+      # Provision them as a client device has them, and use the native ARM64
+      # chezmoi instead of the x64 Chocolatey package.
       - name: Provision the ARM64 image
         if: runner.arch == 'ARM64'
         run: |
@@ -229,7 +229,7 @@ jobs:
           Add-Content -LiteralPath $env:GITHUB_PATH -Value $paths
           winget --version
           if ($LASTEXITCODE -ne 0) { throw "WinGet exited with code $LASTEXITCODE." }
-          foreach ($id in @('Microsoft.VCRedist.2015+.arm64', 'Microsoft.WindowsTerminal', 'twpayne.chezmoi')) {
+          foreach ($id in @('Microsoft.VCRedist.2015+.arm64', 'twpayne.chezmoi')) {
             winget install --id $id --exact --source winget --accept-package-agreements `
               --accept-source-agreements --disable-interactivity
             if ($LASTEXITCODE -ne 0) { throw "WinGet exited with code $LASTEXITCODE for $id." }
