@@ -43,29 +43,50 @@ Before the next apply, migrate manually:
 ### Added
 
 - Support native Windows as a fourth platform with PowerShell 7.6 or later. See
-  the [Windows quick start](README.md#native-windows-quick-start) and the
+  the [Windows quick start](README.md#native-windows-quick-start), the
+  [Windows onboarding notes](docs/01-onboarding.md#native-windows), and the
   [design](docs/design/02-native-windows.en.md). WSL keeps the Linux path.
-  - Apply deploys the shared Git, OpenSSH, and mise configuration and a managed
-    PowerShell profile with the robbyrussell Oh My Posh prompt and a
-    `profile.local.ps1` overlay. It backs up existing files on the first run.
+  - Install the quick-start prerequisites first: `pwsh`, Git, OpenSSH, chezmoi,
+    and WinGet on `PATH`. If you already use chezmoi, run `chezmoi init` before
+    the next apply to pick up the Windows hook interpreter. If device policy
+    blocks a hook, the `winget` source, or an installer, contact the device
+    administrator.
+  - Apply deploys the shared Git and mise configuration and a Windows OpenSSH
+    configuration without connection multiplexing. The first apply backs up
+    existing files at managed targets.
+  - Apply keeps your existing PowerShell profile and adds a line that loads the
+    managed profile. The managed profile activates mise, shows the robbyrussell
+    Oh My Posh prompt from the first prompt, and then loads your optional
+    `profile.local.ps1`.
   - Apply imports Git, GitHub CLI, ripgrep, jq, and Oh My Posh from the `winget`
-    source at user scope. The optional desktop baseline adds PowerToys, Maple
-    Mono NF CN for the current user, and a Windows Terminal profile fragment.
-  - Apply installs mise with WinGet when it is missing, installs the shared
-    runtimes, and installs the Go and uv tools from the shared manifests. It
-    adds the mise shims directory, `~/.local/bin`, and the Go binary directory to
-    the user `Path`. On Windows ARM64, Delve builds with its experimental
-    `exp.winarm64` tag.
-  - Apply installs PowerShell completions for available commands in the shared
-    completion inventory. The profile loads them in interactive sessions.
-  - `bootstrap/windows/check.ps1` checks every delivered layer, and apply runs it
-    last. `bootstrap/windows/uninstall.ps1` previews by default; with `-Apply`, it
-    removes owned configuration, the profile line, recorded user `Path` entries,
-    completions, and fonts, and keeps installed packages and tools.
-  - Windows hooks do not read `bootstrap.env`. On a restricted network,
-    configure each tool's own user settings, for example the uv index in
-    `%APPDATA%\uv\uv.toml`.
-  - CI runs Windows smoke and apply jobs under the single required check.
+    source at user scope. Run `winget upgrade` separately to update them. The
+    desktop option is on by default and requires Windows Terminal on `PATH`. It
+    adds PowerToys, Maple Mono NF CN for the current user, and a Windows Terminal
+    profile fragment. Setting `desktopBaseline = false` and applying removes the
+    fragment and keeps the installed packages and fonts.
+  - Apply installs mise with WinGet when it is missing. The WinGet mise package
+    needs the matching Microsoft Visual C++ 2015+ Redistributable at machine
+    scope. Apply then installs the shared runtimes and the Go and uv tools, and
+    adds any missing mise shims, `~/.local/bin`, and Go binary directories to
+    the user `Path`. When the mise Go targets Windows ARM64, Delve builds with
+    its experimental `exp.winarm64` tag.
+  - Apply installs PowerShell completions for inventory commands found on
+    `PATH`. A new interactive `pwsh` terminal with profile loading enabled
+    loads them. Known issue: the current mise completer offers file names after
+    `mise ` plus Tab; type part of a subcommand first
+    ([jdx/usage#1671](https://github.com/jdx/usage/issues/1671)).
+  - Apply ends with `bootstrap/windows/check.ps1` and prints `All checks passed.`
+    on success. Run the script on demand to recheck.
+    `bootstrap/windows/uninstall.ps1` previews by default. With `-Apply`, it
+    backs up files before removal and removes the managed configuration, the
+    managed profile line, and the `Path` entries, completions, and fonts that
+    this baseline added. It keeps user overlays, the first-run backups, and
+    installed packages and tools.
+  - Windows hooks do not read `bootstrap.env`. If public Python package files
+    are blocked, set the uv index in `%APPDATA%\uv\uv.toml` to a mirror that
+    serves both the index and the package files. uv does not read `pip.ini`.
+  - When platform checks run, `ci-gate` also requires the Windows smoke and
+    apply jobs.
 - Fail the environment check when PATH selects an executable for a Go or uv
   manifest entry other than the one owned by its installer.
 
@@ -83,7 +104,7 @@ Before the next apply, migrate manually:
   requests run each job at most once, a new push cancels the previous run, apply
   jobs run in parallel with the smoke jobs, and a weekly run catches upstream
   drift.
-- Every apply job now runs a clean-machine round trip through
+- Every macOS and Linux apply job now runs a clean-machine round trip through
   `bootstrap/scripts/ci-apply.sh`: apply, an unchanged reapply that must not
   rerun the final check hook, `uninstall.sh --confirm` with empty chezmoi state
   buckets afterward, and a restoring apply.
