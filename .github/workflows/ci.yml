@@ -210,13 +210,15 @@ jobs:
         shell: pwsh
     steps:
       - uses: actions/checkout@v7
-      # The ARM64 image lacks WinGet and the ARM64 Visual C++ runtime that mise needs,
-      # and its Windows Terminal package has no wt.exe alias for the runner user.
-      # Provision them as a client device has them, and use the native ARM64
-      # chezmoi instead of the x64 Chocolatey package.
-      - name: Provision the ARM64 image
-        if: runner.arch == 'ARM64'
+      # Install chezmoi with WinGet, as the README does. The ARM64 image also lacks
+      # WinGet and the ARM64 Visual C++ runtime that mise needs, and its Windows
+      # Terminal package has no wt.exe alias for the runner user.
+      - name: Prepare the Windows tools
         run: |
+          if ($PSVersionTable.PSVersion -lt [version]'7.6') {
+            throw "The runner needs PowerShell 7.6 or later. Found $($PSVersionTable.PSVersion)."
+          }
+          $arm64 = $env:RUNNER_ARCH -ceq 'ARM64'
           $paths = @(
             (Join-Path $env:LOCALAPPDATA 'Microsoft/WindowsApps')
             (Join-Path $env:LOCALAPPDATA 'Microsoft/WinGet/Links')
@@ -233,16 +235,19 @@ jobs:
           }
           winget --version
           if ($LASTEXITCODE -ne 0) { throw "WinGet exited with code $LASTEXITCODE." }
-          foreach ($id in @('Microsoft.VCRedist.2015+.arm64', 'twpayne.chezmoi')) {
+          $packages = @('twpayne.chezmoi')
+          if ($arm64) { $packages = @('Microsoft.VCRedist.2015+.arm64') + $packages }
+          foreach ($id in $packages) {
             $common = @('--id', $id, '--exact', '--source', 'winget', '--accept-source-agreements', '--disable-interactivity')
             winget list @common
             if ($LASTEXITCODE -eq 0) { continue }
-            winget install @common --architecture arm64 --accept-package-agreements
+            winget install @common --architecture $(if ($arm64) { 'arm64' } else { 'x64' }) --accept-package-agreements
             if ($LASTEXITCODE -ne 0) { throw "WinGet exited with code $LASTEXITCODE for $id." }
           }
-          # The Appx cmdlets run in Windows PowerShell, as in the CI fixture.
-          $windowsPowerShell = Join-Path $env:WINDIR 'System32/WindowsPowerShell/v1.0/powershell.exe'
-          & $windowsPowerShell -NoProfile -NonInteractive -Command @'
+          if ($arm64) {
+            # The Appx cmdlets run in Windows PowerShell, as in the CI fixture.
+            $windowsPowerShell = Join-Path $env:WINDIR 'System32/WindowsPowerShell/v1.0/powershell.exe'
+            & $windowsPowerShell -NoProfile -NonInteractive -Command @'
           $ErrorActionPreference = 'Stop'
           $package = Get-AppxPackage -AllUsers -Name Microsoft.WindowsTerminal | Select-Object -First 1
           if (-not $package) { throw 'The image has no Windows Terminal package.' }
@@ -250,23 +255,14 @@ jobs:
           # Registering again for this user creates the missing app execution alias.
           Add-AppxPackage -Register (Join-Path $package.InstallLocation 'AppxManifest.xml') -DisableDevelopmentMode -ForceApplicationShutdown
           '@
-          if ($LASTEXITCODE -ne 0) { throw "Windows PowerShell exited with code $LASTEXITCODE." }
-          Get-ChildItem -LiteralPath (Join-Path $env:LOCALAPPDATA 'Microsoft/WindowsApps') -Filter *.exe | Select-Object -ExpandProperty Name
-          # Fail here instead of falling back to the x64 Chocolatey chezmoi.
-          Get-Command -Name chezmoi.exe, wt.exe -CommandType Application
+            if ($LASTEXITCODE -ne 0) { throw "Windows PowerShell exited with code $LASTEXITCODE." }
+            Get-Command -Name wt.exe -CommandType Application
+          }
+          Get-Command -Name chezmoi.exe -CommandType Application
           # The package lookup ignores architecture, so check the resolved binary.
+          $expected = if ($arm64) { 'arm64' } else { 'amd64' }
           $arch = chezmoi execute-template '{{ .chezmoi.arch }}'
-          if ($LASTEXITCODE -ne 0 -or $arch -cne 'arm64') { throw "Expected the arm64 chezmoi. Found '$arch'." }
-      - name: Prepare the Windows tools
-        run: |
-          if ($PSVersionTable.PSVersion -lt [version]'7.6') {
-            throw "The runner needs PowerShell 7.6 or later. Found $($PSVersionTable.PSVersion)."
-          }
-          . ./dot_config/oh-my-devenv/powershell/environment.ps1
-          if (-not (Get-PathApplication -Name chezmoi -Optional)) {
-            choco install chezmoi --yes --no-progress
-            if ($LASTEXITCODE -ne 0) { throw "Chocolatey exited with code $LASTEXITCODE." }
-          }
+          if ($LASTEXITCODE -ne 0 -or $arch -cne $expected) { throw "Expected the $expected chezmoi. Found '$arch'." }
       - name: Validate the Windows configuration
         run: |
           if ('${{ matrix.mode }}' -eq 'smoke') {
