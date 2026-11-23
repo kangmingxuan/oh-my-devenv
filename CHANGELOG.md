@@ -55,20 +55,22 @@ Before the next apply, migrate manually:
     configuration without connection multiplexing. The first apply backs up
     existing files at managed targets.
   - Apply keeps your existing PowerShell profile and adds a line that loads the
-    managed profile. The managed profile activates mise, shows the robbyrussell
-    Oh My Posh prompt from the first prompt, and then loads your optional
-    `profile.local.ps1`.
+    managed profile. The managed profile activates mise and initializes the
+    robbyrussell Oh My Posh theme before it loads your optional
+    `profile.local.ps1`. In a new interactive `pwsh` terminal, the first prompt
+    uses the theme unless your overlay overrides it.
   - Apply imports Git, GitHub CLI, ripgrep, jq, and Oh My Posh from the `winget`
-    source at user scope. Run `winget upgrade` separately to update them. The
+    source at user scope and leaves installed versions in place. Update a package
+    separately, for example with `winget upgrade --id Git.Git`. The
     desktop option is on by default and requires Windows Terminal on `PATH`. It
     adds PowerToys, Maple Mono NF CN for the current user, and a Windows Terminal
     profile fragment. Setting `desktopBaseline = false` and applying removes the
     fragment and keeps the installed packages and fonts.
   - Apply installs mise with WinGet when it is missing. The WinGet mise package
     needs the matching Microsoft Visual C++ 2015+ Redistributable at machine
-    scope. Apply then installs the shared runtimes and the Go and uv tools, and
-    adds any missing mise shims, `~/.local/bin`, and Go binary directories to
-    the user `Path`. When the mise Go targets Windows ARM64, Delve builds with
+    scope. Apply then installs the shared runtimes and the Go and uv tools. It
+    also adds any missing mise shims, `~/.local/bin`, and Go binary directories
+    to the user `Path`. When the mise Go targets Windows ARM64, Delve builds with
     its experimental `exp.winarm64` tag.
   - Apply installs PowerShell completions for inventory commands found on
     `PATH`. A new interactive `pwsh` terminal with profile loading enabled

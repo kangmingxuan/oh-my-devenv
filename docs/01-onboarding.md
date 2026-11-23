@@ -10,7 +10,8 @@ Follow the [Windows quick start](../README.md#native-windows-quick-start). A
 successful apply configures Git, OpenSSH, and mise under your home directory
 and deploys the PowerShell profile body. It imports the user-scope packages in
 `bootstrap/manifests/system/winget-packages.json` from the built-in `winget`
-source. Run `winget upgrade` separately when you want to upgrade packages.
+source and leaves installed versions in place. Update a package separately,
+for example with `winget upgrade --id Git.Git`.
 Apply installs mise with WinGet when it is missing. It also installs the
 runtimes in the shared mise configuration and the Go and uv tools in
 `bootstrap/manifests/ecosystem/`.
