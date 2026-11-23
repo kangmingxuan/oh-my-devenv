@@ -24,6 +24,27 @@ PowerShell must be 7.6 or later. Check the effective execution policy with
 `Get-ExecutionPolicy` inside `pwsh`. If policy blocks the hooks, the source,
 or an installer, stop and contact the device administrator.
 
+Windows hooks do not read `bootstrap.env`. On a restricted network, configure
+each tool's own user settings before you apply. For example, if the public
+Python package hosts are blocked, point uv at your organization's package index
+in `%APPDATA%\uv\uv.toml`:
+
+```toml
+[[index]]
+url = "https://<your-package-index>/simple"
+default = true
+```
+
+uv does not read `pip.ini` or `PIP_INDEX_URL`. If the public package file host
+is blocked, the index must serve the package files as well as the package list.
+Apply installs uv before the uv tools. If apply stops while it installs the uv
+tools, open a new PowerShell session and run
+`uvx --isolated --no-cache ruff --version` to check that uv can download and
+run a package, then apply again. `--isolated` ignores an installed Ruff.
+[uv configuration files](https://docs.astral.sh/uv/concepts/configuration-files/),
+[uv indexes](https://docs.astral.sh/uv/concepts/indexes/),
+[pip compatibility](https://docs.astral.sh/uv/pip/compatibility/#configuration-files-and-environment-variables)
+
 If you already have a chezmoi configuration, run `chezmoi init` before the
 next apply to pick up the Windows hook interpreter settings. Windows hooks use
 `pwsh -NoProfile`. The environment check starts a separate shell to verify the profile.
@@ -213,7 +234,7 @@ If anything fails, the script exits non-zero and prints diagnostic hints — see
 If you are on a corporate or otherwise restricted network, public registries may be slow or blocked. Keep those private endpoints local to your machine rather than baking them into the public baseline. Start from [**Local overlay examples**](local-overlay-examples/README.md) before your first apply:
 
 - Put persistent Go settings in `$XDG_CONFIG_HOME/oh-my-devenv/env.sh`
-- Put bootstrap endpoint overrides such as `GOPROXY`, `UV_INDEX_URL`, or the Homebrew domains in `$XDG_CONFIG_HOME/oh-my-devenv/bootstrap.env`; every bootstrap script reads it before `chezmoi init --apply` installs anything
+- Put bootstrap endpoint overrides such as `GOPROXY`, `UV_INDEX_URL`, or the Homebrew domains in `$XDG_CONFIG_HOME/oh-my-devenv/bootstrap.env`; every Unix bootstrap script reads it before `chezmoi init --apply` installs anything. Windows hooks do not read this file; see [Native Windows](#native-windows)
 - Keep internal npm scopes in `~/.npmrc`, not in shell startup files
 - Keep Python internal indexes project-local and `uv`-only
 - On Ubuntu, the pinned Maple Mono archive uses a resumable download and SHA-256 verification. If GitHub Releases is unavailable, set **`DOTFILES_MAPLE_MONO_URL`** to an alternate URL serving the exact same archive.
