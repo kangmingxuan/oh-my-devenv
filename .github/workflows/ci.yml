@@ -189,7 +189,7 @@ jobs:
     name: ${{ matrix.name }}-windows
     needs: changes
     if: needs.changes.outputs.needs-checks == 'true'
-    runs-on: windows-2025
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 40
     strategy:
       fail-fast: false
@@ -197,8 +197,14 @@ jobs:
         include:
           - name: smoke-tests
             mode: smoke
+            runner: windows-2025
           - name: apply
             mode: apply
+            runner: windows-2025
+          # Native ARM64 builds, such as Delve, fail differently from x64.
+          - name: apply-arm64
+            mode: apply
+            runner: windows-11-arm
     defaults:
       run:
         shell: pwsh
