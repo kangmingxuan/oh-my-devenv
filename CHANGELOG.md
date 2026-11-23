@@ -10,7 +10,8 @@ versioning and release policy lives in
 ### Changed
 
 - On native Windows, the managed PowerShell profile sets PSReadLine to Emacs
-  line editing and binds Tab to a completion menu, matching the Unix shells.
+  line editing and binds Tab to a completion menu, matching the Unix Oh My Zsh
+  baseline.
   PSReadLine previously used its Windows edit mode. Override either setting in
   `profile.local.ps1`.
 

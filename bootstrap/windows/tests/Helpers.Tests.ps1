@@ -318,8 +318,11 @@ function ConvertTo-PathKey { param([string]$Path) $Path.ToUpperInvariant() }
 function Get-PathApplication { param([string]$Name, [switch]$Optional) }
 '@)
         $runner = Join-Path $TestDrive 'run-psreadline-profile.ps1'
-        $importLine = if ($Import) { 'Import-Module PSReadLine' } else { '' }
+        # Start from the Windows edit mode so the assertion holds on hosts whose default is Emacs.
+        $importLine = if ($Import) { 'Import-Module PSReadLine; Set-PSReadLineOption -EditMode Windows' } else { '' }
         [IO.File]::WriteAllText($runner, @"
+Set-StrictMode -Version Latest
+`$ErrorActionPreference = 'Stop'
 $importLine
 . (Join-Path `$PSScriptRoot 'profile.ps1')
 if (Get-Module -Name PSReadLine) {

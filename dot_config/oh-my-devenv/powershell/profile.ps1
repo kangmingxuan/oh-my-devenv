@@ -7,7 +7,7 @@ param()
 # mode first, because changing it resets key handlers that later initialization adds.
 if (Get-Module -Name PSReadLine) {
     Set-PSReadLineOption -EditMode Emacs
-    Set-PSReadLineKeyHandler -Key Tab -Function MenuComplete
+    Set-PSReadLineKeyHandler -Chord Tab -Function MenuComplete
 }
 
 $ohMyDevenvMiseActivation = & {

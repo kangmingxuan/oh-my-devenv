@@ -52,7 +52,7 @@ next apply to pick up the Windows hook interpreter settings. Windows hooks use
 
 The system baseline installs Oh My Posh. A new PowerShell terminal loads its
 managed robbyrussell theme from disk. The profile also sets Emacs line editing
-and binds Tab to a completion menu, matching the Unix shells. The local
+and binds Tab to a completion menu, matching the Unix Oh My Zsh baseline. The local
 PowerShell overlay runs after initialization and can override the prompt and
 these key settings.
 
