@@ -236,7 +236,7 @@ Tests:
 ### Windows details in the helpers
 
 - A uv tool environment keeps its interpreter at `Scripts\python.exe`, not `bin/python`.
-- When the mise-managed Go targets `GOARCH=arm64`, the Go installer passes `-tags=exp.winarm64` to `go install` for Delve only. Delve v1.27.2 builds for Windows ARM64 only with this experimental tag. For this Delve build, the explicit tag replaces any build tags set through `GOFLAGS`. Other tools keep their existing build flags. The user chose this on 2026-11-22 after the first live apply failed in hook 50 while building Delve on an ARM64 device. Hosted x64 smoke tests cover the argument construction. The first live apply on native ARM64 then built and installed Delve with this tag. [Delve Windows architecture check](https://github.com/go-delve/delve/blob/v1.27.2/pkg/proc/native/support_sentinel_windows.go)
+- When the mise-managed Go targets `GOARCH=arm64`, the Go installer passes `-tags=exp.winarm64` to `go install` for Delve only. Delve v1.27.2 builds for Windows ARM64 only with this experimental tag. For this Delve build, the explicit tag replaces any build tags set through `GOFLAGS`. Other tools keep their existing build flags. The user chose this on 2026-11-22 after the first live apply failed in hook 50 while building Delve on an ARM64 device. Hosted x64 smoke tests cover the argument construction. The first live apply on native ARM64 then built and installed Delve with this tag. The hosted ARM64 apply job also builds it (section 13). [Delve Windows architecture check](https://github.com/go-delve/delve/blob/v1.27.2/pkg/proc/native/support_sentinel_windows.go)
 - Executables have an `.exe` suffix. The shadow check that compares the resolved command with the installer-owned binary includes the suffix.
 - The checker reads the Go command import path and module version with `go version -m` and the uv package version with `uv tool list`. It checks the uv tool interpreter against its recorded version and the mise-selected Python.
 - The Unix helpers run global mise commands from `/`, so the project config of the caller's working directory does not apply. The PowerShell helpers run them from the root of the system drive (`$env:SystemDrive\`) for the same reason. mise searches for project config from the current directory up to the drive root, so a temporary directory under the user profile does not isolate the commands: a config file in a parent directory still applies. A config file in the root directory itself still applies, on Unix and on Windows. The user-global config, by default `%USERPROFILE%\.config\mise\config.toml`, applies independently of that search. On Unix the default system config directory `/etc/mise` is absolute; on Windows it resolves on the drive of the current directory, so running from the system drive root selects `\etc\mise` on that drive.
@@ -389,6 +389,7 @@ Add one Windows overlay, `profile.local.ps1` (section 9), in phase 2 together wi
   the test ownership record. The job logs requested and installed versions for
   each mise tool, identified path-length errors, and the longest path found
   under the mise data and uv tool directories.
+- A second hosted apply job runs the same fixture on a native ARM64 Windows 11 runner. The ARM64 image lacks WinGet and the ARM64 VC++ runtime. Its preinstalled Windows Terminal has no `wt.exe` alias for the runner user. Before the fixture runs, the workflow installs WinGet through the `Microsoft.WinGet.Client` module, installs the runtime and the ARM64 chezmoi with WinGet, and registers Terminal again for the runner user. The smoke job runs on x64 only.
 - Phase 5 smoke tests cover shipped and generated completions, changes in command availability between applies, and font ownership. The hosted apply job runs the real hook 55 and measures completion load time in fresh PowerShell processes. When the runner provides an unredirected console, the profile probe uses `TabExpansion2` to require subcommand results for `chezmoi` and `uv`. The job verifies that uninstall removes owned assets while installed packages and tools remain, then restores the runner's font files, font registry values, user Path, and configuration files.
 - Section 17 records hosted coverage. The hosted jobs leave the clean-client install and the Oh My Posh app execution alias unverified. Section 17 also records the first live apply, which ran after all planned phases and covered the alias.
 - Run both Windows jobs under the same `needs-checks` condition as the Unix jobs, and feed them into the existing single required check. This avoids a second path classifier that could skip Windows CI after a change to a shared file.
@@ -492,6 +493,14 @@ already present at machine scope.
 - With `async` enabled, each new terminal drew the default PowerShell prompt first. The theme now loads synchronously. [PR #70](https://github.com/kangmingxuan/oh-my-devenv/pull/70)
 - After PR #70, startup times were means of three runs. A `pwsh` without a profile took 251 ms. With the profile and redirected output, which skips the prompt and completions, it took 620 ms. With prompt and completion loading forced through `OH_MY_DEVENV_PROBE_PROMPT=1`, it took 1,403 ms. The user judged this acceptable.
 - Completion of a partial `mise` subcommand worked. After a trailing space, `mise <Tab>` offered file names, because the upstream generated completer drops the trailing space. [jdx/usage#1671](https://github.com/jdx/usage/issues/1671)
+
+The first hosted ARM64 apply job ran on `b46276c` and passed. The runner image
+was `win11-vs2026-arm64` 20261115.219.1 with PowerShell 7.6.10. The workflow
+installed WinGet v1.29.380 and the ARM64 chezmoi v2.74.1. WinGet installed mise
+2026.11.12 for `windows-arm64`. mise installed Go 1.27.1 for `windows/arm64`,
+and hook 50 built Delve v1.27.2. Hook 60 printed `All checks passed.` The job
+runs as the runner administrator, so it does not replace the clean
+standard-user client test. [Full CI run](https://github.com/kangmingxuan/oh-my-devenv/actions/runs/45130784147), [Windows ARM64 apply](https://github.com/kangmingxuan/oh-my-devenv/actions/runs/45130784147/job/137545577528).
 
 ## 18. Sources
 
