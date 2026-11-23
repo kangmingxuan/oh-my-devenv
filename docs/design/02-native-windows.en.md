@@ -1,6 +1,6 @@
 # Technical Design: Native Windows Platform
 
-Status: accepted. Phases 3, 4, and 5 passed the hosted Windows smoke and apply jobs. A clean standard-user Windows client remains unverified.
+Status: accepted. Phases 3, 4, and 5 passed the hosted Windows smoke and apply jobs. During the first live validation, apply completed on a Windows ARM64 client after the Delve build and uv index issues were resolved. The account belonged to Administrators and ran unelevated (section 17). A clean standard-user Windows client remains unverified.
 
 ## 1. Summary
 

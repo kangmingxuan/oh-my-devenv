@@ -1,6 +1,6 @@
 # 技术设计：原生 Windows 平台
 
-状态：已接受。阶段 3、阶段 4 和阶段 5 已通过托管 Windows smoke 和 apply 作业。全新的标准用户 Windows 客户端仍待验证。
+状态：已接受。阶段 3、阶段 4 和阶段 5 已通过托管 Windows smoke 和 apply 作业。首次实机验证中，解决 Delve 构建和 uv 索引问题后，apply 在一台 Windows ARM64 客户端上完成。测试账户属于 Administrators 组，以非提升权限运行（第 17 节）。全新的标准用户 Windows 客户端仍待验证。
 
 ## 1. 概要
 
