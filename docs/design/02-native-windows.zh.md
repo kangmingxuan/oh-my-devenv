@@ -222,7 +222,7 @@ hook 10 在文件内容上沿用 Unix 的约定：首次 apply 覆盖目标之�
 ### 辅助脚本中的 Windows 细节
 
 - uv 工具环境的解释器位于 `Scripts\python.exe`，而不是 `bin/python`。
-- mise 管理的 Go 以 `GOARCH=arm64` 为目标时，Go 安装器只在安装 Delve 时给 `go install` 传入 `-tags=exp.winarm64`。Delve v1.27.2 只有加上这个实验性标签才能为 Windows ARM64 构建。构建此版本的 ARM64 Delve 时，显式标签会替换通过 `GOFLAGS` 设置的构建标签。其他工具保留原有的构建参数。首次实机 apply 在一台 ARM64 设备上于 hook 50 构建 Delve 时失败并停止，用户于 2026-11-22 选择了这个方案。托管 x64 smoke 测试覆盖参数构造。原生 ARM64 apply 仍需单独验证。[Delve Windows 架构检查](https://github.com/go-delve/delve/blob/v1.27.2/pkg/proc/native/support_sentinel_windows.go)
+- mise 管理的 Go 以 `GOARCH=arm64` 为目标时，Go 安装器只在安装 Delve 时给 `go install` 传入 `-tags=exp.winarm64`。Delve v1.27.2 只有加上这个实验性标签才能为 Windows ARM64 构建。构建此版本的 ARM64 Delve 时，显式标签会替换通过 `GOFLAGS` 设置的构建标签。其他工具保留原有的构建参数。首次实机 apply 在一台 ARM64 设备上于 hook 50 构建 Delve 时失败并停止，用户于 2026-11-22 选择了这个方案。托管 x64 smoke 测试覆盖参数构造。随后首次实机 apply 在原生 ARM64 上用该标签构建并安装了 Delve。[Delve Windows 架构检查](https://github.com/go-delve/delve/blob/v1.27.2/pkg/proc/native/support_sentinel_windows.go)
 - 可执行文件带 `.exe` 后缀。比较解析到的命令与安装器所属二进制的遮蔽检查要包含这个后缀。
 - 检查器用 `go version -m` 读取 Go 命令导入路径和模块版本，用 `uv tool list` 读取 uv 包版本。检查 uv 工具的解释器是否与记录版本及 mise 选定的 Python 一致。
 - Unix 辅助脚本在 `/` 下运行全局 mise 命令，使调用方工作目录的项目配置不生效。PowerShell 辅助脚本出于同样的原因，在系统盘根目录（`$env:SystemDrive\`）下运行这些命令。mise 从当前目录向上查找项目配置，直到盘符根目录，所以用户 profile 下的临时目录不能隔离这些命令：父目录中的配置文件仍会生效。根目录本身的配置文件在 Unix 和 Windows 上都仍会生效。用户全局配置（默认是 `%USERPROFILE%\.config\mise\config.toml`）与这一查找无关，始终生效。Unix 上的默认系统配置目录 `/etc/mise` 是绝对路径；Windows 上它解析到当前目录所在的盘，所以在系统盘根目录下运行时，使用的是该盘上的 `\etc\mise`。
@@ -373,7 +373,7 @@ WinGet 将清单要求的用户范围应用到 Oh My Posh MSIX。
   的原始字节及注册表类型，并移除测试归属记录。作业记录每项 mise 工具的请求和
   安装版本、识别出的路径长度错误，以及 mise 数据和 uv 工具目录中的最长路径。
 - 阶段 5 的 smoke 测试覆盖发行方补全脚本、生成补全、两次 apply 之间的命令可用性变化和字体归属。托管 apply 作业运行真实的 hook 55，并在新 PowerShell 进程中测量补全加载耗时。runner 提供无重定向控制台时，profile 探测使用 `TabExpansion2` 验证 `chezmoi` 和 `uv` 的子命令补全。作业检查卸载是否移除受管资产并保留已安装的软件包和工具，然后恢复 runner 的字体文件、字体注册值、用户 Path 和配置文件。
-- 第 17 节记录托管作业的覆盖范围。托管作业没有验证干净客户端上的安装和 Oh My Posh 应用执行别名。用户将首次实机 apply 推迟到所有计划阶段完成后，并将 Oh My Posh MSIX 检查推迟到该次 apply。
+- 第 17 节记录托管作业的覆盖范围。托管作业没有验证干净客户端上的安装和 Oh My Posh 应用执行别名。第 17 节还记录了在所有计划阶段完成后进行的首次实机 apply。
 - 两个 Windows job 都在与 Unix job 相同的 `needs-checks` 条件下运行，并汇入现有的单一 required check。这样不需要第二个路径分类器，避免共享文件改动后 Windows CI 被跳过。
 - 在真实 Windows 机器上的实际安装，遵循与 Unix 平台相同的本地验证策略。
 
@@ -455,6 +455,19 @@ Node 24.21.0、Python 3.13.16、usage 6.12.0 和 uv 0.11.33。mise 数据目录�
 受管的用户 `Path` 条目、补全，以及桌面字体文件和注册值。WinGet 包、mise、运行时
 以及 Go 和 uv 工具都保留。
 [完整 CI 运行](https://github.com/kangmingxuan/oh-my-devenv/actions/runs/45017493063)、[Windows smoke](https://github.com/kangmingxuan/oh-my-devenv/actions/runs/45017493063/job/137192897238)、[Windows apply](https://github.com/kangmingxuan/oh-my-devenv/actions/runs/45017493063/job/137192897275)。
+
+首次实机 apply 于 2026-11-22 至 2026-11-23 在一台 Windows Enterprise ARM64
+客户端上进行，使用 PowerShell 7.7.0 和 chezmoi v2.74.1。该账户属于
+Administrators 组，以非提升权限运行，因此全新的标准用户客户端仍待验证。
+`pwsh` 的执行策略是来自 `LocalMachine` 的 `RemoteSigned`，chezmoi 能运行
+`.ps1` hook。与架构匹配的 VC++ 运行库已在机器范围安装。
+
+- hook 50 首次在构建 Delve 时停止。加入 Delve 标签后，它在原生 ARM64 上装好了 Go 工具。[PR #69](https://github.com/kangmingxuan/oh-my-devenv/pull/69)
+- 设备网络策略拦截了公共 Python 包文件主机，因此 uv 工具安装停止。在用户级 uv 配置中把索引指向组织的包镜像后，问题解决。[上手指南](../01-onboarding.md#native-windows)说明了这项设置。
+- 完成这些修改后，hook 60 输出 `All checks passed.`
+- 启用 `async` 时，每个新终端都先显示 PowerShell 默认提示符。主题现在同步加载。[PR #70](https://github.com/kangmingxuan/oh-my-devenv/pull/70)
+- 启动耗时取三次运行的平均值。不加载 profile 的 `pwsh` 用时 251 ms。加载 profile 且输出被重定向时，会跳过提示符和补全，用时 620 ms。通过 `OH_MY_DEVENV_PROBE_PROMPT=1` 强制加载提示符和补全时，用时 1,403 ms。用户认为可以接受。
+- 补全部分输入的 `mise` 子命令正常。在末尾空格之后，`mise <Tab>` 列出的是文件名，因为上游生成的补全脚本丢掉了末尾空格。[jdx/usage#1671](https://github.com/jdx/usage/issues/1671)
 
 ## 18. 来源
 
