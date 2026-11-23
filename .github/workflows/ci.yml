@@ -254,6 +254,9 @@ jobs:
           Get-ChildItem -LiteralPath (Join-Path $env:LOCALAPPDATA 'Microsoft/WindowsApps') -Filter *.exe | Select-Object -ExpandProperty Name
           # Fail here instead of falling back to the x64 Chocolatey chezmoi.
           Get-Command -Name chezmoi.exe, wt.exe -CommandType Application
+          # The package lookup ignores architecture, so check the resolved binary.
+          $arch = chezmoi execute-template '{{ .chezmoi.arch }}'
+          if ($LASTEXITCODE -ne 0 -or $arch -cne 'arm64') { throw "Expected the arm64 chezmoi. Found '$arch'." }
       - name: Prepare the Windows tools
         run: |
           if ($PSVersionTable.PSVersion -lt [version]'7.6') {

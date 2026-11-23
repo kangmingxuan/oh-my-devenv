@@ -373,7 +373,7 @@ WinGet 将清单要求的用户范围应用到 Oh My Posh MSIX。
   无输入变化的 reapply 和按归属记录卸载。测试结束后恢复 runner 用户 `Path`
   的原始字节及注册表类型，并移除测试归属记录。作业记录每项 mise 工具的请求和
   安装版本、识别出的路径长度错误，以及 mise 数据和 uv 工具目录中的最长路径。
-- 第二个托管 apply job 在原生 ARM64 的 Windows 11 runner 上运行同一个 fixture。预配前，ARM64 runner 的 `PATH` 上无法找到 WinGet，也没有安装 ARM64 VC++ 运行库。预装的 Windows Terminal 没有为 runner 用户提供 `wt.exe` 别名。fixture 运行前，工作流通过 `Microsoft.WinGet.Client` 模块安装 WinGet，并用 WinGet 安装该运行库和 ARM64 版 chezmoi，每一项都只在缺失时安装。随后为 runner 用户重新注册 Terminal。smoke job 只在 x64 上运行。
+- 第二个托管 apply job 在原生 ARM64 的 Windows 11 runner 上运行同一个 fixture。预配前，ARM64 runner 的 `PATH` 上无法找到 WinGet，也没有安装 ARM64 VC++ 运行库。预装的 Windows Terminal 没有为 runner 用户提供 `wt.exe` 别名。fixture 运行前，如果 `PATH` 上找不到 `winget.exe`，工作流通过 `Microsoft.WinGet.Client` 模块安装 WinGet。如果 `winget list` 找不到对应的包，工作流用 WinGet 安装该运行库和 ARM64 版 chezmoi。随后检查解析到的 chezmoi 报告 `arm64`，并为 runner 用户重新注册 Terminal。smoke job 只在 x64 上运行。
 - 阶段 5 的 smoke 测试覆盖发行方补全脚本、生成补全、两次 apply 之间的命令可用性变化和字体归属。托管 apply 作业运行真实的 hook 55，并在新 PowerShell 进程中测量补全加载耗时。runner 提供无重定向控制台时，profile 探测使用 `TabExpansion2` 验证 `chezmoi` 和 `uv` 的子命令补全。作业检查卸载是否移除受管资产并保留已安装的软件包和工具，然后恢复 runner 的字体文件、字体注册值、用户 Path 和配置文件。
 - 第 17 节记录托管作业的覆盖范围。托管作业没有验证干净客户端上的安装和 Oh My Posh 应用执行别名。第 17 节还记录了在所有计划阶段完成后进行的首次实机 apply，该次 apply 覆盖了应用执行别名。
 - 两个 Windows job 都在与 Unix job 相同的 `needs-checks` 条件下运行，并汇入现有的单一 required check。这样不需要第二个路径分类器，避免共享文件改动后 Windows CI 被跳过。
