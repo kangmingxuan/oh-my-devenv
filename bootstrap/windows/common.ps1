@@ -3,6 +3,9 @@ $ErrorActionPreference = 'Stop'
 
 . (Join-Path $PSScriptRoot '../../dot_config/oh-my-devenv/powershell/environment.ps1')
 
+# Console.SetError changes the writer without redirecting the native handle.
+$script:InitialConsoleError = [Console]::Error
+
 # Keep host output on the information stream and diagnostics on native stderr.
 function Test-LogTerminal {
     param([switch]$Stderr)
@@ -70,10 +73,11 @@ namespace OhMyDevEnv {
 function Write-LogStderr {
     param([AllowEmptyString()][string]$Message)
 
-    if (Test-WindowsConsoleStderr) {
+    $writer = [Console]::Error
+    if ((Test-WindowsConsoleStderr) -and [object]::ReferenceEquals($writer, $script:InitialConsoleError)) {
         Write-WindowsConsoleStderr -Message $Message
     } else {
-        [Console]::Error.WriteLine($Message)
+        $writer.WriteLine($Message)
     }
 }
 
