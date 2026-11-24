@@ -2448,7 +2448,7 @@ while IFS= read -r overlay_fixture; do
   assert_file_contains <(printf '%s\n' "$uninstall_preview") "$plain_would_label skip overlay-protected: $overlay_fixture"
 done <<<"$overlay_fixture_listing"
 for uninstall_target in "$uninstall_unowned_completion" "$uninstall_linked_completion"; do
-  if grep -Fxq "$plain_would_label remove file: $uninstall_target" <<<"$uninstall_preview"; then
+  if grep -Fxq -- "  $plain_would_label remove file: $uninstall_target" <<<"$uninstall_preview"; then
     fail_test "uninstall preview includes an unowned completion: $uninstall_target"
   fi
 done
