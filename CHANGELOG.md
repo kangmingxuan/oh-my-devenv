@@ -7,6 +7,8 @@ versioning and release policy lives in
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-11-24
+
 ### Fixed
 
 - Preserve Unicode status glyphs and diagnostic text on Windows console stderr
@@ -329,7 +331,8 @@ Before the next apply, migrate manually:
   again when the mise configuration changes, and the environment check reports
   stale uv tool environments.
 
-[Unreleased]: https://github.com/kangmingxuan/oh-my-devenv/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/kangmingxuan/oh-my-devenv/compare/v0.4.1...HEAD
+[0.4.1]: https://github.com/kangmingxuan/oh-my-devenv/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/kangmingxuan/oh-my-devenv/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/kangmingxuan/oh-my-devenv/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/kangmingxuan/oh-my-devenv/compare/v0.1.0...v0.2.0
