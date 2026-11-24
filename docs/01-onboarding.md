@@ -18,8 +18,8 @@ runtimes in the shared mise configuration and the Go and uv tools in
 
 The WinGet mise package requires the Microsoft Visual C++ 2015+ Redistributable
 that matches its architecture (x64 or ARM64). The redistributable installs at
-machine scope. On a standard-user device that lacks it, ask the device
-administrator to provision it before you apply.
+machine scope. If your device lacks it, an administrator must install it before
+you apply; the hooks do not request elevation.
 
 PowerShell must be 7.6 or later. Check the effective execution policy with
 `Get-ExecutionPolicy` inside `pwsh`. If policy blocks the hooks, the source,

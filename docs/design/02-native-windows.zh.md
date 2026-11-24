@@ -1,6 +1,6 @@
 # 技术设计：原生 Windows 平台
 
-状态：已接受。阶段 3、阶段 4 和阶段 5 已通过托管 Windows smoke 和 apply 作业。首次实机验证中，解决 Delve 构建和 uv 索引问题后，apply 在一台 Windows ARM64 客户端上完成。测试账户属于 Administrators 组，以非提升权限运行（第 17 节）。全新的标准用户 Windows 客户端仍待验证。
+状态：已接受。阶段 3、阶段 4 和阶段 5 已通过托管 Windows smoke 和 apply 作业。首次实机验证中，解决 Delve 构建和 uv 索引问题后，apply 在一台 Windows ARM64 客户端上完成。测试账户属于 Administrators 组，以非提升权限运行（第 17 节）。第二次实机 apply 在一台已装有 mise 的 Windows 11 x64 客户端上于新开的终端中重跑完成；过期 `GOROOT` 导致的失败随后由 PR #79 修复。该账户同样属于 Administrators 组，以非提升权限运行。标准用户账户不在目标范围内，未经验证。在全新客户端上的首次 apply 仍待验证。
 
 ## 1. 概要
 
@@ -31,6 +31,7 @@ WSL 不属于本设计。WSL 是 Linux 环境，继续走现有的 Linux 路径�
 | 使用当前用户、所有宿主的 PowerShell profile | 由 Claude 提出，用户批准。 |
 | 请 Gemini 4 Argon 和 Kimi K3.1 Pro 做设计评审 | 用户要求 Claude 把这两份评审与 Codex 的事实核查一起权衡。 |
 | 把受管目录持久化写入用户 `Path` | 用户于 2026-11-21 做出这一决定，让 PowerShell 之外启动的应用也能找到受管工具。Claude 在第 7 节设计了具体机制。 |
+| 以 Windows 默认账户为目标，不以标准用户账户为目标 | 用户于 2026-11-24 做出这一决定。用户和大多数同事使用 Windows 在以 Microsoft 账户首次登录时创建的账户。该账户属于 Administrators 组，以非提升权限运行。hook 仍在用户范围内安装，不请求提升权限。标准用户账户不在目标范围内，未经验证。 |
 
 本文其余决策均由 Claude 在上述范围内提出。第 16 节列出 Claude 采纳了哪些评审意见。用户于 2026-11-21 批准阶段 3，并将首次 Windows 实机 apply 安排在所有计划阶段完成后。Claude 在授权范围内确定了阶段 3 的安装范围、安装与检查行为、设备策略处理、桌面安装与验证，以及卸载边界。
 
@@ -152,7 +153,7 @@ hook 20 的设备策略规则停止 apply。
 - Windows hook 和辅助脚本只面向 PowerShell 7.6 或更高版本编写。
 - 在 Windows 上，`.chezmoi.toml.tmpl` 将 `[interpreters.ps1]` 设为 `pwsh -NoLogo -NoProfile -File`。hook 独立于用户的 PowerShell profile 运行。hook 15 维护 profile 的受管行，hook 60 在单独的 shell 中验证启动。已有配置时，在 apply 前运行 `chezmoi init` 刷新配置。[chezmoi 解释器配置](https://www.chezmoi.io/reference/configuration-file/interpreters/)。
 - 在启动 chezmoi 前安装 `pwsh`，让每个 hook 都能从初始 `PATH` 找到解释器。
-- WinGet 的 `jdx.mise` 包需要与其架构（x64 或 ARM64）匹配的 Microsoft Visual C++ 2015+ Redistributable。该运行库在机器范围安装。标准用户设备缺少该运行库时，请在 apply 前由设备管理员预装。WinGet 失败时，hook 30 停止。
+- WinGet 的 `jdx.mise` 包需要与其架构（x64 或 ARM64）匹配的 Microsoft Visual C++ 2015+ Redistributable。该运行库在机器范围安装。设备缺少该运行库时，必须在 apply 前由管理员安装；hook 不请求提升权限。WinGet 失败时，hook 30 停止。
 - 正在运行的 PowerShell 版本低于 7.6 时，hook 00 失败。这只是兼容性下限；hook 00 不检查支持状态。与其他前置条件一样，由用户让 PowerShell 保持在受支持的版本并装上最新的服务更新。把最低版本写进 `AGENTS.md`，与 Bash 3.2 规则并列。
 - 每个脚本以 `Set-StrictMode -Version Latest` 和 `$ErrorActionPreference = 'Stop'` 开头。
 - 检查每个原生命令的退出码。默认情况下，原生命令失败时 `$ErrorActionPreference` 不会中止执行。
@@ -326,7 +327,7 @@ WinGet 将清单要求的用户范围应用到 Oh My Posh MSIX。
 | --- | --- |
 | `fd`、`bat`、`fzf` | `Get-ChildItem` 和 `Get-Content` 覆盖日常查找和读取文件。PowerShell 筛选覆盖日常选择。 |
 | `yq`、`shellcheck`、`shfmt` | YAML 编辑和 Unix shell 维护在此 Windows 基线中的使用较少。 |
-| Everything | 标准账户的 NTFS 快速索引依赖一项需要管理员权限才能安装的服务。[Everything 服务](https://www.voidtools.com/support/everything/everything_service/) |
+| Everything | 非提升权限下的 NTFS 快速索引依赖一项需要管理员权限才能安装的服务。[Everything 服务](https://www.voidtools.com/support/everything/everything_service/) |
 | 7-Zip | Windows 11 24H2 的文件资源管理器可解压普通 7z 和 RAR 归档。[Microsoft 支持](https://support.microsoft.com/en-gb/windows/experience/storage-filemanagement/zip-and-unzip-files) |
 | DevToys | 当前 DevToys 应用的目录条目是 2.0 预览版。[WinGet 目录](https://github.com/microsoft/winget-pkgs/tree/master/manifests/d/DevToys-app/DevToys) |
 | `gsudo` | 提权超出基线范围。 |
@@ -440,7 +441,7 @@ Node 24.21.0、Python 3.13.16、usage 6.12.0 和 uv 0.11.33。mise 数据目录�
 目录中观察到的最长路径分别为 165 和 203 个字符。采集到的 apply 日志中没有与诊断模式匹配的路径长度错误。这些 runner 路径不能说明更长的客户端路径的行为。
 [完整 CI 运行](https://github.com/kangmingxuan/oh-my-devenv/actions/runs/44985641100)、[Windows smoke](https://github.com/kangmingxuan/oh-my-devenv/actions/runs/44985641100/job/137095504120)、[Windows apply](https://github.com/kangmingxuan/oh-my-devenv/actions/runs/44985641100/job/137095504118)。
 
-全新的标准用户 Windows 客户端仍待验证。WinGet 的 mise 包需要在机器范围安装架构
+在全新 Windows 客户端上的首次 apply 仍待验证。WinGet 的 mise 包需要在机器范围安装架构
 匹配的 Microsoft Visual C++ 2015+ Redistributable。缺少该运行库时，请在 apply 前
 由设备管理员预装。
 
@@ -449,7 +450,7 @@ Node 24.21.0、Python 3.13.16、usage 6.12.0 和 uv 0.11.33。mise 数据目录�
 | 事项 | 阶段 |
 | --- | --- |
 | 实际生效的脚本执行策略是否允许 chezmoi 运行 `.ps1` hook，以及不允许时的停止条件。不绕过设备策略。PowerShell 7 与 Windows PowerShell 5.1 分开存储执行策略设置。组策略可以让它使用 Windows PowerShell 的策略设置，所以要在 `pwsh` 下检查实际生效的策略。 | 2 |
-| 在满足第 7 节前置条件的全新标准用户 Windows 客户端上完成首次 apply。 | 4 |
+| 在满足第 7 节前置条件的全新 Windows 客户端（此前没有 mise 或运行时）上完成首次 apply。标准用户账户不在目标范围内（第 2 节）。 | 4 |
 
 阶段 5 在 `c30194a` 上的托管运行通过了所有作业。Windows smoke 通过了 132 项 Pester
 测试，跳过一项。Windows apply 作业安装了七个 PowerShell 补全。由于 `bat` 不在
@@ -461,7 +462,7 @@ Node 24.21.0、Python 3.13.16、usage 6.12.0 和 uv 0.11.33。mise 数据目录�
 
 首次实机 apply 于 2026-11-22 至 2026-11-23 在一台 Windows Enterprise ARM64
 客户端上进行，使用 PowerShell 7.7.0 和 chezmoi v2.74.1。该账户属于
-Administrators 组，以非提升权限运行，因此全新的标准用户客户端仍待验证。
+Administrators 组，以非提升权限运行，因此全新的标准用户客户端当时仍待验证。
 `pwsh` 的执行策略是来自 `LocalMachine` 的 `RemoteSigned`，chezmoi 运行了
 `.ps1` hook。与架构匹配的 VC++ 运行库已在机器范围安装。
 
@@ -473,12 +474,22 @@ Administrators 组，以非提升权限运行，因此全新的标准用户客�
 - 合并 PR #70 后，启动耗时取三次运行的平均值。不加载 profile 的 `pwsh` 用时 251 ms。加载 profile 且输出被重定向时，会跳过提示符和补全，用时 620 ms。通过 `OH_MY_DEVENV_PROBE_PROMPT=1` 强制加载提示符和补全时，用时 1,403 ms。用户认为可以接受。
 - 补全部分输入的 `mise` 子命令正常。在末尾空格之后，`mise <Tab>` 列出的是文件名，因为上游生成的补全脚本丢掉了末尾空格。[jdx/usage#1671](https://github.com/jdx/usage/issues/1671)
 
+第二次实机 apply 于 2026-11-24 在一台个人 Windows 11 专业版 x64 客户端上运行，
+版本 26H2，内部版本 26300.10075，使用 PowerShell 7.7.0 和 chezmoi v2.74.2。
+测试账户属于 Administrators 组，以非提升权限运行。
+这台电脑此前没有安装过 oh-my-devenv。mise 和 Go 曾手动安装，mise 把工具放在
+`C:\.mise-installs` 下。
+
+- 第一次 apply 在一个已激活旧 mise 配置的终端中运行。该终端带着 Go 1.25.12 的 `GOROOT`。apply 选定了 Go 1.27.1，hook 50 在第一个 `go install` 处停止，报错为 `compile: version "go1.25.12" does not match go tool version "go1.27.1"`。同样的 apply 在新开的终端中完成。Go 工具同步现在在两个平台上都忽略继承的 `GOROOT`。[PR #79](https://github.com/kangmingxuan/oh-my-devenv/pull/79)
+- 重新运行后，hook 60 输出 `All checks passed.`，共 10 个核心工具。由于 `bat` 不在 `PATH` 上，它跳过了 `bat` 补全。
+- Windows Terminal 正确显示了富文本 CLI 输出：banner 渐变色以及 `❯`、`✓`、`›` 标记。未检查旧版 conhost。[PR #77](https://github.com/kangmingxuan/oh-my-devenv/pull/77)
+
 首次成功的托管 ARM64 apply job 在 `b46276c` 上运行。runner 镜像为
 `win11-vs2026-arm64` 20261115.219.1，使用 PowerShell 7.6.10。工作流安装了
 WinGet v1.29.380 和 ARM64 版 chezmoi v2.74.1。WinGet 安装了 `windows-arm64` 版
 mise 2026.11.12。mise 安装了 `windows/arm64` 版 Go 1.27.1，hook 50 构建了 Delve
 v1.27.2。hook 60 输出 `All checks passed.` 该作业以 runner 管理员身份运行，因此
-不能替代全新标准用户客户端的测试。[完整 CI 运行](https://github.com/kangmingxuan/oh-my-devenv/actions/runs/45130784147)、[Windows ARM64 apply](https://github.com/kangmingxuan/oh-my-devenv/actions/runs/45130784147/job/137545577528)。
+不能替代在全新客户端上的首次 apply。[完整 CI 运行](https://github.com/kangmingxuan/oh-my-devenv/actions/runs/45130784147)、[Windows ARM64 apply](https://github.com/kangmingxuan/oh-my-devenv/actions/runs/45130784147/job/137545577528)。
 
 ## 18. 来源
 
