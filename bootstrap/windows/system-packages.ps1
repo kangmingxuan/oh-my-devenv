@@ -58,11 +58,11 @@ function Install-WinGetPackage {
         '--accept-source-agreements', '--disable-interactivity'
     ) -AllowFailure -Live
     if ($result.ExitCode -ne 0) {
-        throw (New-NativeCommandFailure -Result $result -Message (
+        throw (ConvertTo-NativeCommandException -Result $result -Message (
             "WinGet import from source 'winget' failed (exit $($result.ExitCode)). Device policy may block this source or an installer. Manifest package IDs: $($ids -join ', ')."
         ))
     }
-    Write-LogOk WinGet "Imported '$ManifestPath'."
+    Write-LogOk -Name WinGet -Detail "Imported '$ManifestPath'."
 }
 
 function Confirm-WinGetPackage {
@@ -82,7 +82,7 @@ function Confirm-WinGetPackage {
             # APPINSTALLER_CLI_ERROR_NO_APPLICATIONS_FOUND means there is nothing to export.
             $installedIds = @()
         } elseif ($result.ExitCode -ne 0) {
-            throw (New-NativeCommandFailure -Result $result -Message (
+            throw (ConvertTo-NativeCommandException -Result $result -Message (
                 "WinGet could not export installed packages from source 'winget' (exit $($result.ExitCode)). Device policy may block this source."
             ))
         } else {
@@ -103,8 +103,8 @@ function Confirm-WinGetPackage {
 
     $missing = @($ids | Where-Object { $_ -cnotin $installedIds })
     if ($missing) {
-        foreach ($id in $missing) { Write-LogMissing $id "WinGet user package" }
+        foreach ($id in $missing) { Write-LogMissing -Name $id -Detail "WinGet user package" }
         throw "Missing WinGet packages: $($missing -join ', '). Install them from the winget source using user scope."
     }
-    Write-LogOk WinGet "Reported all $($ids.Count) packages from the enabled layers."
+    Write-LogOk -Name WinGet -Detail "Reported all $($ids.Count) packages from the enabled layers."
 }

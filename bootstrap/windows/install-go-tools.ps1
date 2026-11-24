@@ -26,17 +26,17 @@ function Install-GoTool {
     $go = Get-MiseToolExecutable -Name go
     $tools = @(Read-GoToolManifest -Path $ManifestPath)
     if (-not $tools.Count) {
-        Write-LogSkip 'No Go tools to install.'
+        Write-LogSkip -Message 'No Go tools to install.'
         return
     }
     $targetArchitecture = (Invoke-NativeCommand -Executable $go -Arguments @('env', 'GOARCH') `
             -WorkingDirectory "$env:SystemDrive\").Stdout.Trim()
     if (-not $targetArchitecture) { throw "'$go env GOARCH' reported no target architecture." }
     [void][IO.Directory]::CreateDirectory($env:GOBIN)
-    Write-LogInfo "Syncing Go tools from '$ManifestPath' into '$env:GOBIN'."
+    Write-LogInfo -Message "Syncing Go tools from '$ManifestPath' into '$env:GOBIN'."
     foreach ($tool in $tools) {
         # Rebuild every tool when the hook inputs change, including the Go version.
-        Write-LogInfo "Installing $($tool.Spec)"
+        Write-LogInfo -Message "Installing $($tool.Spec)"
         $arguments = Get-GoInstallArgument -Spec $tool.Spec -TargetArchitecture $targetArchitecture
         $null = Invoke-NativeCommand -Executable $go -Arguments $arguments -WorkingDirectory "$env:SystemDrive\" -Live
     }
@@ -47,10 +47,10 @@ if ($MyInvocation.InvocationName -ne '.') {
     . (Join-Path $PSScriptRoot 'mise.ps1')
     . (Join-Path $PSScriptRoot 'ecosystem.ps1')
     trap {
-        Write-BootstrapFailure $_
-        exit (Get-BootstrapExitCode $_)
+        Write-BootstrapFailure -Failure $_
+        exit (Get-BootstrapExitCode -Failure $_)
     }
-    Write-LogPhase 'Syncing go tools...'
+    Write-LogPhase -Message 'Syncing go tools...'
     Update-HookPath -Managed
     Install-GoTool -ManifestPath $ManifestPath
     Write-LogPhaseDone

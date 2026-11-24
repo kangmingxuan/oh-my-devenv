@@ -73,7 +73,7 @@ function Add-ManagedProfileLine {
     $runDirectory = New-BackupRun -BackupRoot $BackupRoot
     $backup = Get-BackupPath -Path $ProfilePath -RunDirectory $runDirectory
     Copy-VerifiedFile -Source $file.FullName -Destination $backup
-    Write-LogOk backed-up "PowerShell profile: $backup"
+    Write-LogOk -Name backed-up -Detail "PowerShell profile: $backup"
     $newline = [regex]::Match($profileFile.Content, '\r\n|\n|\r').Value
     if (-not $newline) {
         $newline = [Environment]::NewLine
@@ -213,5 +213,5 @@ function Confirm-ManagedProfile {
     } catch {
         throw [InvalidOperationException]::new("PowerShell profile check failed for '$ProfilePath'. $($_.Exception.Message)", $_.Exception)
     }
-    Write-LogOk 'PowerShell profile' 'Loaded managed settings, PATH, Oh My Posh, and chezmoi and uv completions.'
+    Write-LogOk -Name 'PowerShell profile' -Detail 'Loaded managed settings, PATH, Oh My Posh, and chezmoi and uv completions.'
 }

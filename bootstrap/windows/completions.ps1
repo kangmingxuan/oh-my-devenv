@@ -49,7 +49,7 @@ function Get-PowerShellCompletionSource {
     $arguments = @(Get-PowerShellCompletionArgument -Name $Name)
     $command = Get-PathApplication -Name $Name -Optional
     if (-not $command) {
-        Write-LogSkip "PowerShell completion for '$Name': application is not on PATH."
+        Write-LogSkip -Message "PowerShell completion for '$Name': application is not on PATH."
         return
     }
     # This is the upstream mise --install location on Windows. PowerShell
@@ -89,9 +89,9 @@ function Invoke-PowerShellCompletion {
         if ($Action -eq 'check') {
             if ((Test-OwnedPowerShellCompletion -Path $target) -and
                 (Get-Content -LiteralPath $target -TotalCount 2 | Select-Object -Skip 1)) {
-                Write-LogOk $name "PowerShell completion: $target"
+                Write-LogOk -Name $name -Detail "PowerShell completion: $target"
             } else {
-                Write-LogMissing $name "Owned PowerShell completion: $target"
+                Write-LogMissing -Name $name -Detail "Owned PowerShell completion: $target"
                 $missing++
             }
             continue
@@ -128,16 +128,16 @@ function Invoke-PowerShellCompletion {
         } finally {
             [IO.File]::Delete($temporary)
         }
-        Write-LogOk $name "Installed PowerShell completion: $target"
+        Write-LogOk -Name $name -Detail "Installed PowerShell completion: $target"
     }
     foreach ($file in Get-OwnedPowerShellCompletion -Directory $directory) {
         if ($targets.Contains($file.FullName)) { continue }
         if ($Action -eq 'check') {
-            Write-LogMissing $file.BaseName "stale: $($file.FullName)"
+            Write-LogMissing -Name $file.BaseName -Detail "stale: $($file.FullName)"
             $missing++
         } elseif (Test-OwnedPowerShellCompletion -Path $file.FullName) {
             [IO.File]::Delete($file.FullName)
-            Write-LogOk removed "obsolete PowerShell completion: $($file.FullName)"
+            Write-LogOk -Name removed -Detail "obsolete PowerShell completion: $($file.FullName)"
         }
     }
     if ($missing) { throw "PowerShell completion check found $($missing) missing or stale files." }

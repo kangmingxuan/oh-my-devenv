@@ -12,11 +12,11 @@ $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'common.ps1')
 
 if (-not $IsWindows) {
-    Write-LogError 'This check requires native Windows.'
+    Write-LogError -Message 'This check requires native Windows.'
     exit 1
 }
 if ($PSVersionTable.PSVersion -lt [version]'7.6') {
-    Write-LogError "PowerShell 7.6 or later is required. Running $($PSVersionTable.PSVersion)."
+    Write-LogError -Message "PowerShell 7.6 or later is required. Running $($PSVersionTable.PSVersion)."
     exit 1
 }
 . (Join-Path $PSScriptRoot 'backup.ps1')
@@ -28,7 +28,7 @@ if ($PSVersionTable.PSVersion -lt [version]'7.6') {
 . (Join-Path $PSScriptRoot 'ecosystem.ps1')
 . (Join-Path $PSScriptRoot 'completions.ps1')
 
-Write-LogPhase 'Running environment checks...'
+Write-LogPhase -Message 'Running environment checks...'
 $checkName = 'Environment'
 try {
     Update-HookPath -Managed
@@ -42,7 +42,7 @@ try {
         if ($null -eq (Resolve-RegularFile -Path $target)) {
             throw "Missing managed file '$target'. Run chezmoi apply."
         }
-        Write-LogOk $relativePath
+        Write-LogOk -Name $relativePath
     }
 
     $checkName = 'Git config'
@@ -54,7 +54,7 @@ try {
     if ((ConvertTo-PathKey -Path $gitConfig) -cnotin $gitGlobalKeys) {
         throw "Git global config paths '$($gitGlobalPaths -join "', '")' do not include managed file '$gitConfig'."
     }
-    Write-LogOk "Git config" "$gitConfig"
+    Write-LogOk -Name "Git config" -Detail "$gitConfig"
 
     $checkName = 'PowerShell profile'
     if ($null -eq (Resolve-RegularFile -Path $ProfilePath) -or
@@ -72,7 +72,7 @@ try {
     if ($missingPath.Count) {
         throw "Missing directories in the user Path: $($missingPath -join '; '). Run chezmoi apply."
     }
-    Write-LogOk 'User Path' 'Managed directories are present.'
+    Write-LogOk -Name 'User Path' -Detail 'Managed directories are present.'
     $checkName = 'mise toolchain'
     $runtimes = @(Get-MiseProfileCommand -ConfigPath $configPath -ShimsDirectory $managedEntries[0])
     $checkName = 'Ecosystem tools'
@@ -88,7 +88,7 @@ try {
 
     $checkName = 'SSH config'
     $ssh = Get-PathApplication -Name ssh
-    Write-LogOk 'SSH executable' $ssh.Source
+    Write-LogOk -Name 'SSH executable' -Detail $ssh.Source
 
     $sshConfig = Join-Path $Destination '.ssh/config'
     if ($null -eq (Resolve-RegularFile -Path $sshConfig)) {
@@ -100,7 +100,7 @@ try {
     if (-not (Test-SshConfigRead -Diagnostic $result.Stderr -Path $sshConfig)) {
         throw "SSH did not report reading its default user config at '$sshConfig'.`n$($result.Stderr)"
     }
-    Write-LogOk 'SSH config' "$sshConfig"
+    Write-LogOk -Name 'SSH config' -Detail "$sshConfig"
 
     if (-not $PSBoundParameters.ContainsKey('DesktopBaseline')) {
         $data = Invoke-NativeCommand -Executable $chezmoi.Source -Arguments @('data', '--format=json')
@@ -124,26 +124,26 @@ try {
         }
         Confirm-TerminalFragment -Path $fragment -Family $manifest.Family
     }
-    Write-LogInfo 'Core tools in this environment:'
+    Write-LogInfo -Message 'Core tools in this environment:'
     $checkName = 'chezmoi'
-    Write-LogOk chezmoi (Invoke-NativeCommand -Executable $chezmoi.Source -Arguments @('--version')).Stdout.Trim()
+    Write-LogOk -Name chezmoi -Detail (Invoke-NativeCommand -Executable $chezmoi.Source -Arguments @('--version')).Stdout.Trim()
     $checkName = 'git'
-    Write-LogOk git (Invoke-NativeCommand -Executable $git.Source -Arguments @('--version')).Stdout.Trim()
+    Write-LogOk -Name git -Detail (Invoke-NativeCommand -Executable $git.Source -Arguments @('--version')).Stdout.Trim()
     $checkName = 'mise'
-    Write-LogOk mise (Invoke-GlobalMise -Arguments @('--version')).Stdout.Trim()
+    Write-LogOk -Name mise -Detail (Invoke-GlobalMise -Arguments @('--version')).Stdout.Trim()
     $checkName = 'ssh'
     $version = Invoke-NativeCommand -Executable $ssh.Source -Arguments @('-V')
-    Write-LogOk ssh ($version.Stderr + $version.Stdout).Trim()
+    Write-LogOk -Name ssh -Detail ($version.Stderr + $version.Stdout).Trim()
     foreach ($runtime in $runtimes) {
-        Write-LogOk ([IO.Path]::GetFileNameWithoutExtension($runtime.Name)) $runtime.Version
+        Write-LogOk -Name ([IO.Path]::GetFileNameWithoutExtension($runtime.Name)) -Detail $runtime.Version
     }
     Write-LogPhaseDone
-    Write-LogSummary 'All checks passed.' "$($runtimes.Count + 4) core tools"
+    Write-LogSummary -Message 'All checks passed.' -Counts "$($runtimes.Count + 4) core tools"
 } catch {
-    Write-LogMissing $checkName
-    Write-BootstrapFailure $_
-    Write-LogSummaryFailed 'Checks failed.' '1 failed check'
-    Write-LogNext 'Review the failed check and re-run the environment check.'
-    exit (Get-BootstrapExitCode $_)
+    Write-LogMissing -Name $checkName
+    Write-BootstrapFailure -Failure $_
+    Write-LogSummaryFailed -Message 'Checks failed.' -Counts '1 failed check'
+    Write-LogNext -Message 'Review the failed check and re-run the environment check.'
+    exit (Get-BootstrapExitCode -Failure $_)
 }
 exit 0

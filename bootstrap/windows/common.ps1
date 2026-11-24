@@ -71,7 +71,7 @@ $script:LogPhaseClock = $null
 function Write-LogPhase {
     param([string]$Message)
     $script:LogPhaseClock = [Diagnostics.Stopwatch]::StartNew()
-    Write-LogLine phase $Message
+    Write-LogLine -Level phase -Message $Message
 }
 
 function Write-LogPhaseDone {
@@ -79,57 +79,57 @@ function Write-LogPhaseDone {
     if (-not $PSBoundParameters.ContainsKey('DurationSeconds')) {
         $DurationSeconds = [Math]::Floor($script:LogPhaseClock.Elapsed.TotalSeconds)
     }
-    if ($DurationSeconds -ge 1) { Write-LogLine done "in ${DurationSeconds}s" }
+    if ($DurationSeconds -ge 1) { Write-LogLine -Level done -Message "in ${DurationSeconds}s" }
     Write-Host ''
 }
 
 function Write-LogOk {
     param([string]$Name, [string]$Detail)
-    Write-LogLine ok $Name $Detail
+    Write-LogLine -Level ok -Message $Name -Detail $Detail
 }
 function Write-LogSkip {
     param([string]$Message)
-    Write-LogLine skip $Message
+    Write-LogLine -Level skip -Message $Message
 }
 function Write-LogInfo {
     param([string]$Message)
-    Write-LogLine info $Message
+    Write-LogLine -Level info -Message $Message
 }
 function Write-LogMissing {
     param([string]$Name, [string]$Detail)
-    Write-LogLine missing $Name $Detail
+    Write-LogLine -Level missing -Message $Name -Detail $Detail
 }
 function Write-LogWarn {
     param([string]$Message)
-    Write-LogLine warn $Message
+    Write-LogLine -Level warn -Message $Message
 }
 function Write-LogDetail {
     param([string]$Message)
-    foreach ($line in ($Message -split '\r?\n')) { Write-LogLine detail $line }
+    foreach ($line in ($Message -split '\r?\n')) { Write-LogLine -Level detail -Message $line }
 }
 function Write-LogError {
     param([string]$Message, [string[]]$Details)
-    Write-LogLine error $Message
+    Write-LogLine -Level error -Message $Message
     foreach ($line in $Details) {
-        if ($line) { Write-LogDetail $line }
+        if ($line) { Write-LogDetail -Message $line }
     }
     [Console]::Error.WriteLine()
 }
 function Write-LogWould {
     param([string]$Action, [string]$Target)
-    Write-LogLine would $Action $Target
+    Write-LogLine -Level would -Message $Action -Detail $Target
 }
 function Write-LogNext {
     param([string]$Message)
-    Write-LogLine next $Message
+    Write-LogLine -Level next -Message $Message
 }
 function Write-LogSummary {
     param([string]$Message, [string]$Counts)
-    Write-LogLine summary $Message $Counts
+    Write-LogLine -Level summary -Message $Message -Detail $Counts
 }
 function Write-LogSummaryFailed {
     param([string]$Message, [string]$Counts)
-    Write-LogLine summaryFailed $Message $Counts
+    Write-LogLine -Level summaryFailed -Message $Message -Detail $Counts
 }
 
 function Get-LogTerminalWidth {
@@ -188,7 +188,7 @@ function Write-StartupBanner {
     Write-Host ''
 }
 
-function New-NativeCommandFailure {
+function ConvertTo-NativeCommandException {
     param([string]$Message, [hashtable]$Result)
     foreach ($output in $Result['Stderr'], $Result['Stdout']) {
         if ($output) { $Message += "`n" + $output.TrimEnd("`r`n") }
@@ -209,7 +209,7 @@ function Get-BootstrapExitCode {
 function Write-BootstrapFailure {
     param([Management.Automation.ErrorRecord]$Failure)
     $message, $details = $Failure.Exception.Message -split '\r?\n', 2
-    Write-LogError $message -Details $details
+    Write-LogError -Message $message -Details $details
 }
 
 function Get-HookPath {
@@ -328,7 +328,7 @@ function Invoke-NativeCommand {
             $result.Stderr = $stderrRead.GetAwaiter().GetResult()
         }
         if ($result.ExitCode -ne 0 -and -not $AllowFailure) {
-            throw (New-NativeCommandFailure -Message "'$Executable' exited with code $($result.ExitCode)." -Result $result)
+            throw (ConvertTo-NativeCommandException -Message "'$Executable' exited with code $($result.ExitCode)." -Result $result)
         }
         $result
     } finally {

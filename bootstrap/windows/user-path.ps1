@@ -96,7 +96,7 @@ namespace OhMyDevenv {
     # HWND_BROADCAST, WM_SETTINGCHANGE, SMTO_ABORTIFHUNG.
     if ([OhMyDevenv.EnvironmentChange]::SendMessageTimeout(
         [IntPtr]0xffff, 0x001a, [UIntPtr]::Zero, 'Environment', 0x0002, 1000, [ref]$result) -eq [IntPtr]::Zero) {
-        Write-LogWarn 'Windows did not confirm the Environment notification. Restart applications to pick up the user Path.'
+        Write-LogWarn -Message 'Windows did not confirm the Environment notification. Restart applications to pick up the user Path.'
     }
 }
 

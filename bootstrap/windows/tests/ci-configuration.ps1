@@ -29,10 +29,10 @@ function Get-FixtureOutputLabel {
     ($row.Bytes.TrimStart() -split ' ')[0]
 }
 
-$previewLabel = Get-FixtureOutputLabel would
-$okLabel = Get-FixtureOutputLabel ok
-$nextLabel = Get-FixtureOutputLabel next
-$missingLabel = Get-FixtureOutputLabel missing
+$previewLabel = Get-FixtureOutputLabel -Level would
+$okLabel = Get-FixtureOutputLabel -Level ok
+$nextLabel = Get-FixtureOutputLabel -Level next
+$missingLabel = Get-FixtureOutputLabel -Level missing
 
 function Invoke-FixtureChezmoi {
     param([string[]]$Arguments, [switch]$AllowFailure, [int]$TimeoutSeconds = 0)

@@ -13,38 +13,39 @@ $PSStyle.OutputRendering = $Rendering
 
 # Override the terminal probe only for cases that require a terminal on a headless runner.
 if ($Terminals -ne 'actual') {
+    $script:FixtureTerminalWidth = $Columns
     function Test-LogTerminal {
         param([switch]$Stderr)
         $Terminals -eq 'both' -or ($Stderr -and $Terminals -eq 'stderr') -or
             (-not $Stderr -and $Terminals -eq 'stdout')
     }
-    function Get-LogTerminalWidth { $Columns }
+    function Get-LogTerminalWidth { $script:FixtureTerminalWidth }
 }
 
 trap {
-    Write-BootstrapFailure $_
-    exit (Get-BootstrapExitCode $_)
+    Write-BootstrapFailure -Failure $_
+    exit (Get-BootstrapExitCode -Failure $_)
 }
 
 switch ($Case) {
     'Sample' {
-        Write-LogPhase 'Environment check'
-        Write-LogOk git '2.47.1'
-        Write-LogOk chezmoi ''
-        Write-LogSkip 'Already installed'
-        Write-LogInfo 'Reading configuration'
-        Write-LogWould remove '~/.zshrc'
-        Write-LogNext 'Open a new terminal'
+        Write-LogPhase -Message 'Environment check'
+        Write-LogOk -Name git -Detail '2.47.1'
+        Write-LogOk -Name chezmoi -Detail ''
+        Write-LogSkip -Message 'Already installed'
+        Write-LogInfo -Message 'Reading configuration'
+        Write-LogWould -Action remove -Target '~/.zshrc'
+        Write-LogNext -Message 'Open a new terminal'
         Write-LogPhaseDone -DurationSeconds 3
         Write-LogPhaseDone -DurationSeconds 0
-        Write-LogSummary 'All checks passed.' '2 tools'
-        Write-LogMissing gh 'not on PATH'
-        Write-LogWarn 'Restart applications'
-        Write-LogError 'Installation failed (exit 7).' -Details "child output`n`nsecond line"
-        Write-LogDetail 'script: install, line 29'
-        Write-LogSummaryFailed 'Checks failed.' '1 missing'
+        Write-LogSummary -Message 'All checks passed.' -Counts '2 tools'
+        Write-LogMissing -Name gh -Detail 'not on PATH'
+        Write-LogWarn -Message 'Restart applications'
+        Write-LogError -Message 'Installation failed (exit 7).' -Details "child output`n`nsecond line"
+        Write-LogDetail -Message 'script: install, line 29'
+        Write-LogSummaryFailed -Message 'Checks failed.' -Counts '1 missing'
     }
-    'Banner' { Write-StartupBanner 'Fixture OS, arm64' }
+    'Banner' { Write-StartupBanner -Platform 'Fixture OS, arm64' }
     default {
         $pwsh = Join-Path $PSHOME 'pwsh.exe'
         if ($Case -eq 'Timeout') {

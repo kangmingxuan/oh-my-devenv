@@ -242,13 +242,13 @@ function Confirm-DesktopFont {
             }
         }
         if ($missing) {
-            foreach ($face in $missing) { Write-LogMissing $face "Missing or unregistered font face." }
+            foreach ($face in $missing) { Write-LogMissing -Name $face -Detail "Missing or unregistered font face." }
             throw "Missing or unregistered $($Manifest.Family) faces: $($missing -join ', ')."
         }
     } finally {
         if ($null -ne $registry) { $registry.Dispose() }
     }
-    Write-LogOk $Manifest.Family 'Faces are installed and registered.'
+    Write-LogOk -Name $Manifest.Family -Detail 'Faces are installed and registered.'
 }
 
 function Get-OwnedDesktopFont {
@@ -293,7 +293,7 @@ function Remove-OwnedDesktopFont {
                 if ($font.File) {
                     try {
                         [IO.File]::Delete($font.Path)
-                        Write-LogOk removed "desktop font '$($font.Path)'."
+                        Write-LogOk -Name removed -Detail "desktop font '$($font.Path)'."
                     } catch {
                         $fileRemaining = [IO.File]::Exists($font.Path)
                         $problems.Add("Could not remove desktop font '$($font.Path)'. Close applications using the font and retry uninstall. $_")
@@ -304,7 +304,7 @@ function Remove-OwnedDesktopFont {
                         $value = $registry.GetValue($font.Name, $null, 'DoNotExpandEnvironmentNames')
                         if (Test-DesktopFontRegistryPath -Value $value -Path $font.Path) {
                             $registry.DeleteValue($font.Name, $false)
-                            Write-LogOk removed "HKCU\$RegistryPath value '$($font.Name)'."
+                            Write-LogOk -Name removed -Detail "HKCU\$RegistryPath value '$($font.Name)'."
                         }
                     } catch {
                         $registryRemaining = $true

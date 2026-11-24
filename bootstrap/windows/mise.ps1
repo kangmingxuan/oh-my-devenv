@@ -13,13 +13,13 @@ function Invoke-GlobalMise {
 function Install-Mise {
     if (-not (Get-PathApplication -Name mise.exe -Optional)) {
         $winget = Get-WinGetApplication
-        Write-LogInfo 'Installing jdx.mise with WinGet.'
+        Write-LogInfo -Message 'Installing jdx.mise with WinGet.'
         $result = Invoke-NativeCommand -Executable $winget.Source -Arguments @(
             'install', '--id', 'jdx.mise', '--exact', '--source', 'winget', '--scope', 'user'
             '--accept-package-agreements', '--accept-source-agreements', '--disable-interactivity'
         ) -AllowFailure -Live
         if ($result.ExitCode -ne 0) {
-            throw (New-NativeCommandFailure -Result $result -Message (
+            throw (ConvertTo-NativeCommandException -Result $result -Message (
                 "WinGet install of jdx.mise failed (exit $($result.ExitCode)). " +
                 'mise requires the architecture-matched Microsoft Visual C++ (VC++ 2015+ Redistributable) installed at machine scope. ' +
                 'If it is missing or device policy blocks the install, contact the device administrator.'
@@ -27,9 +27,9 @@ function Install-Mise {
         }
         Update-HookPath -Managed
     } else {
-        Write-LogSkip 'mise is already installed.'
+        Write-LogSkip -Message 'mise is already installed.'
     }
-    Write-LogOk mise (Invoke-GlobalMise -Arguments @('--version')).Stdout.Trim()
+    Write-LogOk -Name mise -Detail (Invoke-GlobalMise -Arguments @('--version')).Stdout.Trim()
 }
 
 function Get-MiseToolExecutable {
@@ -48,7 +48,7 @@ function Confirm-MiseToolchain {
     if ($missing.Stdout.Trim()) {
         foreach ($line in ($missing.Stdout.Trim() -split '\r?\n')) {
             $name, $version = $line.Trim() -split '\s+', 2
-            Write-LogMissing $name $version
+            Write-LogMissing -Name $name -Detail $version
         }
         throw "Missing mise tools. Run 'mise install --yes' from the system drive root.`n$($missing.Stdout.Trim())"
     }

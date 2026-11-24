@@ -37,17 +37,17 @@ BeforeAll {
         ) -Environment $environment -AllowFailure -TimeoutSeconds 30
     }
 
-    function Assert-GoldenStreams {
+    function Assert-GoldenOutput {
         param([hashtable]$Result, [string]$Stdout, [string]$Stderr)
         $Result.ExitCode | Should -Be 0
-        ($Result.Stdout -creplace '\r\n', "`n") | Should -BeExactly (Read-GoldenStream $Stdout stdout)
-        ($Result.Stderr -creplace '\r\n', "`n") | Should -BeExactly (Read-GoldenStream $Stderr stderr)
+        ($Result.Stdout -creplace '\r\n', "`n") | Should -BeExactly (Read-GoldenStream -Mode $Stdout -Stream stdout)
+        ($Result.Stderr -creplace '\r\n', "`n") | Should -BeExactly (Read-GoldenStream -Mode $Stderr -Stream stderr)
     }
 }
 
 Describe 'PowerShell CLI output' {
     It 'matches the golden streams with both native handles redirected' {
-        Assert-GoldenStreams (Invoke-OutputHarness) plain plain
+        Assert-GoldenOutput -Result (Invoke-OutputHarness) -Stdout plain -Stderr plain
     }
 
     It 'selects each stream independently when the terminal probe reports <Terminals>' -ForEach @(
@@ -55,7 +55,7 @@ Describe 'PowerShell CLI output' {
         @{ Terminals = 'stdout'; Stdout = 'rich'; Stderr = 'plain' }
         @{ Terminals = 'stderr'; Stdout = 'plain'; Stderr = 'rich' }
     ) {
-        Assert-GoldenStreams (Invoke-OutputHarness -Terminals $Terminals) $Stdout $Stderr
+        Assert-GoldenOutput -Result (Invoke-OutputHarness -Terminals $Terminals) -Stdout $Stdout -Stderr $Stderr
     }
 
     It 'uses plain output with <Name> even when both streams are terminal streams' -ForEach @(
@@ -64,7 +64,8 @@ Describe 'PowerShell CLI output' {
         @{ Name = 'TERM=dumb'; Variables = @{ TERM = 'dumb' }; Rendering = 'Ansi' }
         @{ Name = 'PSStyle PlainText'; Variables = @{}; Rendering = 'PlainText' }
     ) {
-        Assert-GoldenStreams (Invoke-OutputHarness -Terminals both -Variables $Variables -Rendering $Rendering) plain plain
+        $result = Invoke-OutputHarness -Terminals both -Variables $Variables -Rendering $Rendering
+        Assert-GoldenOutput -Result $result -Stdout plain -Stderr plain
     }
 
     It 'renders the shared <Art> banner with <Name>' -ForEach @(
