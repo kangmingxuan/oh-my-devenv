@@ -7,31 +7,62 @@ versioning and release policy lives in
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-24
+
+### Breaking
+
+- Remove the Unix `NO_EMOJI` switch. Bootstrap status messages show glyphs
+  and color on eligible terminal streams and plain labels on redirected
+  streams. Child commands such as installers control their own output.
+- Any non-empty `NO_COLOR` selects plain status labels and an uncolored banner
+  on Unix and Windows. On Unix, the previous `NO_COLOR=1` setting disabled
+  banner color. A non-empty `CI` also selects plain labels and hides the banner.
+- Update log parsers for the new output. The environment check summary adds a
+  core tool count, for example `All checks passed. (10 core tools)`. In plain
+  mode, Unix uninstall previews print `[would] remove`, `[would] skip`, and
+  `[would] reset` instead of `[would-remove]`, `[would-skip]`, and
+  `[would-reset]`.
+
 ### Added
 
 - Warn when the Windows user `Path` contains direct mise tool installation
   directories. The environment check suggests removing the entries and using
   the managed shims.
+- Run the Windows apply round trip on native ARM64 in CI.
 
 ### Changed
 
 - Bootstrap output uses the same plain labels and terminal glyphs on Unix and
-  Windows. The startup banner uses shared ASCII art on both platforms.
-- The next apply reruns bootstrap hook 10 once on existing machines because
-  its body changed. If managed files already exist, it creates one extra
-  first-run backup directory and prints the backup warning.
-
+  Windows. The startup banner uses shared ASCII art on both platforms. On
+  Windows it replaces the PowerShell version line and is hidden when stdout is
+  redirected or `NO_LOGO=1` is set. On Unix, `TERM=dumb` now allows an
+  uncolored banner on a terminal.
+- Windows install hooks stream native installer output as it runs and keep
+  the native exit code on failure. The runtime hook no longer prints a
+  separate `mise list`; the final check reports versions.
+- When upgrading from v0.3.0, the next apply reruns the enabled
+  change-triggered hooks because their rendered contents changed. The Windows
+  completion hook also refreshes eligible generated PowerShell completions.
+  The next apply also reruns bootstrap hook 10 once on existing machines
+  because its body changed. If managed files already exist, hook 10 creates
+  one extra first-run backup directory and prints the backup warning.
 - On native Windows, the managed PowerShell profile sets PSReadLine to Emacs
   line editing and binds Tab to a completion menu, matching the Unix Oh My Zsh
   baseline.
   PSReadLine previously used its Windows edit mode. Override either setting in
   `profile.local.ps1`.
+- Windows CI installs chezmoi through WinGet and checks the binary
+  architecture. The Bash smoke suite checks direct status output in bootstrap
+  scripts. The Windows smoke suite enforces the `Write-Host` rule with
+  exemptions for the renderer, tests, and the profile probe.
 
 ### Fixed
 
 - Sync Go tools with the Go executable selected by mise on Unix and Windows.
   The installer ignores a stale `GOROOT` from the parent shell, and the Windows
   post-install check does the same when it reads Go tool versions.
+- The Unix environment check reports failed version probes and prints success
+  only after they pass. A failed `mise current` now fails the check.
 
 ## [0.3.0] - 2026-11-23
 
@@ -283,7 +314,8 @@ Before the next apply, migrate manually:
   again when the mise configuration changes, and the environment check reports
   stale uv tool environments.
 
-[Unreleased]: https://github.com/kangmingxuan/oh-my-devenv/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/kangmingxuan/oh-my-devenv/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/kangmingxuan/oh-my-devenv/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/kangmingxuan/oh-my-devenv/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/kangmingxuan/oh-my-devenv/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/kangmingxuan/oh-my-devenv/releases/tag/v0.1.0
