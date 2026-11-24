@@ -47,7 +47,7 @@ switch ($Case) {
     }
     'Banner' { Write-StartupBanner -Platform 'Fixture OS, arm64' }
     default {
-        $pwsh = Join-Path $PSHOME 'pwsh.exe'
+        $pwsh = Join-Path $PSHOME $(if ($IsWindows) { 'pwsh.exe' } else { 'pwsh' })
         if ($Case -eq 'Timeout') {
             $null = Invoke-NativeCommand -Executable $pwsh -Arguments @('-NoProfile', '-Command', 'Start-Sleep 20') `
                 -Live -TimeoutSeconds 1

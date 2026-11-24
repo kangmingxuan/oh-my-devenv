@@ -9,7 +9,7 @@ BeforeAll {
     . (Join-Path $PSScriptRoot '../common.ps1')
     . (Join-Path $PSScriptRoot 'fixtures/output-expected.ps1')
     $harness = Join-Path $PSScriptRoot 'fixtures/output-harness.ps1'
-    $pwsh = Join-Path $PSHOME 'pwsh.exe'
+    $pwsh = Join-Path $PSHOME $(if ($IsWindows) { 'pwsh.exe' } else { 'pwsh' })
     $golden = @(Read-OutputGolden)
 
     function Read-GoldenStream {
@@ -48,6 +48,51 @@ BeforeAll {
 Describe 'PowerShell CLI output' {
     It 'matches the golden streams with both native handles redirected' {
         Assert-GoldenOutput -Result (Invoke-OutputHarness) -Stdout plain -Stderr plain
+    }
+
+    It 'sends Unicode diagnostics to <Destination> with <Rendering> output' -ForEach @(
+        @{ Destination = 'the Windows stderr console'; Rendering = 'rich'; NoColor = $null; ReplaceError = $false }
+        @{ Destination = 'the Windows stderr console'; Rendering = 'plain'; NoColor = '1'; ReplaceError = $false }
+        @{ Destination = 'a replacement Console.Error'; Rendering = 'plain'; NoColor = '1'; ReplaceError = $true }
+    ) {
+        # Simulate a Windows console without calling Win32 on headless runners.
+        function Test-WindowsConsoleStderr { $true }
+        function Test-LogTerminal { param([switch]$Stderr) $Stderr.IsPresent }
+        function Write-WindowsConsoleStderr {
+            param([AllowEmptyString()][string]$Message)
+            $consoleLines.Add($Message)
+        }
+
+        $consoleLines = [Collections.Generic.List[string]]::new()
+        $originalError = [Console]::Error
+        $writer = $null
+        $originalRendering = $PSStyle.OutputRendering
+        $originalNoColor, $originalCI, $originalTerm = $env:NO_COLOR, $env:CI, $env:TERM
+        try {
+            if ($ReplaceError) {
+                $writer = [IO.StringWriter]::new()
+                [Console]::SetError($writer)
+            }
+            $PSStyle.OutputRendering = 'Ansi'
+            $env:NO_COLOR, $env:CI, $env:TERM = $NoColor, $null, 'xterm'
+            Write-LogError -Message 'Installation failed' -Details "C:\工具\包`n子进程输出 🎯"
+
+            $status = if ($Rendering -ceq 'rich') { "`e[1;31m✗ Installation failed`e[0m" } else { '[error] Installation failed' }
+            $expected = "  $status`n    C:\工具\包`n    子进程输出 🎯`n"
+            if ($ReplaceError) {
+                ($writer.ToString() -creplace '\r\n', "`n") | Should -BeExactly ($expected + "`n")
+                $consoleLines.Count | Should -Be 0
+            } else {
+                ($consoleLines -join "`n") | Should -BeExactly $expected
+            }
+        } finally {
+            $env:NO_COLOR, $env:CI, $env:TERM = $originalNoColor, $originalCI, $originalTerm
+            $PSStyle.OutputRendering = $originalRendering
+            if ($null -ne $writer) {
+                [Console]::SetError($originalError)
+                $writer.Dispose()
+            }
+        }
     }
 
     It 'selects each stream independently when the terminal probe reports <Terminals>' -ForEach @(
