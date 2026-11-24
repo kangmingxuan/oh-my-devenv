@@ -2,13 +2,14 @@
 set -euo pipefail
 
 if [[ $# -gt 1 ]]; then
-  printf 'USAGE: %s [chezmoi-config-file]\n' "$0" >&2
+  printf '[error] %s [chezmoi-config-file]\n\n' "$0" >&2
   exit 2
 fi
 config_file="${1:-}"
 
+# Check the inherited value before common.sh resolves XDG paths or reads bootstrap.env.
 if [[ "${XDG_CONFIG_HOME+x}" == x && "${XDG_CONFIG_HOME-}" != "$HOME/.config" ]]; then
-  printf "ERROR: unsupported XDG_CONFIG_HOME='%s'; unset it or set it to %s\n" \
+  printf "[error] unsupported XDG_CONFIG_HOME='%s'; unset it or set it to %s\n\n" \
     "$XDG_CONFIG_HOME" "$HOME/.config" >&2
   exit 1
 fi
@@ -28,14 +29,14 @@ export_tool_path "$GOBIN"
 # Hooks use the running chezmoi binary; manual and CI callers use PATH.
 chezmoi_bin="${CHEZMOI_EXECUTABLE:-chezmoi}"
 if ! command -v "$chezmoi_bin" >/dev/null 2>&1; then
-  printf 'ERROR: chezmoi is required to check the environment.\n' >&2
+  log_error "chezmoi is required to check the environment."
   exit 1
 fi
 
 chezmoi_config_args=()
 if [[ -n "$config_file" ]]; then
   if [[ ! -f "$config_file" ]]; then
-    printf "ERROR: chezmoi configuration is missing. Run 'chezmoi init' first.\n" >&2
+    log_error "chezmoi configuration is missing. Run 'chezmoi init' first."
     exit 1
   fi
   chezmoi_config_args=(--config="$config_file")
@@ -44,25 +45,29 @@ fi
 # Resolve platform rules from the root templates and the persisted opt-in.
 # Do not infer desktop selection from this shell's graphical session.
 platform_facts="$(
-  "$chezmoi_bin" ${chezmoi_config_args[@]+"${chezmoi_config_args[@]}"} --source="$repo_root" execute-template \
+  capture_probe "$chezmoi_bin" ${chezmoi_config_args[@]+"${chezmoi_config_args[@]}"} --source="$repo_root" execute-template \
     '{{ if hasKey . "desktopBaseline" }}{{ includeTemplate "system-package-manager" . }}|{{ includeTemplate "desktop-platform-supported" . }}|{{ .desktopBaseline }}|{{ .chezmoi.os }}{{ end }}'
-)"
+)" || {
+  probe_status=$?
+  _bootstrap_error_handler "$probe_status" "$LINENO" "$0" "$platform_facts"
+  exit "$probe_status"
+}
 if [[ -z "$platform_facts" ]]; then
-  printf "ERROR: chezmoi configuration lacks desktopBaseline. Run 'chezmoi init' first.\n" >&2
+  log_error "chezmoi configuration lacks desktopBaseline. Run 'chezmoi init' first."
   exit 1
 fi
 IFS='|' read -r package_manager desktop_platform_supported desktop_baseline platform <<<"$platform_facts"
 
-log_step "🔎" "Running environment checks..."
+log_phase "Running environment checks..."
 
 errors=0
 ghostty_bin=""
 
 check_cmd() {
   if command -v "$1" >/dev/null 2>&1; then
-    log_check_ok "$1"
+    log_ok "$1"
   else
-    log_check_missing "$1"
+    log_missing "$1"
     errors=$((errors + 1))
   fi
 }
@@ -72,9 +77,9 @@ check_path() {
   local name="$2"
 
   if [[ -e "$path" ]]; then
-    log_check_ok "$name"
+    log_ok "$name"
   else
-    log_check_missing "$name"
+    log_missing "$name"
     errors=$((errors + 1))
   fi
 }
@@ -97,9 +102,9 @@ check_apt_packages() {
     fi
     status="$(dpkg-query -W -f='${Status}' "$package" 2>/dev/null || true)"
     if [[ "$status" == *"install ok installed"* ]]; then
-      log_check_ok "$package"
+      log_ok "$package"
     else
-      log_check_missing "$package"
+      log_missing "$package"
       errors=$((errors + 1))
     fi
   done <<<"$entries"
@@ -114,9 +119,9 @@ check_pacman_packages() {
   while read -r package; do
     [[ -n "$package" ]] || continue
     if pacman -Q "$package" >/dev/null 2>&1; then
-      log_check_ok "$package"
+      log_ok "$package"
     else
-      log_check_missing "$package"
+      log_missing "$package"
       errors=$((errors + 1))
     fi
   done <<<"$entries"
@@ -134,10 +139,10 @@ check_brewfile() {
   fi
 
   if output="$("$brew_bin" bundle check --file="$brewfile" --no-upgrade --verbose 2>&1)"; then
-    log_check_ok "${brewfile#"$manifests_dir/"}"
+    log_ok "${brewfile#"$manifests_dir/"}"
   else
-    log_warning "Homebrew bundle is not satisfied: $brewfile"
-    printf '%s\n' "$output" >&2
+    log_missing "${brewfile#"$manifests_dir/"}" "Homebrew bundle is not satisfied."
+    log_detail "$output"
     errors=$((errors + 1))
   fi
 }
@@ -149,17 +154,17 @@ check_mise_toolchain() {
   local version=""
 
   if ! command -v mise >/dev/null 2>&1; then
-    log_check_missing "mise"
+    log_missing "mise"
     errors=$((errors + 1))
     return 0
   fi
-  log_check_ok "mise"
+  log_ok "mise"
   check_path "$XDG_CONFIG_HOME/mise/config.toml" "mise config"
 
-  # Only stdout is parsed; mise warnings stay visible on stderr without being
-  # mistaken for missing tools.
-  if ! missing="$(cd / && mise ls --current --missing --no-header)"; then
-    log_warning "mise could not inspect the configured toolchain"
+  # Only stdout contains the list of missing tools.
+  if ! missing="$(cd / 2>&1 && capture_probe mise ls --current --missing --no-header)"; then
+    log_warn "mise could not inspect the configured toolchain"
+    [[ -z "$missing" ]] || log_detail "$missing"
     errors=$((errors + 1))
     return 0
   fi
@@ -167,14 +172,14 @@ check_mise_toolchain() {
   if [[ -n "$missing" ]]; then
     while read -r tool version _; do
       if [[ -n "$tool" ]]; then
-        log_check_missing "$tool $version"
+        log_missing "$tool" "$version"
       fi
     done <<<"$missing"
     errors=$((errors + 1))
     return 0
   fi
 
-  log_check_ok "mise toolchain"
+  log_ok "mise toolchain"
 }
 
 resolve_ghostty_bin() {
@@ -201,16 +206,18 @@ check_ghostty_config() {
   local executable="$1"
 
   if [[ -z "$executable" ]]; then
-    log_check_missing "ghostty"
+    log_missing "ghostty"
     errors=$((errors + 1))
     return 0
   fi
 
-  log_check_ok "ghostty"
-  if "$executable" +validate-config >/dev/null 2>&1; then
-    log_check_ok "ghostty config"
+  log_ok "ghostty"
+  local output
+  if output="$("$executable" +validate-config 2>&1)"; then
+    log_ok "ghostty config"
   else
-    log_warning "Ghostty could not load the managed configuration."
+    log_missing "ghostty config" "Could not load the managed configuration."
+    [[ -z "$output" ]] || log_detail "$output"
     errors=$((errors + 1))
   fi
 }
@@ -222,7 +229,7 @@ check_desktop_font_fontconfig() {
   local postscript_name=""
 
   if ! command -v fc-list >/dev/null 2>&1; then
-    log_check_missing "fontconfig"
+    log_missing "fontconfig"
     errors=$((errors + 1))
     return 0
   fi
@@ -230,13 +237,13 @@ check_desktop_font_fontconfig() {
   installed_names="$(fc-list -f '%{postscriptname}\n' ":family=$MAPLE_MONO_FAMILY")"
   for postscript_name in $MAPLE_MONO_POSTSCRIPT_NAMES; do
     if ! grep -Fxq "$postscript_name" <<<"$installed_names"; then
-      log_check_missing "$postscript_name"
+      log_missing "$postscript_name"
       errors=$((errors + 1))
       return 0
     fi
   done
 
-  log_check_ok "$MAPLE_MONO_FAMILY"
+  log_ok "$MAPLE_MONO_FAMILY"
 }
 
 # macOS: the Homebrew cask installs one file per declared face in the user font directory.
@@ -246,13 +253,13 @@ check_desktop_font_macos() {
 
   for postscript_name in $MAPLE_MONO_POSTSCRIPT_NAMES; do
     if [[ ! -f "$font_dir/$postscript_name.ttf" ]]; then
-      log_check_missing "$postscript_name.ttf"
+      log_missing "$postscript_name.ttf"
       errors=$((errors + 1))
       return 0
     fi
   done
 
-  log_check_ok "$MAPLE_MONO_FAMILY"
+  log_ok "$MAPLE_MONO_FAMILY"
 }
 
 check_manifest_cmds() {
@@ -277,7 +284,7 @@ check_manifest_cmds() {
     command_name="$($command_name_parser "$tool_spec")"
 
     if [[ -z "$command_name" ]]; then
-      log_warning "Skipping invalid manifest entry in $manifest: $tool_spec"
+      log_warn "Skipping invalid manifest entry in $manifest: $tool_spec"
       errors=$((errors + 1))
       continue
     fi
@@ -288,7 +295,7 @@ check_manifest_cmds() {
     if [[ -n "$owned_bin_dir" ]] && selected_path="$(command -v "$command_name")"; then
       expected_path="$owned_bin_dir/$command_name"
       if [[ ! "$selected_path" -ef "$expected_path" ]]; then
-        log_warning "$command_name is shadowed: PATH selects $selected_path; expected $expected_path"
+        log_warn "$command_name is shadowed: PATH selects $selected_path; expected $expected_path"
         errors=$((errors + 1))
       fi
     fi
@@ -309,7 +316,13 @@ check_uv_tool_envs() {
     return 0
   fi
 
-  if ! entries="$(manifest_entries "$manifest")" || ! tool_dir="$(uv tool dir 2>/dev/null)"; then
+  if ! entries="$(manifest_entries "$manifest")"; then
+    errors=$((errors + 1))
+    return 0
+  fi
+  if ! tool_dir="$(capture_probe uv tool dir)"; then
+    log_warn "could not resolve the uv tool directory"
+    [[ -z "$tool_dir" ]] || log_detail "$tool_dir"
     errors=$((errors + 1))
     return 0
   fi
@@ -320,7 +333,7 @@ check_uv_tool_envs() {
     # check_manifest_cmds reports a tool that is not installed.
     [[ -d "$tool_dir/$name" ]] || continue
     if ! problem="$(uv_tool_env_healthy "$tool_dir" "$name" "$MISE_PYTHON_VERSION")"; then
-      log_warning "uv tool $name: $problem. Run \`bash $scripts_dir/install-uv-tools.sh $manifest\` to rebuild it."
+      log_warn "uv tool $name: $problem. Run \`bash $scripts_dir/install-uv-tools.sh $manifest\` to rebuild it."
       errors=$((errors + 1))
     fi
   done <<<"$entries"
@@ -347,7 +360,7 @@ check_oh_my_zsh_plugins() {
     read -r plugin_repo plugin_path extra_field <<<"$plugin_entry"
 
     if [[ -z "$plugin_repo" || -z "$plugin_path" || -n "$extra_field" ]]; then
-      log_warning "Skipping invalid oh-my-zsh plugin entry in $manifest: $plugin_entry"
+      log_warn "Skipping invalid oh-my-zsh plugin entry in $manifest: $plugin_entry"
       errors=$((errors + 1))
       continue
     fi
@@ -362,7 +375,7 @@ case "$package_manager" in
   apt) check_apt_packages "$manifests_dir/system/apt-packages.txt" ;;
   brew) check_brewfile "$manifests_dir/system/Brewfile" ;;
   *)
-    log_warning "Unsupported system package manager: $package_manager"
+    log_warn "Unsupported system package manager: $package_manager"
     errors=$((errors + 1))
     ;;
 esac
@@ -373,8 +386,10 @@ check_mise_toolchain
 # Ecosystem tools
 check_manifest_cmds "$manifests_dir/ecosystem/go-tools.txt" go_tool_binary_name "$GOBIN"
 uv_bin_dir=""
-if ! uv_bin_dir="$(uv tool dir --bin)"; then
-  log_warning "could not resolve the uv tool binary directory"
+if ! uv_bin_dir="$(capture_probe uv tool dir --bin)"; then
+  log_warn "could not resolve the uv tool binary directory"
+  [[ -z "$uv_bin_dir" ]] || log_detail "$uv_bin_dir"
+  uv_bin_dir=""
   errors=$((errors + 1))
 fi
 check_manifest_cmds "$manifests_dir/ecosystem/uv-tools.txt" uv_tool_binary_name "$uv_bin_dir"
@@ -406,56 +421,51 @@ if [[ "$desktop_baseline" == "true" && "$desktop_platform_supported" == "true" ]
   fi
 fi
 
-if [[ $errors -gt 0 ]]; then
-  log_warning "$errors required tool(s) or asset(s) are missing."
-  print_diagnostic_hints
-  exit 1
-fi
-
-log_step "🎉" "All checks passed."
-
-log_info "Core tools in this environment:"
+core_tools=0
 print_version_line() {
-  local name="$1"
-  local output=""
-  local executable="$name"
-
-  if [[ "$name" == "chezmoi" ]]; then
-    executable="$chezmoi_bin"
-  fi
-
-  if [[ "$name" != "ghostty" ]] && ! command -v "$executable" >/dev/null 2>&1; then
-    return 0
-  fi
-
+  local name="$1" output="" executable="$1" version=""
   case "$name" in
-    chezmoi) output="$("$chezmoi_bin" --version 2>/dev/null | head -1 | awk '{print $3}' | tr -d ',')" ;;
-    git)     output="$(git --version 2>/dev/null | awk '{print $3}')" ;;
-    mise)    output="$(mise --version 2>/dev/null | awk '{print $1}')" ;;
-    ghostty)
-      [[ -n "$ghostty_bin" ]] || return 0
-      output="$("$ghostty_bin" --version 2>/dev/null | head -1 | awk '{print $2}')"
-      ;;
-    *)       output="installed" ;;
+    chezmoi) executable="$chezmoi_bin" ;;
+    ghostty) executable="$ghostty_bin" ;;
   esac
+  [[ -n "$executable" ]] && command -v "$executable" >/dev/null 2>&1 || return 0
 
-  printf '    %-16s %s\n' "$name" "${output:-installed}"
+  if output="$(capture_probe "$executable" --version)"; then
+    case "$name" in
+      chezmoi) version="$(awk 'NR==1 {gsub(/,/, "", $3); print $3}' <<<"$output")" ;;
+      git)     version="$(awk 'NR==1 {print $3}' <<<"$output")" ;;
+      mise)    version="$(awk 'NR==1 {print $1}' <<<"$output")" ;;
+      ghostty) version="$(awk 'NR==1 {print $2}' <<<"$output")" ;;
+    esac
+    log_ok "$name" "${version:-installed}"
+    core_tools=$((core_tools + 1))
+  else
+    log_missing "$name" "Version probe failed."
+    [[ -z "$output" ]] || log_detail "$output"
+    errors=$((errors + 1))
+  fi
 }
 
 # mise prints one `<tool> <version>` line per tool in its current configuration.
 print_mise_toolchain() {
-  local listing=""
-  local tool=""
-  local version=""
+  local listing="" tool="" version=""
+  command -v mise >/dev/null 2>&1 || return 0
 
-  listing="$(cd / && mise current 2>/dev/null)" || return 0
+  if ! listing="$(cd / 2>&1 && capture_probe mise current)"; then
+    log_missing "mise toolchain" "Version probe failed."
+    [[ -z "$listing" ]] || log_detail "$listing"
+    errors=$((errors + 1))
+    return 0
+  fi
   while read -r tool version _; do
     if [[ -n "$tool" ]]; then
-      printf '    %-16s %s\n' "$tool" "$version"
+      log_ok "$tool" "$version"
+      core_tools=$((core_tools + 1))
     fi
   done <<<"$listing"
 }
 
+log_info "Core tools in this environment:"
 print_version_line chezmoi
 print_version_line git
 print_version_line mise
@@ -463,3 +473,16 @@ print_mise_toolchain
 if [[ "$desktop_baseline" == "true" && "$desktop_platform_supported" == "true" ]]; then
   print_version_line ghostty
 fi
+
+log_phase_done
+if (( errors > 0 )); then
+  if (( errors == 1 )); then
+    log_summary_failed "Checks failed." "1 failed check"
+  else
+    log_summary_failed "Checks failed." "$errors failed checks"
+  fi
+  log_detail "$(diagnostic_hints)"
+  log_next "Review the failed checks and re-run the environment check."
+  exit 1
+fi
+log_summary "All checks passed." "$core_tools core tools"

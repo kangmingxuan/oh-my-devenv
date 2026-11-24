@@ -17,9 +17,9 @@ install_error_trap "$0"
 {{ if eq .chezmoi.os "darwin" -}}
 # Desktop Brewfile hash: {{ include "bootstrap/manifests/desktop/Brewfile" | sha256sum }}
 # Homebrew installer hash: {{ include "bootstrap/scripts/install-brew-packages.sh" | sha256sum }}
-log_step "🖥️" "Installing the desktop baseline via Homebrew..."
+log_phase "Installing the desktop baseline via Homebrew..."
 bash "$scripts_dir/install-brew-packages.sh" "$manifests_dir/desktop/Brewfile"
-log_step "✅" "Desktop baseline installation complete."
+log_phase_done
 {{- else if $isSupportedDesktop -}}
 {{ if eq $packageManager "pacman" -}}
 # Desktop pacman manifest hash: {{ include "bootstrap/manifests/desktop/pacman-packages.txt" | sha256sum }}
@@ -30,15 +30,15 @@ log_step "✅" "Desktop baseline installation complete."
 {{ end -}}
 # Maple Mono manifest hash: {{ include "bootstrap/manifests/desktop/maple-mono-nf-cn.env" | sha256sum }}
 # Maple Mono installer hash: {{ include "bootstrap/scripts/install-maple-mono-font.sh" | sha256sum }}
-log_step "🖥️" "Installing the Linux desktop baseline..."
+log_phase "Installing the Linux desktop baseline..."
 {{ if eq $packageManager "pacman" -}}
 bash "$scripts_dir/install-pacman-packages.sh" "$manifests_dir/desktop/pacman-packages.txt"
 {{ else -}}
 bash "$scripts_dir/install-apt-packages.sh" "$manifests_dir/desktop/apt-packages.txt"
 {{ end -}}
 bash "$scripts_dir/install-maple-mono-font.sh" "$manifests_dir/desktop/maple-mono-nf-cn.env"
-log_step "✅" "Desktop baseline installation complete."
+log_phase_done
 {{- else }}
-log_warning "Desktop baseline requested, but automatic installation is not supported on this platform. No desktop assets were installed. See docs/02-reference.md for supported platforms."
+log_warn "Desktop baseline requested, but automatic installation is not supported on this platform. No desktop assets were installed. See docs/02-reference.md for supported platforms."
 {{- end }}
 {{- end -}}

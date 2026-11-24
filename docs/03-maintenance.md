@@ -436,10 +436,10 @@ loads `bootstrap.env` before it computes any path.
 ### Defaults and flags
 
 - **Dry-run by default.** Running the script with no flags prints
-  `[would-remove]` / `[would-skip]` lines and exits `0` without deleting
-  anything. It also prints `[would-reset]` for the main chezmoi `scriptState`
-  and `entryState` buckets without clearing them. Read the preview end-to-end
-  before you add `--confirm`.
+  preview lines and exits `0` without deleting files or clearing state.
+  In plain mode, look for `[would] remove` and `[would] skip`. The
+  `[would] reset` lines name the main chezmoi `scriptState` and `entryState`
+  buckets. Read the preview before you add `--confirm`.
 - **`--confirm`** performs the deletions after an optional backup tarball under
   `~/.local/state/chezmoi-uninstall-backup/<UTC-timestamp>/` (unless
   `--no-backup` is also passed — intended for scripted CI where the filesystem
@@ -456,8 +456,9 @@ loads `bootstrap.env` before it computes any path.
 
 The script reads
 [`bootstrap/manifests/local-overlays.tsv`](../bootstrap/manifests/local-overlays.tsv)
-and logs `[would-skip] overlay-protected` for every matching user-owned path. If
-a path is both managed and an overlay (it should not be), the overlay rule wins.
+and logs `[would] skip overlay-protected` in a plain preview for each matching
+user-owned path. A match protects the path even if it appears in chezmoi's
+managed-file list.
 
 Completion candidates must carry the installer's ownership marker at both
 current and obsolete targets. The script rechecks ownership immediately before

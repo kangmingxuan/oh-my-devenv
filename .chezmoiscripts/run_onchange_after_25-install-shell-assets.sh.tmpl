@@ -13,6 +13,6 @@ manifests_dir="$bootstrap_dir/manifests"
 source "$scripts_dir/common.sh"
 install_error_trap "$0"
 
-log_step "🐚" "Installing shell assets..."
+log_phase "Installing shell assets..."
 bash "$scripts_dir/install-oh-my-zsh-assets.sh" "$manifests_dir/shell/oh-my-zsh-plugins.txt"
-log_step "✅" "Shell assets installation complete."
+log_phase_done

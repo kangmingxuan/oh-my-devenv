@@ -4,31 +4,32 @@ $ErrorActionPreference = 'Stop'
 if (-not $IsWindows) { throw 'The mise helpers require native Windows.' }
 
 function Invoke-GlobalMise {
-    param([Parameter(Mandatory)][string[]]$Arguments, [switch]$AllowFailure)
+    param([Parameter(Mandatory)][string[]]$Arguments, [switch]$AllowFailure, [switch]$Live)
 
     $mise = Get-PathApplication -Name mise.exe
-    Invoke-NativeCommand -Executable $mise.Source -Arguments $Arguments -WorkingDirectory "$env:SystemDrive\" -AllowFailure:$AllowFailure
+    Invoke-NativeCommand -Executable $mise.Source -Arguments $Arguments -WorkingDirectory "$env:SystemDrive\" -AllowFailure:$AllowFailure -Live:$Live
 }
 
 function Install-Mise {
     if (-not (Get-PathApplication -Name mise.exe -Optional)) {
         $winget = Get-WinGetApplication
-        Write-Host 'Installing jdx.mise with WinGet.'
+        Write-LogInfo -Message 'Installing jdx.mise with WinGet.'
         $result = Invoke-NativeCommand -Executable $winget.Source -Arguments @(
             'install', '--id', 'jdx.mise', '--exact', '--source', 'winget', '--scope', 'user'
             '--accept-package-agreements', '--accept-source-agreements', '--disable-interactivity'
-        ) -AllowFailure
+        ) -AllowFailure -Live
         if ($result.ExitCode -ne 0) {
-            throw ("WinGet install of jdx.mise failed (exit $($result.ExitCode)). " +
+            throw (ConvertTo-NativeCommandException -Result $result -Message (
+                "WinGet install of jdx.mise failed (exit $($result.ExitCode)). " +
                 'mise requires the architecture-matched Microsoft Visual C++ (VC++ 2015+ Redistributable) installed at machine scope. ' +
-                'If it is missing or device policy blocks the install, contact the device administrator. ' +
-                "`n$($result.Stderr)`n$($result.Stdout)")
+                'If it is missing or device policy blocks the install, contact the device administrator.'
+            ))
         }
-        Write-Host $result.Stdout
-        if ($result.Stderr) { Write-Host $result.Stderr }
         Update-HookPath -Managed
+    } else {
+        Write-LogSkip -Message 'mise is already installed.'
     }
-    Write-Host (Invoke-GlobalMise -Arguments @('--version')).Stdout.Trim()
+    Write-LogOk -Name mise -Detail (Invoke-GlobalMise -Arguments @('--version')).Stdout.Trim()
 }
 
 function Get-MiseToolExecutable {
@@ -43,11 +44,13 @@ function Get-MiseToolExecutable {
 }
 
 function Confirm-MiseToolchain {
-    Write-Host (Invoke-GlobalMise -Arguments @('--version')).Stdout.Trim()
     $missing = Invoke-GlobalMise -Arguments @('ls', '--current', '--missing', '--no-header')
-    if ($missing.Stderr) { Write-Host $missing.Stderr }
     if ($missing.Stdout.Trim()) {
-        throw "Missing mise tools. Run 'mise install --yes' from the system drive root.`n$($missing.Stdout)"
+        foreach ($line in ($missing.Stdout.Trim() -split '\r?\n')) {
+            $name, $version = $line.Trim() -split '\s+', 2
+            Write-LogMissing -Name $name -Detail $version
+        }
+        throw "Missing mise tools. Run 'mise install --yes' from the system drive root.`n$($missing.Stdout.Trim())"
     }
 }
 
@@ -68,7 +71,7 @@ function Get-MiseProfileCommand {
                 $found = $true
                 $path = Get-MiseToolExecutable -Name $name
                 $binary = [IO.Path]::GetFileName($path)
-                @{ Name = $binary; Path = $path; Shim = Join-Path $ShimsDirectory $binary }
+                @{ Name = $binary; Path = $path; Shim = Join-Path $ShimsDirectory $binary; Version = $version['version'] }
                 break
             }
         }

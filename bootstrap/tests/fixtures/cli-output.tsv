@@ -1,0 +1,31 @@
+# Mode	Stream	Level	UTF-8 output with escaped ESC and LF
+plain	stdout	phase	==> Environment check\n
+plain	stdout	ok	  [ok] git 2.47.1\n
+plain	stdout	empty_detail	  [ok] chezmoi\n
+plain	stdout	skip	  [skip] Already installed\n
+plain	stdout	info	  [info] Reading configuration\n
+plain	stdout	would	  [would] remove ~/.zshrc\n
+plain	stdout	next	  [next] Open a new terminal\n
+plain	stdout	done	  [done] in 3s\n\n
+plain	stdout	subsecond	\n
+plain	stdout	summary	All checks passed. (2 tools)\n
+plain	stderr	missing	  [missing] gh not on PATH\n
+plain	stderr	warn	  [warn] Restart applications\n
+plain	stderr	error	  [error] Installation failed (exit 7).\n    child output\n    \n    second line\n\n
+plain	stderr	detail	    script: install, line 29\n
+plain	stderr	summary_failed	[failed] Checks failed. (1 missing)\n
+rich	stdout	phase	\033[1;36m❯ Environment check\033[0m\n
+rich	stdout	ok	  \033[32m✓\033[0m git              \033[2m2.47.1\033[0m\n
+rich	stdout	empty_detail	  \033[32m✓\033[0m chezmoi\n
+rich	stdout	skip	  \033[2m›\033[0m Already installed\n
+rich	stdout	info	  › Reading configuration\n
+rich	stdout	would	  \033[36m▸\033[0m remove ~/.zshrc\n
+rich	stdout	next	  \033[36mnext\033[0m Open a new terminal\n
+rich	stdout	done	  \033[2m✓ done in 3s\033[0m\n\n
+rich	stdout	subsecond	\n
+rich	stdout	summary	\033[1;32m✓ All checks passed.\033[0m \033[2m(2 tools)\033[0m\n
+rich	stderr	missing	  \033[31m✗\033[0m gh               not on PATH\n
+rich	stderr	warn	  \033[1;33m!\033[0m Restart applications\n
+rich	stderr	error	  \033[1;31m✗ Installation failed (exit 7).\033[0m\n    child output\n    \n    second line\n\n
+rich	stderr	detail	    script: install, line 29\n
+rich	stderr	summary_failed	\033[1;31m✗ Checks failed.\033[0m \033[2m(1 missing)\033[0m\n

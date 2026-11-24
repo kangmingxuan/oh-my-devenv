@@ -9,6 +9,12 @@ versioning and release policy lives in
 
 ### Changed
 
+- Bootstrap output uses the same plain labels and terminal glyphs on Unix and
+  Windows. The startup banner uses shared ASCII art on both platforms.
+- The next apply reruns bootstrap hook 10 once on existing machines because
+  its body changed. If managed files already exist, it creates one extra
+  first-run backup directory and prints the backup warning.
+
 - On native Windows, the managed PowerShell profile sets PSReadLine to Emacs
   line editing and binds Tab to a completion menu, matching the Unix Oh My Zsh
   baseline.

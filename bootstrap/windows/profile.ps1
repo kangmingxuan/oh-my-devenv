@@ -73,7 +73,7 @@ function Add-ManagedProfileLine {
     $runDirectory = New-BackupRun -BackupRoot $BackupRoot
     $backup = Get-BackupPath -Path $ProfilePath -RunDirectory $runDirectory
     Copy-VerifiedFile -Source $file.FullName -Destination $backup
-    Write-Host "Profile backup completed: $backup"
+    Write-LogOk -Name backed-up -Detail "PowerShell profile: $backup"
     $newline = [regex]::Match($profileFile.Content, '\r\n|\n|\r').Value
     if (-not $newline) {
         $newline = [Environment]::NewLine
@@ -211,7 +211,7 @@ function Confirm-ManagedProfile {
             throw 'The child PowerShell did not report the profile probe success marker.'
         }
     } catch {
-        throw "PowerShell profile check failed for '$ProfilePath'. $_"
+        throw [InvalidOperationException]::new("PowerShell profile check failed for '$ProfilePath'. $($_.Exception.Message)", $_.Exception)
     }
-    Write-Host 'PowerShell loaded the managed profile, restored its PATH entries, resolved the managed commands, initialized Oh My Posh, and completed chezmoi and uv commands.'
+    Write-LogOk -Name 'PowerShell profile' -Detail 'Loaded managed settings, PATH, Oh My Posh, and chezmoi and uv completions.'
 }

@@ -18,6 +18,22 @@ $helpers = Split-Path -Parent $PSScriptRoot
 . (Join-Path $helpers 'ecosystem.ps1')
 . (Join-Path $helpers 'completions.ps1')
 
+# Isolate in-process information-stream captures from the runner's terminal.
+$env:NO_COLOR = '1'
+. (Join-Path $PSScriptRoot 'fixtures/output-expected.ps1')
+$fixtureOutput = @(Read-OutputGolden)
+
+function Get-FixtureOutputLabel {
+    param([string]$Level)
+    $row = $fixtureOutput | Where-Object { $_.Mode -ceq 'plain' -and $_.Level -ceq $Level }
+    ($row.Bytes.TrimStart() -split ' ')[0]
+}
+
+$previewLabel = Get-FixtureOutputLabel -Level would
+$okLabel = Get-FixtureOutputLabel -Level ok
+$nextLabel = Get-FixtureOutputLabel -Level next
+$missingLabel = Get-FixtureOutputLabel -Level missing
+
 function Invoke-FixtureChezmoi {
     param([string[]]$Arguments, [switch]$AllowFailure, [int]$TimeoutSeconds = 0)
 
@@ -32,11 +48,15 @@ function Invoke-FixtureApply {
     Write-Host $result.Stderr
     $script:fixtureInstallLog += $result.Stdout + $result.Stderr
     if ($result.ExitCode -ne 0) { throw "Windows fixture apply exited with code $($result.ExitCode)." }
-    if ($Reapply -and ($result.Stdout + $result.Stderr) -match 'Syncing mise-managed|Syncing Go tools|Syncing uv tools|Installing jdx.mise|Installed PowerShell completion:') {
+    if ($Reapply -and ($result.Stdout + $result.Stderr) -match '(?:Syncing mise-managed|Syncing Go tools|Syncing uv tools|Installing jdx.mise|Installed PowerShell completion:)') {
         throw 'Reapply ran an unchanged runtime, tool, or completion installer.'
     }
     if ($result.Stdout -notmatch 'All checks passed\.') {
         throw 'The Windows check did not run or did not pass.'
+    }
+    if (-not $result.Stdout.Contains("  $okLabel chezmoi ") -or
+        -not $result.Stdout.Contains("  $nextLabel Open a new PowerShell session")) {
+        throw 'The Windows check omitted the core tool versions or next steps.'
     }
 }
 
@@ -74,20 +94,23 @@ function Assert-UnsafeSshAcl {
 function Assert-FixtureCheckFailure {
     param([string]$Pattern)
 
+    $diagnostic = [IO.StringWriter]::new()
+    $originalError = [Console]::Error
     try {
+        [Console]::SetError($diagnostic)
         & (Join-Path $helpers 'check.ps1') -Destination $destination -ProfilePath $profilePath `
             -DesktopBaseline:$fixtureConfig.data.desktopBaseline -RegistryPath $pathTarget.RegistryPath `
             -ProbeFixtureBin $fixtureConfig.scriptEnv.OH_MY_DEVENV_WINDOWS_PROBE_BIN
-    } catch {
-        # Native stderr is part of the exception message before PowerShell formats it.
-        $diagnostic = $_.Exception.Message
-        if ($diagnostic -notmatch $Pattern) {
-            throw "Expected the checker to fail with '$Pattern'.`n$diagnostic"
-        }
-        Write-Host $diagnostic
-        return
+        $exitCode = $LASTEXITCODE
+        $output = $diagnostic.ToString()
+    } finally {
+        [Console]::SetError($originalError)
+        $diagnostic.Dispose()
     }
-    throw "Expected the checker to fail with '$Pattern', but it succeeded."
+    if ($exitCode -eq 0 -or $output -notmatch $Pattern) {
+        throw "Expected the checker to fail with '$Pattern'. Exit $exitCode.`n$output"
+    }
+    Write-Host $output
 }
 
 function Initialize-FixtureStub {
@@ -449,13 +472,15 @@ function Assert-FixturePathUninstall {
     $previewOptions = $Options.Clone()
     $previewOptions.Remove('Apply')
     $preview = (& $uninstall @previewOptions 6>&1 | Out-String)
+    if ($LASTEXITCODE -ne 0) { throw "Uninstall preview failed with exit $LASTEXITCODE." }
     foreach ($entry in $recordedPath) {
-        if (-not $preview.Contains("Would remove user Path entry '$entry'.")) {
+        if (-not $preview.Contains("  $previewLabel remove user Path entry '$entry'.")) {
             throw "Uninstall preview omitted '$entry'."
         }
     }
     Assert-FixturePathUnchanged -Expected $beforePreview
     & $uninstall @Options
+    if ($LASTEXITCODE -ne 0) { throw "Uninstall failed with exit $LASTEXITCODE." }
     $after = Read-UserPath -RegistryPath $pathTarget.RegistryPath
     if ($after.Value -cne $expected -or $after.Kind -ne $before.Kind -or [IO.File]::Exists($pathTarget.StatePath)) {
         throw 'Uninstall did not remove exactly the recorded user Path entries and their record.'
@@ -760,15 +785,21 @@ function prompt {{ 'overlay prompt> ' }}
             }
             Write-Host "First-run copy failure stopped apply with exit $($failed.ExitCode)."
             Write-Host $failed.Stderr
+            $diagnostic = [IO.StringWriter]::new()
+            $originalError = [Console]::Error
             try {
+                [Console]::SetError($diagnostic)
                 & $uninstall @uninstallOptions
-                throw 'Uninstall should fail when a pre-delete copy fails.'
-            } catch {
-                if ($_ -notlike '*Pre-uninstall backup failed*Could not back up*') {
-                    throw
-                }
-                Write-Host $_
+                $exitCode = $LASTEXITCODE
+                $output = $diagnostic.ToString()
+            } finally {
+                [Console]::SetError($originalError)
+                $diagnostic.Dispose()
             }
+            if ($exitCode -eq 0 -or $output -notlike '*Pre-uninstall backup failed*Could not back up*') {
+                throw "Expected a pre-delete copy failure. Exit $exitCode.`n$output"
+            }
+            Write-Host $output
         } finally {
             Set-Acl -LiteralPath $gitConfig -AclObject $originalAcl
         }
@@ -780,6 +811,7 @@ function prompt {{ 'overlay prompt> ' }}
         }
         [IO.Directory]::Move($uninstallBackupRoot, (Join-Path $fixture 'failed-uninstall-backup'))
         & $uninstall @uninstallOptions
+        if ($LASTEXITCODE -ne 0) { throw "Uninstall failed with exit $LASTEXITCODE." }
         $run = Get-ChildItem -LiteralPath $uninstallBackupRoot -Directory
         $miseCopy = Get-BackupPath -Path $miseConfig -RunDirectory $run.FullName
         $gitCopy = Get-BackupPath -Path $gitConfig -RunDirectory $run.FullName
@@ -839,7 +871,7 @@ function prompt {{ 'overlay prompt> ' }}
         $completionBytes = [IO.File]::ReadAllBytes($completion)
         try {
             [IO.File]::Delete($completion)
-            Assert-FixtureCheckFailure -Pattern '\[missing\] Owned PowerShell completion:'
+            Assert-FixtureCheckFailure -Pattern ([regex]::Escape($missingLabel) + ' [^ ]+ Owned PowerShell completion:')
         } finally {
             [IO.File]::WriteAllBytes($completion, $completionBytes)
         }
@@ -1022,14 +1054,15 @@ if ($env:OH_MY_DEVENV_PROFILE_LOADED -cne '1' -or $env:OH_MY_DEVENV_POSH_CONFIG 
 
     $beforePreview = (Invoke-FixtureChezmoi -Arguments @('state', 'dump')).Stdout
     $preview = (& $uninstall -Config $config 6>&1 | Out-String)
+    if ($LASTEXITCODE -ne 0) { throw "Uninstall preview failed with exit $LASTEXITCODE." }
     Write-Host $preview
     foreach ($file in $ownedCompletions) {
-        if (-not $preview.Contains("Would remove '$file'.") -or -not [IO.File]::Exists($file)) {
+        if (-not $preview.Contains("  $previewLabel remove '$file'.") -or -not [IO.File]::Exists($file)) {
             throw "Uninstall preview omitted or removed PowerShell completion '$file'."
         }
     }
     foreach ($font in Get-OwnedDesktopFont @fontTarget) {
-        if (($font.File -and -not $preview.Contains("Would remove desktop font '$($font.Path)'.")) -or
+        if (($font.File -and -not $preview.Contains("  $previewLabel remove desktop font '$($font.Path)'.")) -or
             ($font.Registry -and -not $preview.Contains("value '$($font.Name)'."))) {
             throw "Uninstall preview omitted owned desktop font '$($font.Name)'."
         }

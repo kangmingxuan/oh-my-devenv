@@ -2,12 +2,19 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 . {{ includeTemplate "powershell-literal" (joinPath .chezmoi.sourceDir "bootstrap/windows/common.ps1") }}
+
+trap {
+    Write-BootstrapFailure -Failure $_
+    exit (Get-BootstrapExitCode -Failure $_)
+}
+
 . {{ includeTemplate "powershell-literal" (joinPath .chezmoi.sourceDir "bootstrap/windows/backup.ps1") }}
 
+Write-LogPhase -Message 'Bootstrap: ensuring prerequisites...'
 Update-HookPath
 $git = Get-PathApplication -Name git
 $result = Invoke-NativeCommand -Executable $git.Source -Arguments @('--version')
-Write-Host $result.Stdout.Trim()
+Write-LogOk -Name git -Detail $result.Stdout.Trim()
 
 $destination = {{ includeTemplate "powershell-literal" .chezmoi.destDir }}
 $homeDirectory = {{ includeTemplate "powershell-literal" .chezmoi.homeDir }}
@@ -20,3 +27,4 @@ $paths = @{
 $backupRoot = Get-HookBackupRoot -Destination $destination -HomeDirectory $homeDirectory
 $managedFiles = @(Get-ManagedFile @paths)
 Backup-ExistingFile -Paths $managedFiles -BackupRoot $backupRoot
+Write-LogPhaseDone

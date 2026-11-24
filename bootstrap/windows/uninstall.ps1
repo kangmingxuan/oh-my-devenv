@@ -23,11 +23,17 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+. (Join-Path $PSScriptRoot 'common.ps1')
+
+trap {
+    Write-BootstrapFailure -Failure $_
+    exit (Get-BootstrapExitCode -Failure $_)
+}
+
 if (-not $IsWindows) {
     throw 'The Windows uninstaller requires a Windows host.'
 }
 
-. (Join-Path $PSScriptRoot 'common.ps1')
 . (Join-Path $PSScriptRoot 'backup.ps1')
 . (Join-Path $PSScriptRoot 'profile.ps1')
 . (Join-Path $PSScriptRoot 'local-overlays.ps1')
@@ -92,27 +98,30 @@ $candidates = foreach ($path in $paths) {
 
 $stateBuckets = @('scriptState', 'entryState')
 if (-not $Apply) {
-    Write-Host "Would remove the managed line from '$ProfilePath' if present."
+    Write-LogPhase -Message 'Uninstall preview'
+    Write-LogWould -Action remove -Target "the managed line from '$ProfilePath' if present."
     foreach ($path in @($candidates; $completionFiles)) {
-        Write-Host "Would remove '$path'."
+        Write-LogWould -Action remove -Target "'$path'."
     }
     foreach ($font in $fonts) {
-        if ($font.File) { Write-Host "Would remove desktop font '$($font.Path)'." }
-        if ($font.Registry) { Write-Host "Would remove HKCU\$($FontTarget.RegistryPath) value '$($font.Name)'." }
+        if ($font.File) { Write-LogWould -Action remove -Target "desktop font '$($font.Path)'." }
+        if ($font.Registry) { Write-LogWould -Action remove -Target "HKCU\$($FontTarget.RegistryPath) value '$($font.Name)'." }
     }
     if ($FontTarget -and [IO.File]::Exists($FontTarget.StatePath)) {
-        Write-Host "Would delete desktop font record '$($FontTarget.StatePath)'."
+        Write-LogWould -Action remove -Target "desktop font record '$($FontTarget.StatePath)'."
     }
     foreach ($entry in $pathRemoval.Entries) {
-        Write-Host "Would remove user Path entry '$entry'."
+        Write-LogWould -Action remove -Target "user Path entry '$entry'."
     }
     if ([IO.File]::Exists($pathTarget.StatePath)) {
-        Write-Host "Would delete user Path record '$($pathTarget.StatePath)'."
+        Write-LogWould -Action remove -Target "user Path record '$($pathTarget.StatePath)'."
     }
     foreach ($bucket in $stateBuckets) {
-        Write-Host "Would reset chezmoi state bucket '$bucket'."
+        Write-LogWould -Action reset -Target "chezmoi state bucket '$bucket'."
     }
-    return
+    Write-LogPhaseDone
+    Write-LogSummary -Message 'Dry-run complete. No files were deleted.'
+    exit 0
 }
 $profileFile = Resolve-RegularFile -Path $ProfilePath
 $removeProfileLine = $null -ne $profileFile -and
@@ -123,8 +132,9 @@ if ($removeProfileLine) {
     $backupCandidates += $ProfilePath
 }
 if (-not $PSCmdlet.ShouldProcess($root, 'Back up and remove Windows configuration and reset chezmoi state')) {
-    return
+    exit 0
 }
+Write-LogPhase -Message 'Uninstalling the baseline...'
 if ($backupCandidates.Count) {
     if (-not $BackupRoot) {
         $BackupRoot = Get-LocalBackupRoot -Name 'chezmoi-uninstall-backup'
@@ -137,12 +147,12 @@ if ($backupCandidates.Count) {
 }
 foreach ($path in $candidates) {
     [IO.File]::Delete($path)
-    Write-Host "Removed '$path'."
+    Write-LogOk -Name removed -Detail "'$path'."
 }
 foreach ($path in $completionFiles) {
     if (Test-OwnedPowerShellCompletion -Path $path) {
         [IO.File]::Delete($path)
-        Write-Host "Removed '$path'."
+        Write-LogOk -Name removed -Detail "'$path'."
     }
 }
 if ($FontTarget) { Remove-OwnedDesktopFont @FontTarget }
@@ -157,5 +167,9 @@ foreach ($bucket in $stateBuckets) {
     $null = Invoke-NativeCommand -Executable $chezmoi.Source -Arguments @(
         "--config=$Config", "--source=$source", "--destination=$root", 'state', 'delete-bucket', "--bucket=$bucket"
     )
-    Write-Host "Reset chezmoi state bucket '$bucket'."
+    Write-LogOk -Name reset -Detail "chezmoi state bucket '$bucket'."
 }
+Write-LogPhaseDone
+Write-LogSummary -Message 'Uninstall finished. Source checkout kept.'
+Write-LogNext -Message 'Re-run chezmoi apply to restore the baseline.'
+exit 0

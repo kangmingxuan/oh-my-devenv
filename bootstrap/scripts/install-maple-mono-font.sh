@@ -1,27 +1,27 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck disable=SC1091
+source "$script_dir/common.sh"
+
 MANIFEST="${1:-}"
 
 if [[ -z "$MANIFEST" ]]; then
-  echo "USAGE: $0 <manifest-path>" >&2
+  log_error "$0 <manifest-path>"
   exit 1
 fi
 
 if [[ ! -f "$MANIFEST" ]]; then
-  echo "ERROR: $MANIFEST not found" >&2
+  log_error "$MANIFEST not found"
   exit 1
 fi
-
-script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck disable=SC1091
-source "$script_dir/common.sh"
 
 desktop_font_manifest_load "$MANIFEST"
 
 for required_command in curl fc-cache fc-list fc-scan sha256sum unzip; do
   if ! command -v "$required_command" >/dev/null 2>&1; then
-    echo "ERROR: required command not found: $required_command" >&2
+    log_error "required command not found: $required_command"
     exit 1
   fi
 done
@@ -58,12 +58,12 @@ expected_marker="version=$MAPLE_MONO_VERSION sha256=$MAPLE_MONO_SHA256"
 if [[ -f "$managed_marker" ]] && \
   grep -Fxq "$expected_marker" "$managed_marker" && \
   font_family_complete; then
-  echo "$MAPLE_MONO_FAMILY $MAPLE_MONO_VERSION is already installed."
+  log_skip "$MAPLE_MONO_FAMILY $MAPLE_MONO_VERSION is already installed."
   exit 0
 fi
 
 if [[ ! -f "$managed_marker" ]] && font_family_complete; then
-  echo "A compatible $MAPLE_MONO_FAMILY installation already exists; leaving it untouched."
+  log_skip "A compatible $MAPLE_MONO_FAMILY installation already exists; leaving it untouched."
   exit 0
 fi
 
@@ -88,7 +88,7 @@ download_font_archive() {
 # cannot resume it. A complete archive that fails verification is discarded so
 # the next run starts over.
 if ! checksum_matches "$archive_path"; then
-  echo "==> Downloading $MAPLE_MONO_FAMILY $MAPLE_MONO_VERSION"
+  log_info "Downloading $MAPLE_MONO_FAMILY $MAPLE_MONO_VERSION"
   if ! download_font_archive --continue-at -; then
     rm -f "$archive_path.part"
     download_font_archive
@@ -96,7 +96,7 @@ if ! checksum_matches "$archive_path"; then
   mv -f "$archive_path.part" "$archive_path"
   if ! checksum_matches "$archive_path"; then
     rm -f "$archive_path"
-    echo "ERROR: checksum verification failed for $MAPLE_MONO_ARCHIVE" >&2
+    log_error "checksum verification failed for $MAPLE_MONO_ARCHIVE"
     exit 1
   fi
 fi
@@ -132,7 +132,7 @@ while IFS= read -r -d '' font_file; do
   font_files+=("$font_file")
 done < <(find "$work_dir" -type f -name '*.ttf' -print0 | sort -z)
 if [[ ${#font_files[@]} -eq 0 ]]; then
-  echo "ERROR: $MAPLE_MONO_ARCHIVE contains no TTF files" >&2
+  log_error "$MAPLE_MONO_ARCHIVE contains no TTF files"
   exit 1
 fi
 
@@ -142,13 +142,13 @@ for font_file in "${font_files[@]}"; do
 done
 for postscript_name in "${required_postscript_names[@]}"; do
   if ! grep -Fxq "$postscript_name" <<<"$archive_postscript_names"; then
-    echo "ERROR: archive is missing required font $postscript_name" >&2
+    log_error "archive is missing required font $postscript_name"
     exit 1
   fi
 done
 
 if [[ -d "$font_dir" && ! -f "$managed_marker" ]]; then
-  echo "ERROR: refusing to replace unowned font directory: $font_dir" >&2
+  log_error "refusing to replace unowned font directory: $font_dir"
   exit 1
 fi
 
@@ -171,10 +171,10 @@ swapped=1
 
 fc-cache -f "$font_dir" >/dev/null
 if ! font_family_complete; then
-  echo "ERROR: $MAPLE_MONO_FAMILY did not register with Fontconfig" >&2
+  log_error "$MAPLE_MONO_FAMILY did not register with Fontconfig"
   exit 1
 fi
 committed=1
 rm -rf "$previous_dir"
 
-echo "==> $MAPLE_MONO_FAMILY $MAPLE_MONO_VERSION installed successfully."
+log_ok "$MAPLE_MONO_FAMILY" "$MAPLE_MONO_VERSION installed."

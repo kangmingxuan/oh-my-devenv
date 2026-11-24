@@ -13,12 +13,11 @@ install_error_trap "$0"
 export_tool_path
 
 if ! command -v mise >/dev/null 2>&1; then
-  echo "ERROR: mise not found in PATH" >&2
+  log_error "mise not found in PATH"
   exit 1
 fi
 
-log_step "⚙️" "Syncing mise-managed runtimes and tools..."
+log_phase "Syncing mise-managed runtimes and tools..."
 mise install --yes
 
-log_info "Current mise toolchain:"
-mise list
+log_phase_done

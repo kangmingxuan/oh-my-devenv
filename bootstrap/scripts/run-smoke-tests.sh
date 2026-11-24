@@ -9,6 +9,7 @@ tmp_dir="$(mktemp -d)"
 trap 'rm -rf "$tmp_dir"' EXIT
 
 # Smoke tests must not inherit machine-local bootstrap settings.
+export NO_COLOR=1
 export HOME="$tmp_dir/home"
 export XDG_CONFIG_HOME="$HOME/.config"
 export XDG_DATA_HOME="$HOME/.local/share"
@@ -25,7 +26,7 @@ require_command() {
   local command_name="$1"
 
   if ! command -v "$command_name" >/dev/null 2>&1; then
-    printf 'ERROR: required command not found: %s\n' "$command_name" >&2
+    log_error "required command not found: $command_name"
     exit 1
   fi
 }
@@ -59,7 +60,7 @@ shellcheck_rendered_bash() {
 }
 
 fail_test() {
-  printf 'ERROR: %s\n' "$*" >&2
+  log_error "$*"
   exit 1
 }
 
@@ -217,6 +218,125 @@ require_command bash
 require_command git
 require_command zsh
 require_command sh
+require_command script
+
+# Golden payloads are UTF-8 with explicit newline and ESC escapes.
+output_fixtures="$bootstrap_dir/tests/fixtures"
+output_expected() {
+  local mode stream level bytes
+  while IFS=$'\t' read -r mode stream level bytes; do
+    if [[ "$mode" == "$1" && "$stream" == "$2" && ( $# -lt 3 || "$level" == "$3" ) ]]; then
+      printf '%b' "$bytes"
+    fi
+  done <"$output_fixtures/cli-output.tsv"
+}
+
+output_label() {
+  local expected
+  expected="$(output_expected plain "$1" "$2")"
+  expected="${expected#"  "}"
+  printf '%s' "${expected%% *}"
+}
+
+plain_ok_label="$(output_label stdout ok)"
+plain_skip_label="$(output_label stdout skip)"
+plain_would_label="$(output_label stdout would)"
+plain_next_label="$(output_label stdout next)"
+plain_missing_label="$(output_label stderr missing)"
+plain_error_label="$(output_label stderr error)"
+plain_failed_label="$(output_label stderr summary_failed)"
+
+output_pty() {
+  local scenario="$1"
+  shift
+  local -a runner
+  if [[ "$(uname -s)" == Darwin ]]; then
+    runner=(script -q /dev/null bash "$output_fixtures/cli-output.sh")
+  else
+    # shellcheck disable=SC2016
+    runner=(script -q -e -c 'bash "$OUTPUT_HARNESS"' /dev/null)
+  fi
+  # Remove PTY line discipline CR and the macOS script EOF echo.
+  env -u CI -u NO_COLOR -u NO_LOGO -u COLORTERM -u WT_SESSION TERM=xterm     OUTPUT_COMMON="$script_dir/common.sh" OUTPUT_HARNESS="$output_fixtures/cli-output.sh"     OUTPUT_CASE="$scenario" OUTPUT_REDIRECTED="$tmp_dir/output.redirected"     "$@" "${runner[@]}" </dev/null | tr -d '\r' | sed "1s/^\\^D$(printf '\b\b')//"
+}
+
+assert_output_exact() {
+  if ! diff -u "$1" "$2"; then
+    fail_test "renderer output differed from its golden fixture"
+  fi
+}
+
+log_phase "Testing CLI output bytes and terminal behavior..."
+for output_mode in plain rich; do
+  for output_stream in stdout stderr; do
+    output_expected "$output_mode" "$output_stream" >"$tmp_dir/$output_mode.$output_stream"
+  done
+  cat "$tmp_dir/$output_mode.stdout" "$tmp_dir/$output_mode.stderr" >"$tmp_dir/$output_mode.merged"
+done
+
+OUTPUT_CASE=plain OUTPUT_COMMON="$script_dir/common.sh" NO_COLOR='' CI='' TERM=xterm   bash "$output_fixtures/cli-output.sh" >"$tmp_dir/output.stdout" 2>"$tmp_dir/output.stderr"
+assert_output_exact "$tmp_dir/plain.stdout" "$tmp_dir/output.stdout"
+assert_output_exact "$tmp_dir/plain.stderr" "$tmp_dir/output.stderr"
+output_pty rich >"$tmp_dir/output.terminal"
+assert_output_exact "$tmp_dir/rich.merged" "$tmp_dir/output.terminal"
+
+for output_override in NO_COLOR=anything CI=anything TERM=dumb; do
+  output_pty rich "$output_override" >"$tmp_dir/output.terminal"
+  assert_output_exact "$tmp_dir/plain.merged" "$tmp_dir/output.terminal"
+done
+for output_stream in stdout stderr; do
+  if [[ "$output_stream" == stdout ]]; then terminal_stream=stderr; else terminal_stream=stdout; fi
+  output_pty "${output_stream}_redirected" >"$tmp_dir/output.terminal"
+  assert_output_exact "$tmp_dir/plain.$output_stream" "$tmp_dir/output.redirected"
+  assert_output_exact "$tmp_dir/rich.$terminal_stream" "$tmp_dir/output.terminal"
+done
+
+banner_span="$(awk 'length > width {width = length} END {print width}' "$bootstrap_dir/assets/banner-wide.txt")"
+output_esc=$'\033'
+for output_art in wide narrow; do
+  if [[ "$output_art" == wide ]]; then columns=$((banner_span + 2)); else columns=$((banner_span + 1)); fi
+  art_path="$bootstrap_dir/assets/banner-$output_art.txt"
+  art_width="$(awk 'length > width {width = length} END {print width}' "$art_path")"
+  {
+    cat "$art_path"
+    for subtitle in 'bootstrap your dev env at lightning speed' 'Fixture OS, arm64'; do
+      printf '%*s%s\n' "$((art_width - ${#subtitle}))" '' "$subtitle"
+    done
+    printf '\n'
+  } >"$tmp_dir/banner.expected"
+  output_pty banner "COLUMNS=$columns" NO_COLOR=1 >"$tmp_dir/banner.plain"
+  assert_output_exact "$tmp_dir/banner.expected" "$tmp_dir/banner.plain"
+
+  for output_color in COLORTERM=truecolor COLORTERM=24bit WT_SESSION=fixture WT_SESSION= COLORTERM=; do
+    output_pty banner "COLUMNS=$columns" "$output_color" >"$tmp_dir/banner.rich"
+    if [[ "$output_color" == COLORTERM= ]]; then
+      assert_file_contains "$tmp_dir/banner.rich" "${output_esc}[35m"
+      assert_file_not_contains "$tmp_dir/banner.rich" "${output_esc}[38;2;"
+    else
+      assert_file_contains "$tmp_dir/banner.rich" "${output_esc}[38;2;255;95;175m"
+      assert_file_contains "$tmp_dir/banner.rich" "${output_esc}[38;2;175;135;255m"
+    fi
+    assert_file_contains "$tmp_dir/banner.rich" "${output_esc}[2mbootstrap your dev env at lightning speed"
+    if grep -Eq "${output_esc}\\[(35|38;2;[0-9;]+)m " "$tmp_dir/banner.rich"; then
+      fail_test "banner applied color to an art space"
+    fi
+    sed -E "s/${output_esc}\\[[0-9;]+m//g" "$tmp_dir/banner.rich" >"$tmp_dir/banner.visible"
+    assert_output_exact "$tmp_dir/banner.expected" "$tmp_dir/banner.visible"
+  done
+done
+for output_override in NO_LOGO=1 CI=anything; do
+  output_pty banner "$output_override" >"$tmp_dir/banner.hidden"
+  [[ ! -s "$tmp_dir/banner.hidden" ]] || fail_test "$output_override must hide the banner"
+done
+OUTPUT_CASE=banner OUTPUT_COMMON="$script_dir/common.sh"   bash "$output_fixtures/cli-output.sh" >"$tmp_dir/banner.redirected"
+[[ ! -s "$tmp_dir/banner.redirected" ]] || fail_test "redirected stdout must hide the banner"
+
+output_status=0
+OUTPUT_CASE=failure OUTPUT_COMMON="$script_dir/common.sh"   bash "$output_fixtures/cli-output.sh" >"$tmp_dir/output.stdout" 2>"$tmp_dir/output.stderr" || output_status=$?
+[[ "$output_status" == 7 && ! -s "$tmp_dir/output.stdout" ]] || fail_test "error trap did not preserve child exit 7"
+assert_file_contains "$tmp_dir/output.stderr" "$plain_error_label Bootstrap step failed (exit 7)."
+assert_file_contains "$tmp_dir/output.stderr" '    script: fixture, line '
+log_phase_done
 
 # Stand-in persisted user data for rendering without an initialized machine.
 desktop_font_manifest="$repo_root/bootstrap/manifests/desktop/maple-mono-nf-cn.env"
@@ -252,9 +372,14 @@ ghostty_include_literal="config-file = ?${ghostty_overlay_literal##*/}"
 # shellcheck disable=SC2016
 xdg_source_literal='source "$HOME/.local/share/oh-my-devenv/xdg.sh"'
 
-log_step "🧪" "Running local smoke tests..."
+smoke_phase() {
+  if [[ -n "${log_phase_started:-}" ]]; then log_phase_done; fi
+  log_phase "$1"
+}
 
-log_step "🛑" "Checking unsupported XDG_CONFIG_HOME rejection..."
+# The renderer test closed its own phase.
+unset log_phase_started
+smoke_phase "Checking unsupported XDG_CONFIG_HOME rejection..."
 render_template .chezmoiscripts/run_before_00-banner.sh.tmpl "$tmp_dir/xdg-banner.sh"
 for unsupported_xdg in "$tmp_dir/custom-config" "relative/config" "" "$tmp_dir/home/.config/"; do
   for xdg_entrypoint in "$tmp_dir/xdg-banner.sh" "$script_dir/check.sh"; do
@@ -300,7 +425,7 @@ for supported_xdg_mode in unset default; do
     || fail_test "supported XDG_CONFIG_HOME did not allow apply"
 done
 
-log_step "📂" "Checking XDG directory resolution..."
+smoke_phase "Checking XDG directory resolution..."
 xdg_resolver="$repo_root/dot_local/share/oh-my-devenv/xdg.sh"
 syntax_check bash "$xdg_resolver"
 syntax_check zsh "$xdg_resolver"
@@ -401,7 +526,7 @@ for guarded_env_name in env.sh bootstrap.env; do
   assert_file_contains "$tmp_dir/$guarded_env_name-moved-xdg.err" "must not change XDG_CONFIG_HOME"
 done
 
-log_step "📝" "Rendering and checking shell templates..."
+smoke_phase "Rendering and checking shell templates..."
 render_template dot_zshrc.tmpl "$tmp_dir/dot_zshrc"
 syntax_check zsh "$tmp_dir/dot_zshrc"
 assert_file_contains "$tmp_dir/dot_zshrc" "$shared_secrets_literal"
@@ -766,7 +891,7 @@ for mise_case in default xdg-data mise-data shims-dir; do
   done
 done
 
-log_step "📜" "Rendering and checking chezmoi hooks..."
+smoke_phase "Rendering and checking chezmoi hooks..."
 # Render every hook for synthetic platforms so each package-manager and desktop
 # template arm is syntax-checked and linted on any host.
 hook_platforms=(
@@ -936,12 +1061,72 @@ run_rendered_hook() {
 # Unsupported systems stop in the first hooks instead of guessing a package manager.
 for hook_name in run_once_before_10-bootstrap run_onchange_after_20-install-system-packages; do
   expect_failure "$tmp_dir/unsupported-hook.err" run_rendered_hook unsupported "$hook_name"
-  assert_file_contains "$tmp_dir/unsupported-hook.err" "ERROR:"
+  assert_file_contains "$tmp_dir/unsupported-hook.err" "$plain_error_label"
 done
 # A requested desktop baseline on a platform without desktop support only warns.
 run_rendered_hook wsl run_onchange_after_22-install-desktop-assets >/dev/null 2>"$tmp_dir/wsl-desktop.err" \
   || fail_test "desktop hook must not install anything on a platform without desktop support"
 assert_file_contains "$tmp_dir/wsl-desktop.err" "Desktop baseline requested"
+
+# Exercise the remaining phase wrappers against stub child installers.
+phase_source="$tmp_dir/phase-output-source"
+mkdir -p "$phase_source/bootstrap/scripts" "$phase_source/dot_local/share/oh-my-devenv"
+cp "$script_dir/common.sh" "$phase_source/bootstrap/scripts/"
+cp "$repo_root/dot_local/share/oh-my-devenv/xdg.sh" "$phase_source/dot_local/share/oh-my-devenv/"
+for child in install-oh-my-zsh-assets install-go-tools install-uv-tools install-shell-completions; do
+  printf '#!/bin/bash\nprintf "%%s\\n" "%s called"\n' "$child" >"$phase_source/bootstrap/scripts/$child.sh"
+done
+ln -s "$(command -v mkdir)" "$hook_stub_bin/mkdir"
+plain_phase_label="$(output_label stdout phase)"
+while IFS='|' read -r hook_name phase_message child; do
+  phase_hook="$phase_source/$hook_name.sh"
+  chezmoi --source="$repo_root" \
+    --override-data "{\"chezmoi\":{\"sourceDir\":\"$phase_source\",\"os\":\"linux\"}}" \
+    execute-template --file "$repo_root/.chezmoiscripts/$hook_name.sh.tmpl" >"$phase_hook"
+  env -i PATH="$hook_stub_bin" HOME="$tmp_dir/hook-home" NO_COLOR=1 \
+    bash "$phase_hook" >"$phase_source/hook.out"
+  assert_file_contains "$phase_source/hook.out" "$plain_phase_label $phase_message"
+  assert_file_contains "$phase_source/hook.out" "$child called"
+done <<'EOF'
+run_onchange_after_25-install-shell-assets|Installing shell assets...|install-oh-my-zsh-assets
+run_onchange_after_50-sync-ecosystem-tools|Syncing ecosystem tools...|install-go-tools
+run_onchange_after_55-install-shell-completions|Installing shell completions...|install-shell-completions
+EOF
+
+# These installers must parse and execute on Bash 3.2 through their normal CLI.
+# Put only fixture commands on PATH, so the apt and Go commands cannot escape.
+installer_fixture="$tmp_dir/installer-output"
+mkdir -p "$installer_fixture/bin" "$installer_fixture/home"
+for fixture_command in bash dirname mkdir sed; do
+  ln -s "$(command -v "$fixture_command")" "$installer_fixture/bin/$fixture_command"
+done
+cat >"$installer_fixture/bin/sudo" <<'EOF'
+#!/bin/bash
+printf 'stub sudo: %s\n' "$*"
+EOF
+cat >"$installer_fixture/bin/go" <<'EOF'
+#!/bin/bash
+printf 'stub go: %s\n' "$*"
+EOF
+chmod +x "$installer_fixture/bin/sudo" "$installer_fixture/bin/go"
+printf 'fixture-package\n' >"$installer_fixture/apt.txt"
+printf 'example.com/fixture@v1.2.3\n' >"$installer_fixture/go.txt"
+for installer_kind in apt go; do
+  if [[ "$installer_kind" == apt ]]; then installer=install-apt-packages; else installer=install-go-tools; fi
+  env -i PATH="$installer_fixture/bin" HOME="$installer_fixture/home" NO_COLOR=1 \
+    bash "$script_dir/$installer.sh" "$installer_fixture/$installer_kind.txt" >"$installer_fixture/$installer_kind.out"
+done
+assert_file_contains "$installer_fixture/apt.out" 'stub sudo: env DEBIAN_FRONTEND=noninteractive apt-get install'
+assert_file_contains "$installer_fixture/go.out" 'stub go: install example.com/fixture@v1.2.3'
+mkdir -p "$installer_fixture/home/.config/oh-my-devenv"
+cat >"$installer_fixture/home/.config/oh-my-devenv/bootstrap.env" <<'EOF'
+export CI=true
+printf 'loaded\n' >"$HOME/ci-overlay-loaded"
+EOF
+expect_failure "$installer_fixture/ci-guard.err" env -i PATH="$installer_fixture/bin" \
+  HOME="$installer_fixture/home" bash "$script_dir/ci-apply.sh" false
+assert_file_contains "$installer_fixture/ci-guard.err" "$plain_error_label $script_dir/ci-apply.sh applies to"
+[[ ! -e "$installer_fixture/home/ci-overlay-loaded" ]] || fail_test "CI guard loaded bootstrap.env before refusing"
 
 # The runtime hook finds mise through the resolved shim directory before any
 # runtime exists and without GOBIN.
@@ -968,15 +1153,15 @@ expect_failure "$tmp_dir/error-trap-function.err" \
   env -i "${error_trap_env[@]}" /bin/bash -c \
   'set -euo pipefail; source "$1"; install_error_trap smoke; failing_function() { return 1; }; failing_function' \
   _ "$script_dir/common.sh"
-assert_file_contains "$tmp_dir/error-trap-function.err" "Bootstrap step failed."
+assert_file_contains "$tmp_dir/error-trap-function.err" "Bootstrap step failed (exit 1)."
 # shellcheck disable=SC2016
 if ! env -i "${error_trap_env[@]}" /bin/bash -c \
   'set -euo pipefail; source "$1"; install_error_trap smoke; x="$(false)" || true' \
   _ "$script_dir/common.sh" >"$tmp_dir/error-trap-guarded.out" 2>"$tmp_dir/error-trap-guarded.err"; then
   fail_test "a guarded command substitution must succeed after install_error_trap"
 fi
-assert_file_not_contains "$tmp_dir/error-trap-guarded.out" "Bootstrap step failed."
-assert_file_not_contains "$tmp_dir/error-trap-guarded.err" "Bootstrap step failed."
+assert_file_not_contains "$tmp_dir/error-trap-guarded.out" "Bootstrap step failed (exit 1)."
+assert_file_not_contains "$tmp_dir/error-trap-guarded.err" "Bootstrap step failed (exit 1)."
 
 # Resolve Homebrew independently of the parent PATH on macOS. The lookup stub
 # keeps the fixture away from the host's standard Homebrew prefixes.
@@ -1025,7 +1210,7 @@ if [[ -s "$disabled_desktop_hook" || -s "$disabled_ghostty_config" || -s "$disab
   fail_test "desktop templates must render zero bytes when desktopBaseline is disabled"
 fi
 
-log_step "🧩" "Testing generated shell completion assets..."
+smoke_phase "Testing generated shell completion assets..."
 completion_installer="$repo_root/bootstrap/scripts/install-shell-completions.sh"
 completion_manifest="$repo_root/bootstrap/manifests/shell/completions.txt"
 completion_stub_bin="$tmp_dir/completion-stub-bin"
@@ -1217,10 +1402,10 @@ fi
 # Argument and manifest validation.
 completion_errors="$tmp_dir/completion.err"
 expect_failure "$completion_errors" run_completion_installer "$synthetic_completion_data" install darwin
-assert_file_contains "$completion_errors" "Usage:"
+assert_file_contains "$completion_errors" "$plain_error_label install-shell-completions.sh"
 expect_failure "$completion_errors" run_completion_installer "$synthetic_completion_data" \
   install plan9 "$synthetic_completion_manifest"
-assert_file_contains "$completion_errors" "Usage:"
+assert_file_contains "$completion_errors" "$plain_error_label install-shell-completions.sh"
 expect_failure "$completion_errors" run_completion_installer "$synthetic_completion_data" \
   list darwin "$tmp_dir/missing-completions.txt"
 assert_file_contains "$completion_errors" "completion manifest not found"
@@ -1288,7 +1473,9 @@ $reconcile_bash_dir/chezmoi.bash"
 expect_failure "$completion_errors" run_completion_installer "$reconcile_completion_data" \
   check linux "$reconcile_completion_manifest"
 while IFS= read -r completion_target; do
-  assert_file_contains "$completion_errors" "[stale] shell completion: $completion_target"
+  completion_name="${completion_target##*/}"
+  completion_name="${completion_name#_}"
+  assert_file_contains "$completion_errors" "$plain_missing_label ${completion_name%.bash} stale: $completion_target"
 done <<<"$reconcile_obsolete_targets"
 reconcile_listing="$(run_completion_installer "$reconcile_completion_data" \
   list linux "$reconcile_completion_manifest" | sort)"
@@ -1342,7 +1529,9 @@ $native_completion_data/bash-completion/completions/chezmoi.bash"
 expect_failure "$completion_errors" run_completion_installer "$native_completion_data" check linux "$synthetic_completion_manifest"
 native_listing="$(run_completion_installer "$native_completion_data" list linux "$synthetic_completion_manifest")"
 while IFS= read -r completion_target; do
-  assert_file_contains "$completion_errors" "[stale] shell completion: $completion_target"
+  completion_name="${completion_target##*/}"
+  completion_name="${completion_name#_}"
+  assert_file_contains "$completion_errors" "$plain_missing_label ${completion_name%.bash} stale: $completion_target"
   grep -Fxq "$completion_target" <<<"$native_listing" || fail_test "list omitted stale native replacement: $completion_target"
 done <<<"$native_obsolete_targets"
 # Native assets are skipped; the other shell still needs generated assets.
@@ -1495,7 +1684,7 @@ for_each_failed_write list "$completion_write_obsolete" assert_reports_failed_wr
 for_each_failed_write install "$completion_write_obsolete" assert_reports_failed_write
 for_each_failed_write install "$completion_write_target" assert_install_keeps_target
 
-log_step "🔎" "Testing the standalone environment check with stubbed tools..."
+smoke_phase "Testing the standalone environment check with stubbed tools..."
 check_root="$tmp_dir/check-fixture"
 check_stub_bin="$check_root/bin"
 check_config="$check_root/home/.config/chezmoi/chezmoi.toml"
@@ -1538,7 +1727,11 @@ case "$name" in
   mise)
     case "${1:-}" in
       ls)
-        [[ "${FAIL_CHECK:-}" != mise ]] || exit 1
+        if [[ "${FAIL_CHECK:-}" == mise ]]; then
+          printf '%s\n' 'fixture mise failure' 'second diagnostic line' >&2
+          exit 1
+        fi
+        printf 'fixture mise success diagnostic\n' >&2
         [[ "$PWD" == / ]] || printf 'project-runtime missing\n'
         ;;
       current)
@@ -1624,6 +1817,7 @@ mkdir -p "$check_root/project"
 assert_file_contains "$check_root/global-toolchain.log" 'All checks passed.'
 assert_file_contains "$check_root/global-toolchain.log" 'smoke-runtime'
 assert_file_not_contains "$check_root/global-toolchain.log" 'project-runtime'
+assert_file_not_contains "$check_root/global-toolchain.log" 'fixture mise success diagnostic'
 for check_platform in "${hook_platforms[@]}"; do
   check_platform_name="${check_platform%%|*}"
   [[ "$check_platform_name" != unsupported ]] || continue
@@ -1634,7 +1828,7 @@ for check_platform in "${hook_platforms[@]}"; do
   assert_file_contains "$check_log" 'All checks passed.'
   assert_file_contains "$check_log" 'Core tools in this environment:'
   assert_file_contains "$check_log" 'smoke-runtime'
-  assert_file_not_contains "$check_log" 'Next steps:'
+  assert_file_not_contains "$check_log" "$plain_next_label Reload your shell"
   assert_file_contains "$check_root/calls" "--config=$check_config"
   case "$check_platform_name" in
     macos) assert_file_contains "$check_root/calls" 'brew bundle check'; completion_platform=darwin ;;
@@ -1664,7 +1858,7 @@ for tool_manifest_kind in go uv; do
     fail_test "environment check must reject a shadowed $tool_manifest_kind tool"
   fi
   assert_file_contains "$check_root/shadow.log" "$command_name is shadowed: PATH selects $shadow_path; expected $check_owned_bin/$command_name"
-  assert_file_contains "$check_root/shadow.log" '1 required tool(s) or asset(s) are missing.'
+  assert_file_contains "$check_root/shadow.log" "$plain_failed_label Checks failed. (1 failed check)"
   rm "$shadow_path"
   ln -s "$check_owned_bin/$command_name" "$shadow_path"
   run_check_fixture "$darwin_chezmoi_data" bash "$check_root/bootstrap/scripts/check.sh" \
@@ -1676,7 +1870,8 @@ for tool_manifest_kind in go uv; do
     "$check_config" >"$check_root/missing-tool.log" 2>&1; then
     fail_test "environment check must reject a missing $tool_manifest_kind tool"
   fi
-  assert_file_contains "$check_root/missing-tool.log" '1 required tool(s) or asset(s) are missing.'
+  assert_file_contains "$check_root/missing-tool.log" "$plain_missing_label $command_name"
+  assert_file_contains "$check_root/missing-tool.log" "$plain_failed_label Checks failed. (1 failed check)"
   assert_file_not_contains "$check_root/missing-tool.log" 'is shadowed:'
   mv "$check_owned_bin/$command_name.saved" "$check_owned_bin/$command_name"
 done
@@ -1712,9 +1907,9 @@ for check_config_state in missing uninitialized; do
     expect_failure "$check_config_error" run_check_fixture "$darwin_chezmoi_data" \
       bash "$check_root/bootstrap/scripts/check.sh" ${check_config_args[@]+"${check_config_args[@]}"}
     assert_file_contains "$check_config_error" "Run 'chezmoi init' first."
-    assert_file_not_contains "$check_config_error" 'Bootstrap step failed.'
+    assert_file_not_contains "$check_config_error" 'Bootstrap step failed (exit'
     assert_file_not_contains "$check_config_error" 'map has no entry'
-    assert_file_not_contains "$check_config_error" 'required tool(s) or asset(s) are missing.'
+    assert_file_not_contains "$check_config_error" "$plain_failed_label Checks failed."
   done
 done
 mv "$check_config.saved" "$check_config"
@@ -1746,15 +1941,24 @@ assert_file_not_contains "$check_root/calls" 'ghostty +validate-config'
 printf '[data]\ndesktopBaseline = true\n' >"$check_config"
 for failed_check in mise ghostty python; do
   if FAIL_CHECK="$failed_check" run_check_fixture "$darwin_chezmoi_data" \
-    bash "$check_root/bootstrap/scripts/check.sh" "$check_config" >"$check_root/failure.log" 2>&1; then
+    bash "$check_root/bootstrap/scripts/check.sh" "$check_config" \
+    >"$check_root/failure.out" 2>"$check_root/failure.err"; then
     fail_test "environment check must fail when $failed_check fails"
   fi
-  assert_file_contains "$check_root/failure.log" 'required tool(s) or asset(s) are missing.'
-  assert_file_contains "$check_root/failure.log" 'What to try next:'
-  assert_file_not_contains "$check_root/failure.log" 'All checks passed.'
+  assert_file_contains "$check_root/failure.err" "$plain_failed_label Checks failed."
+  assert_file_contains "$check_root/failure.err" 'What to try next:'
+  assert_file_not_contains "$check_root/failure.out" 'All checks passed.'
+  if [[ "$failed_check" == mise ]]; then
+    warning_label="$(output_label stderr warn)"
+    awk -v header="  $warning_label mise could not inspect the configured toolchain" '
+      $0 == "    second diagnostic line" && last == "    fixture mise failure" && previous == header { found = 1 }
+      { previous = last; last = $0 }
+      END { exit !found }
+    ' "$check_root/failure.err" || fail_test "mise probe details must follow their stderr header"
+  fi
 done
 expect_failure "$check_root/usage.err" bash "$script_dir/check.sh" extra extra
-assert_file_contains "$check_root/usage.err" 'USAGE:'
+assert_file_contains "$check_root/usage.err" "$plain_error_label"
 # Render the actual hook, then run it against the same isolated fixture.
 chezmoi --source="$repo_root" \
   --override-data "{\"desktopBaseline\":true,\"chezmoi\":{\"os\":\"darwin\",\"sourceDir\":\"$check_root\",\"configFile\":\"$check_config\"}}" \
@@ -1762,14 +1966,14 @@ chezmoi --source="$repo_root" \
   >"$check_root/hook.sh"
 run_check_fixture "$darwin_chezmoi_data" bash "$check_root/hook.sh" >"$check_root/hook.log" 2>&1
 assert_file_contains "$check_root/hook.log" 'All checks passed.'
-assert_file_contains "$check_root/hook.log" 'Next steps:'
+assert_file_contains "$check_root/hook.log" "$plain_next_label Reload your shell"
 if FAIL_CHECK=mise run_check_fixture "$darwin_chezmoi_data" bash "$check_root/hook.sh" \
   >"$check_root/hook-failure.log" 2>&1; then
   fail_test "hook must propagate a failed environment check"
 fi
-assert_file_not_contains "$check_root/hook-failure.log" 'Next steps:'
+assert_file_not_contains "$check_root/hook-failure.log" "$plain_next_label Reload your shell"
 
-log_step "🍺" "Testing the Homebrew installer with a stubbed brew..."
+smoke_phase "Testing the Homebrew installer with a stubbed brew..."
 brew_fixture="$tmp_dir/brew-installer"
 mkdir -p "$brew_fixture/bin"
 cat >"$brew_fixture/bin/brew" <<'EOF'
@@ -1797,7 +2001,7 @@ expect_failure "$brew_fixture/failure.err" env -i \
   BREW_CALLS="$brew_fixture/calls" FAIL_BREW=1 \
   bash "$script_dir/install-brew-packages.sh" "$repo_root/bootstrap/manifests/system/Brewfile"
 
-log_step "🔤" "Testing the desktop font installer with a local archive..."
+smoke_phase "Testing the desktop font installer with a local archive..."
 require_command zip
 require_command unzip
 font_fixture="$tmp_dir/font-installer"
@@ -1859,7 +2063,7 @@ run_font_installer() {
     bash "$script_dir/install-maple-mono-font.sh" "$1"
 }
 run_font_installer "$font_fixture/manifest.env" >"$font_fixture/install.log" 2>&1
-assert_file_contains "$font_fixture/install.log" 'installed successfully.'
+assert_file_contains "$font_fixture/install.log" "$plain_ok_label $MAPLE_MONO_FAMILY $MAPLE_MONO_VERSION installed."
 assert_file_contains "$font_marker" "version=$MAPLE_MONO_VERSION sha256=$font_archive_sha"
 for font_face in $MAPLE_MONO_POSTSCRIPT_NAMES; do
   cmp -s "$font_fixture/archive/$font_face.ttf" "$font_install_dir/$font_face.ttf" \
@@ -1887,7 +2091,7 @@ expect_failure "$font_fixture/cache-failure.err" env -i \
 diff -r "$font_fixture/previous" "$font_install_dir" \
   || fail_test "failed Fontconfig refresh did not restore the previous installation"
 
-log_step "🤖" "Verifying the main source deploys only dotfiles..."
+smoke_phase "Verifying the main source deploys only dotfiles..."
 # Repository documentation and metadata are not targets:
 # every path the main source manages is a dot-path directly under HOME.
 managed_listing="$(chezmoi managed --source="$repo_root" --override-data-file "$tmp_data_file" --path-style=absolute)"
@@ -1896,7 +2100,7 @@ while IFS= read -r managed_path; do
     || fail_test "main chezmoi source deploys a non-dotfile target: $managed_path"
 done <<<"$managed_listing"
 
-log_step "📋" "Checking the local overlay inventory..."
+smoke_phase "Checking the local overlay inventory..."
 overlay_manifest="$repo_root/bootstrap/manifests/local-overlays.tsv"
 overlay_examples_dir="$repo_root/docs/local-overlay-examples"
 
@@ -1970,7 +2174,7 @@ done
 git_config_example="$overlay_examples_dir/git-config.example"
 git config --file "$git_config_example" --list >/dev/null
 
-log_step "📁" "Applying main-source configuration under temporary homes..."
+smoke_phase "Applying main-source configuration under temporary homes..."
 config_test_home="$tmp_dir/main-config-home"
 desktop_config="$tmp_dir/desktop-chezmoi.toml"
 cat >"$desktop_config" <<'EOF'
@@ -2115,7 +2319,7 @@ while IFS= read -r backup_target; do
   cmp -s "$backup_target" "$backup_copy" || fail_test "hook 10 changed the backup of $backup_target"
 done <<<"$backup_listing"
 
-log_step "🧹" "Testing uninstall previews, backups, deletion, and state reset..."
+smoke_phase "Testing uninstall previews, backups, deletion, and state reset..."
 uninstall_home="$tmp_dir/uninstall-home"
 uninstall_config_home="$uninstall_home/.config"
 uninstall_data_home="$tmp_dir/uninstall-data"
@@ -2226,7 +2430,7 @@ done
 uninstall_preview="$(with_uninstall_fixture bash "$script_dir/uninstall.sh")"
 for uninstall_bucket in scriptState entryState; do
   assert_file_contains <(printf '%s\n' "$uninstall_preview") \
-    "[would-reset] main chezmoi state bucket: $uninstall_bucket"
+    "$plain_would_label reset main chezmoi state bucket: $uninstall_bucket"
   uninstall_bucket_data="$(with_uninstall_fixture chezmoi --source="$repo_root" state get-bucket --bucket="$uninstall_bucket")"
   [[ "$uninstall_bucket_data" == *seeded* ]] || fail_test "uninstall preview changed $uninstall_bucket"
 done
@@ -2236,15 +2440,15 @@ $uninstall_config_listing
 $uninstall_owned_completions"
 while IFS= read -r uninstall_target; do
   [[ -n "$uninstall_target" ]] || continue
-  assert_file_contains <(printf '%s\n' "$uninstall_preview") "[would-remove] file: $uninstall_target"
+  assert_file_contains <(printf '%s\n' "$uninstall_preview") "$plain_would_label remove file: $uninstall_target"
   [[ -e "$uninstall_target" || -L "$uninstall_target" ]] \
     || fail_test "uninstall preview removed a fixture: $uninstall_target"
 done <<<"$uninstall_removed_files"
 while IFS= read -r overlay_fixture; do
-  assert_file_contains <(printf '%s\n' "$uninstall_preview") "[would-skip] overlay-protected: $overlay_fixture"
+  assert_file_contains <(printf '%s\n' "$uninstall_preview") "$plain_would_label skip overlay-protected: $overlay_fixture"
 done <<<"$overlay_fixture_listing"
 for uninstall_target in "$uninstall_unowned_completion" "$uninstall_linked_completion"; do
-  if grep -Fxq "[would-remove] file: $uninstall_target" <<<"$uninstall_preview"; then
+  if grep -Fxq -- "  $plain_would_label remove file: $uninstall_target" <<<"$uninstall_preview"; then
     fail_test "uninstall preview includes an unowned completion: $uninstall_target"
   fi
 done
@@ -2275,8 +2479,8 @@ uninstall_log="$tmp_dir/uninstall-confirm.log"
 with_uninstall_fixture env PATH="$uninstall_backup_stub_bin:$PATH" \
   UNINSTALL_TEST_TAR="$uninstall_real_tar" UNINSTALL_TEST_COMPLETION="$uninstall_replaced_completion" \
   bash "$script_dir/uninstall.sh" --confirm >"$uninstall_log"
-assert_file_contains "$uninstall_log" "[skipped] completion is no longer owned: $uninstall_replaced_completion"
-uninstall_archive="$(sed -n 's/^\[backed-up\] //p' "$uninstall_log" | sed -n '/\/managed-files\.tgz$/p')"
+assert_file_contains "$uninstall_log" "$plain_skip_label completion is no longer owned: $uninstall_replaced_completion"
+uninstall_archive="$(awk -v prefix="  $plain_ok_label backed-up " 'index($0,prefix)==1 {print substr($0,length(prefix)+1)}' "$uninstall_log" | sed -n '/\/managed-files\.tgz$/p')"
 [[ -f "$uninstall_archive" ]] || fail_test "confirmed uninstall did not create a file backup"
 tar -tzf "$uninstall_archive" 2>/dev/null | sed 's|^/||' >"$tmp_dir/uninstall-archive-list"
 while IFS= read -r uninstall_target; do
@@ -2287,7 +2491,7 @@ while IFS= read -r uninstall_target; do
     || fail_test "uninstall archive omitted a removed file: $uninstall_target"
 done <<<"$uninstall_removed_files"
 [[ ! -e "$uninstall_owned_directory" ]] || fail_test "confirmed uninstall left an owned directory"
-uninstall_tree_archive="$(sed -n 's/^\[backed-up\] //p' "$uninstall_log" | sed -n '/\/tree-.*\.tgz$/p')"
+uninstall_tree_archive="$(awk -v prefix="  $plain_ok_label backed-up " 'index($0,prefix)==1 {print substr($0,length(prefix)+1)}' "$uninstall_log" | sed -n '/\/tree-.*\.tgz$/p')"
 [[ -f "$uninstall_tree_archive" ]] || fail_test "confirmed uninstall did not back up the owned directory"
 tar -tzf "$uninstall_tree_archive" | grep -Fq '/smoke-owned' \
   || fail_test "uninstall tree archive omitted the owned directory contents"
@@ -2318,8 +2522,8 @@ for uninstall_bucket in scriptState entryState; do
     --bucket="$uninstall_bucket" --key=smoke --value='{"seeded":true}'
 done
 with_uninstall_fixture bash "$script_dir/uninstall.sh" --confirm --no-backup >"$uninstall_log"
-assert_file_contains "$uninstall_log" '[skipped] backup (--no-backup)'
-assert_file_not_contains "$uninstall_log" '[backed-up]'
+assert_file_contains "$uninstall_log" "$plain_skip_label backup (--no-backup)"
+assert_file_not_contains "$uninstall_log" "$plain_ok_label backed-up"
 [[ ! -e "$uninstall_main_file" ]] || fail_test "--no-backup did not remove the managed fixture"
 find "$uninstall_state_home" -name '*.tgz' | sort >"$tmp_dir/uninstall-backups-after"
 cmp -s "$tmp_dir/uninstall-backups-before" "$tmp_dir/uninstall-backups-after" \
@@ -2329,7 +2533,7 @@ for uninstall_bucket in scriptState entryState; do
     || fail_test "--no-backup did not clear $uninstall_bucket"
 done
 
-log_step "🧩" "Running manifest and template contract checks..."
+smoke_phase "Running manifest and template contract checks..."
 # The real desktop support rule. Ubuntu versions sit far on either side of the
 # release floor, so these cases check that the floor exists, not its value.
 # WSL never receives the desktop baseline, whatever the distribution.
@@ -2559,7 +2763,7 @@ MAPLE_MONO_FAMILY="Bad; Family"|must contain only letters, digits, spaces, and h
 MAPLE_MONO_POSTSCRIPT_NAMES="Good-Face bad.face"|invalid PostScript name
 MAPLE_MONO_SHA256=ABC|not a lowercase SHA-256 digest
 EOF
-log_step "🛠️" "Running the rendered Linux mise hook against a stubbed installer..."
+smoke_phase "Running the rendered Linux mise hook against a stubbed installer..."
 # The stub curl records its arguments and emits a fake installer that drops a
 # stub mise into the fake HOME, so the `curl ... | sh` pipeline runs end to end
 # without touching the network, the real HOME, or a real installer.
@@ -2588,7 +2792,7 @@ INSTALLER
 EOF
 chmod +x "$mise_stub_bin/curl"
 # Expose only fixture prerequisites, even on hosts with mise in /usr/bin.
-for fixture_command in bash sh dirname cat mkdir chmod; do
+for fixture_command in bash sh dirname cat mkdir chmod mktemp rm; do
   ln -s "$(command -v "$fixture_command")" "$mise_stub_bin/$fixture_command"
 done
 if env -i PATH="$mise_stub_bin" HOME="$mise_fake_home" \
@@ -2607,9 +2811,9 @@ if [[ ! -x "$mise_fake_home/.local/bin/mise" ]]; then
   fail_test "Linux mise hook did not pipe the downloaded installer into sh"
 fi
 assert_file_contains "$mise_hook_output" "mise smoke-stub"
-assert_file_contains "$mise_hook_output" "mise installed successfully."
+assert_file_contains "$mise_hook_output" "$plain_ok_label mise mise smoke-stub"
 
-log_step "🧬" "Verifying the chezmoi init template..."
+smoke_phase "Verifying the chezmoi init template..."
 # Values stored by an earlier init are reused; the prompt answers below would
 # only appear if the template asked again.
 tmp_chezmoi_toml="$tmp_dir/chezmoi-toml.rendered"
@@ -2634,7 +2838,7 @@ chezmoi --source="$repo_root" --override-data "$windows_init_override" \
   --promptBool 'Install Windows desktop baseline (PowerToys + Windows Terminal settings + Maple Mono NF CN)=false' >"$tmp_dir/windows-init.toml"
 assert_toml_section_contains "$tmp_dir/windows-init.toml" "data" 'desktopBaseline = false'
 
-log_step "📦" "Exercising the pacman installer with a stubbed sudo..."
+smoke_phase "Exercising the pacman installer with a stubbed sudo..."
 pacman_stub_bin="$tmp_dir/pacman-stub-bin"
 pacman_manifest="$tmp_dir/pacman-packages.txt"
 pacman_log="$tmp_dir/pacman-args"
@@ -2662,7 +2866,7 @@ printf '%s\n' '--bad-option' >"$pacman_manifest"
 expect_failure "$tmp_dir/pacman.err" run_pacman_installer
 assert_file_contains "$tmp_dir/pacman.err" "invalid pacman package"
 
-log_step "🐍" "Exercising the uv tool installer against stale tool environments..."
+smoke_phase "Exercising the uv tool installer against stale tool environments..."
 # Synthetic interpreters report fixed versions. The environments record the
 # Python they were built on, as uv writes it into pyvenv.cfg.
 uv_stub_bin="$tmp_dir/uv-stub-bin"
@@ -2674,7 +2878,14 @@ cat >"$uv_stub_bin/uv" <<'STUB'
 #!/usr/bin/env bash
 case "$1 $2" in
   "tool dir") printf '%s\n' "$UV_TEST_TOOL_DIR" ;;
-  "tool list") [[ -z "${UV_TEST_LIST_EXIT:-}" ]] || exit "$UV_TEST_LIST_EXIT"; printf 'healthy v1.0\n- healthy\ndrifted v1.0\n- drifted\norphaned v1.0\n- orphaned\nold-python v1.0\n- old-python\nbumped v0.9\n- bumped\n' ;;
+  "tool list")
+    if [[ -n "${UV_TEST_LIST_EXIT:-}" ]]; then
+      printf 'uv partial output'
+      printf 'uv probe diagnostic\n' >&2
+      exit "$UV_TEST_LIST_EXIT"
+    fi
+    printf 'healthy v1.0\n- healthy\ndrifted v1.0\n- drifted\norphaned v1.0\n- orphaned\nold-python v1.0\n- old-python\nbumped v0.9\n- bumped\n'
+    ;;
   *) printf '%s\n' "$*" >>"$UV_TEST_LOG" ;;
 esac
 STUB
@@ -2728,7 +2939,10 @@ printf '%s\n' 'tool uninstall drifted' "tool install --python $tmp_dir/uv-python
   "tool install --python $tmp_dir/uv-python/python absent==1.0" >"$tmp_dir/uv-expected"
 cmp -s "$tmp_dir/uv-expected" "$uv_log" \
   || fail_test "uv installer must rebuild only stale tool environments: $(<"$uv_log")"
-DOTFILES_FORCE_REINSTALL=1 run_uv_installer
+uv_force_home="$tmp_dir/uv-force-home"
+mkdir -p "$uv_force_home/.config/oh-my-devenv"
+printf '%s\n' 'DOTFILES_FORCE_REINSTALL=1' >"$uv_force_home/.config/oh-my-devenv/bootstrap.env"
+HOME="$uv_force_home" XDG_CONFIG_HOME="$uv_force_home/.config" run_uv_installer
 printf '%s\n' 'tool uninstall healthy' "tool install --python $tmp_dir/uv-python/python healthy==1.0" \
   'tool uninstall drifted' "tool install --python $tmp_dir/uv-python/python drifted==1.0" \
   'tool uninstall orphaned' "tool install --python $tmp_dir/uv-python/python orphaned==1.0" \
@@ -2737,16 +2951,19 @@ printf '%s\n' 'tool uninstall healthy' "tool install --python $tmp_dir/uv-python
   "tool install --python $tmp_dir/uv-python/python absent==1.0" >"$tmp_dir/uv-expected"
 cmp -s "$tmp_dir/uv-expected" "$uv_log" \
   || fail_test "uv installer must rebuild every installed tool on force reinstall: $(<"$uv_log")"
-if UV_TEST_LIST_EXIT=42 run_uv_installer 2>/dev/null; then
-  fail_test "uv installer must fail when uv cannot list installed tools"
-fi
+uv_probe_status=0
+UV_TEST_LIST_EXIT=42 run_uv_installer 2>"$tmp_dir/uv-list.err" || uv_probe_status=$?
+[[ "$uv_probe_status" == 42 ]] || fail_test "uv installer must preserve the failed probe status"
+printf '%s\n' "  $plain_error_label could not list installed uv tools (exit 42)." \
+  '    uv partial output' '    uv probe diagnostic' '' >"$tmp_dir/uv-list.expected"
+assert_output_exact "$tmp_dir/uv-list.expected" "$tmp_dir/uv-list.err"
 expect_failure "$tmp_dir/uv-mise.err" env UV_TEST_MISE_FAIL=1 \
   PATH="$uv_stub_bin:$PATH" UV_TEST_TOOL_DIR="$uv_tool_dir" UV_TEST_LOG="$uv_log" \
   UV_TEST_PYTHON="$tmp_dir/uv-python/python" \
   bash "$repo_root/bootstrap/scripts/install-uv-tools.sh" "$uv_manifest"
 assert_file_contains "$tmp_dir/uv-mise.err" 'could not resolve the mise-selected Python'
 
-log_step "🐚" "Checking Bash 3.2 compatibility..."
+smoke_phase "Checking Bash 3.2 compatibility..."
 # All Bash code must run on macOS /bin/bash 3.2. Bash sources are discovered:
 # files with a Bash shebang or ShellCheck directive, Bash dotfiles, and Bash
 # overlay examples. `bash -n` rejects newer syntax; the pattern rejects Bash 4+
@@ -2773,7 +2990,7 @@ while IFS= read -r bash_source; do
     fail_test "Bash 4+ construct in $bash_source; Bash code must run on Bash 3.2"
   fi
 done <<<"$bash_sources"
-log_step "🧭" "Classifying pull request paths for CI..."
+smoke_phase "Classifying pull request paths for CI..."
 ci_needs_checks="$script_dir/ci-needs-checks.sh"
 assert_ci_needs_checks() {
   local expected="$1"
@@ -2792,8 +3009,9 @@ assert_ci_needs_checks true $'docs/dot_bashrc.md\n'
 assert_ci_needs_checks true $'LICENSE\n'
 assert_ci_needs_checks true ''
 
-log_step "🔍" "Running shellcheck on bootstrap scripts..."
+smoke_phase "Running shellcheck on bootstrap scripts..."
 shellcheck "$repo_root"/bootstrap/scripts/*.sh \
   "$repo_root/docs/local-overlay-examples/git-pre-push.example"
 
-log_step "✅" "Smoke tests passed."
+log_phase_done
+log_summary "Smoke tests passed."

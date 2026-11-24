@@ -50,7 +50,7 @@ function Resolve-RegularFile {
         $attributes = Get-FileAttribute -Path $target.FullName
         if ($null -eq $attributes) {
             if ($SkipDangling) {
-                Write-Host "Skipping dangling link '$Path'."
+                Write-LogSkip -Message "Dangling link '$Path'."
                 return
             }
             throw "Dangling link '$Path'."
@@ -128,11 +128,15 @@ function Backup-ExistingFile {
         }
     }
     if ($runDirectory) {
-        Write-Host "${purpose} completed: $runDirectory"
+        if ($BeforeUninstall) {
+            Write-LogOk -Name backed-up -Detail "$runDirectory"
+        } else {
+            Write-LogWarn -Message "${purpose} completed: $runDirectory"
+        }
         if ($PassThru) {
             $runDirectory
         }
     } else {
-        Write-Host 'No pre-existing managed files to back up.'
+        Write-LogSkip -Message 'No pre-existing managed files to back up.'
     }
 }

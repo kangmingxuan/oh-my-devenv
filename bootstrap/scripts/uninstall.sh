@@ -6,23 +6,18 @@
 #
 set -euo pipefail
 
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+repo_root="$(cd "$script_dir/../.." && pwd)"
+# shellcheck disable=SC1091
+source "$script_dir/common.sh"
+
 usage() {
-  cat <<'USAGE'
-Usage: uninstall.sh [--confirm] [--no-backup]
-
-  Default (no flags): dry-run. Prints [would-remove] / [would-skip] for
-  every candidate path and exits 0 without deleting anything.
-
-  --confirm       Actually remove candidates after an optional backup.
-  --no-backup     With --confirm, skip the pre-delete tarball (for CI).
-
-  Never removes apt/Homebrew packages, mise shims, or Go/uv-managed installs.
-  Always keeps the chezmoi source checkout. Confirmation also clears the main
-  scriptState and entryState buckets so the next apply can rerun the hooks.
-
-  Structured log prefixes (grep-friendly):
-    [would-remove] [would-skip] [would-reset] [removed] [skipped] [backed-up] [reset]
-USAGE
+  log_phase "Usage: uninstall.sh [--confirm] [--no-backup]"
+  log_info "Default: preview the candidate paths and state buckets."
+  log_info "--confirm: back up and remove the candidates, then clear scriptState and entryState."
+  log_info "--no-backup: skip the pre-delete tarball with --confirm."
+  log_info "The source checkout and installed packages, mise shims, and Go and uv tools stay in place."
+  log_phase_done
 }
 
 CONFIRM=0
@@ -41,43 +36,35 @@ while [[ $# -gt 0 ]]; do
       exit 0
       ;;
     *)
-      printf 'ERROR: unknown argument: %s\n' "$1" >&2
-      usage >&2
+      log_error "unknown argument: $1" "Usage: uninstall.sh [--confirm] [--no-backup]"
       exit 1
       ;;
   esac
   shift
 done
 
-script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-repo_root="$(cd "$script_dir/../.." && pwd)"
-# common.sh resolves the XDG directories and loads bootstrap.env, so this
-# process and the producers it calls see the same paths.
-# shellcheck disable=SC1091
-source "$script_dir/common.sh"
 # shellcheck disable=SC1091
 source "$script_dir/local-overlays.sh"
 local_overlay_load
 
+install_error_trap "$0"
+if (( CONFIRM )); then
+  log_phase "Uninstalling the baseline..."
+else
+  log_phase "Uninstall preview"
+fi
+
 if ! command -v chezmoi >/dev/null 2>&1; then
-  printf 'ERROR: chezmoi is not on PATH; cannot enumerate managed files.\n' >&2
+  log_error "chezmoi is not on PATH; cannot enumerate managed files."
   exit 1
 fi
 
-would_remove() {
-  printf '[would-remove] %s\n' "$*"
-}
-
-would_skip() {
-  printf '[would-skip] %s\n' "$*"
-}
-
-removed() {
-  printf '[removed] %s\n' "$*"
-}
-
-backed_up() {
-  printf '[backed-up] %s\n' "$*"
+report_uninstall_skip() {
+  if (( CONFIRM )); then
+    log_skip "$1"
+  else
+    log_would skip "$1"
+  fi
 }
 
 is_whitelist_dir() {
@@ -120,11 +107,11 @@ candidates="$(
     --path-style=absolute \
     --format=
 )" || {
-  printf 'ERROR: chezmoi managed failed.\n' >&2
+  log_error "chezmoi managed failed."
   exit 1
 }
 completion_candidates="$(list_owned_completions)" || {
-  printf 'ERROR: shell completion inventory failed.\n' >&2
+  log_error "shell completion inventory failed."
   exit 1
 }
 candidates+=$'\n'"$completion_candidates"
@@ -148,39 +135,42 @@ overlay_logged=$'\n'
 while IFS= read -r p; do
   if local_overlay_matches_path "$p"; then
     overlay_logged+="$p"$'\n'
-    would_skip "overlay-protected: $p"
+    report_uninstall_skip "overlay-protected: $p"
     continue
   fi
 
   if [[ -d "$p" ]]; then
     if is_whitelist_dir "$p"; then
-      would_remove "directory (whitelist): $p"
+      if (( CONFIRM == 0 )); then log_would remove "directory (whitelist): $p"; fi
       rem_dirs+=("$p")
     else
-      would_skip "directory not on whitelist (manual cleanup if needed): $p"
+      report_uninstall_skip "directory not on whitelist (manual cleanup if needed): $p"
     fi
     continue
   fi
 
   if [[ -f "$p" || -L "$p" ]]; then
-    would_remove "file: $p"
+    if (( CONFIRM == 0 )); then log_would remove "file: $p"; fi
     rem_files+=("$p")
     continue
   fi
 
-  would_skip "path does not exist: $p"
+  report_uninstall_skip "path does not exist: $p"
 done < <(printf '%s\n' "$candidates" | sort -u | longest_first)
 
 # User-created overlays may not appear in `chezmoi managed`; still log them
 # when present so the dry run documents their protection.
 while IFS= read -r p; do
   [[ "$overlay_logged" == *$'\n'"$p"$'\n'* ]] && continue
-  would_skip "overlay-protected: $p"
+  report_uninstall_skip "overlay-protected: $p"
 done < <(local_overlay_existing_paths)
 
 if (( CONFIRM == 0 )); then
-  printf '[would-reset] main chezmoi state bucket: %s\n' scriptState entryState
-  printf '\nDry-run complete (--confirm not passed). No files were deleted.\n'
+  for bucket in scriptState entryState; do
+    log_would reset "main chezmoi state bucket: $bucket"
+  done
+  log_phase_done
+  log_summary "Dry-run complete (--confirm not passed). No files were deleted."
   exit 0
 fi
 
@@ -202,17 +192,17 @@ if (( NO_BACKUP == 0 )); then
   if [[ -s "$listfile" ]]; then
     backup_archive="$backup_root/managed-files.tgz"
     tar -P -czf "$backup_archive" -T "$listfile"
-    backed_up "$backup_archive"
+    log_ok backed-up "$backup_archive"
   fi
 
   for d in ${rem_dirs[@]+"${rem_dirs[@]}"}; do
     [[ -d "$d" ]] || continue
     arc="$backup_root/tree-$(basename "$d").tgz"
     tar -czf "$arc" -C "$(dirname "$d")" "$(basename "$d")"
-    backed_up "$arc"
+    log_ok backed-up "$arc"
   done
 else
-  printf '[skipped] backup (--no-backup)\n'
+  log_skip "backup (--no-backup)"
 fi
 
 # --- Remove ---------------------------------------------------------------
@@ -223,20 +213,20 @@ for p in ${rem_files[@]+"${rem_files[@]}"}; do
     # user may have replaced a generated file since the initial inventory.
     current_completions="$(list_owned_completions)"
     if [[ $'\n'"$current_completions"$'\n' != *$'\n'"$p"$'\n'* ]]; then
-      printf '[skipped] completion is no longer owned: %s\n' "$p"
+      log_skip "completion is no longer owned: $p"
       continue
     fi
   fi
   if [[ -f "$p" || -L "$p" ]]; then
     rm -f "$p"
-    removed "$p"
+    log_ok removed "$p"
   fi
 done
 
 for d in ${rem_dirs[@]+"${rem_dirs[@]}"}; do
   if [[ -d "$d" ]]; then
     rm -rf "$d"
-    removed "$d"
+    log_ok removed "$d"
   fi
 done
 
@@ -244,7 +234,9 @@ done
 # run_once scripts use scriptState; run_onchange scripts use entryState.
 for bucket in scriptState entryState; do
   chezmoi --source="$repo_root" state delete-bucket --bucket="$bucket"
-  printf '[reset] main chezmoi state bucket: %s\n' "$bucket"
+  log_ok reset "main chezmoi state bucket: $bucket"
 done
 
-printf '\nUninstall finished (--confirm). Source checkout kept. Re-run chezmoi apply to restore the baseline.\n'
+log_phase_done
+log_summary "Uninstall finished (--confirm). Source checkout kept."
+log_next "Re-run chezmoi apply to restore the baseline."

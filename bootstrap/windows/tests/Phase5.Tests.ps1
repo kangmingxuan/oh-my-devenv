@@ -10,6 +10,9 @@ BeforeAll {
     $profileSource = Join-Path $helpers '../../dot_config/oh-my-devenv/powershell'
     . (Join-Path $helpers 'common.ps1')
     . (Join-Path $helpers 'completions.ps1')
+    . (Join-Path $PSScriptRoot 'fixtures/output-expected.ps1')
+    $missingRow = Read-OutputGolden | Where-Object { $_.Mode -ceq 'plain' -and $_.Level -ceq 'missing' }
+    $missingLabel = ($missingRow.Bytes.TrimStart() -split ' ')[0]
 }
 
 Describe 'PowerShell completion lifecycle' {
@@ -53,7 +56,13 @@ Describe 'PowerShell completion lifecycle' {
         }
         $userBytes = [IO.File]::ReadAllBytes($unowned)
         $shippedBytes = [IO.File]::ReadAllBytes($shipped)
-        $log = Invoke-PowerShellCompletion @installOptions 6>&1 | Out-String
+        $originalNoColor = $env:NO_COLOR
+        try {
+            $env:NO_COLOR = '1'
+            $log = Invoke-PowerShellCompletion @installOptions 6>&1 | Out-String
+        } finally {
+            $env:NO_COLOR = $originalNoColor
+        }
         $log | Should -Match 'fixture-absent.*not on PATH'
         Should -Invoke Invoke-NativeCommand -Times 1 -Exactly
         $header = "$marker; sha256=$($installOptions.Fingerprint)"
@@ -83,8 +92,25 @@ Describe 'PowerShell completion lifecycle' {
 
     It 'lists obsolete owned files and reports missing and obsolete files in check' {
         @(Invoke-PowerShellCompletion @options -Action list) | Should -Be @($stale)
-        { Invoke-PowerShellCompletion @options -Action check } |
-            Should -Throw "*missing*fixture-generated.ps1*stale*fixture-removed.ps1*"
+        $expected = @(
+            "  $missingLabel fixture-generated Owned PowerShell completion: $generated"
+            "  $missingLabel fixture-shipped Owned PowerShell completion: $shippedTarget"
+            "  $missingLabel fixture-removed stale: $stale"
+        )
+        $originalError = [Console]::Error
+        $diagnostics = [IO.StringWriter]::new()
+        $originalNoColor = $env:NO_COLOR
+        try {
+            $env:NO_COLOR = '1'
+            [Console]::SetError($diagnostics)
+            { Invoke-PowerShellCompletion @options -Action check } |
+                Should -Throw "PowerShell completion check found $($expected.Count) missing or stale files."
+            $diagnostics.ToString() | Should -BeExactly (($expected -join $diagnostics.NewLine) + $diagnostics.NewLine)
+        } finally {
+            [Console]::SetError($originalError)
+            $diagnostics.Dispose()
+            $env:NO_COLOR = $originalNoColor
+        }
     }
 
     It 'does not regenerate or rewrite completions on an unchanged reapply' {

@@ -157,7 +157,11 @@ Describe 'Application and SSH diagnostics' {
 Describe 'Uninstall platform boundary' {
     It 'rejects Unix before trying to list targets' -Skip:$IsWindows {
         $uninstall = Join-Path $helpers 'uninstall.ps1'
-        { & $uninstall -Apply -Destination $TestDrive } | Should -Throw '*requires a Windows host*'
+        $result = Invoke-NativeCommand -Executable (Join-Path $PSHOME 'pwsh') -Arguments @(
+            '-NoProfile', '-File', $uninstall, '-Apply', '-Destination', $TestDrive
+        ) -AllowFailure -TimeoutSeconds 30
+        $result.ExitCode | Should -Be 1
+        $result.Stderr | Should -Match 'requires a Windows host'
     }
 }
 

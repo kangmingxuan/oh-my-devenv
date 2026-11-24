@@ -1,11 +1,17 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+. {{ includeTemplate "powershell-literal" (joinPath .chezmoi.sourceDir "bootstrap/windows/common.ps1") }}
+
+trap {
+    Write-BootstrapFailure -Failure $_
+    exit (Get-BootstrapExitCode -Failure $_)
+}
+
 if (-not $IsWindows) {
     throw 'This hook requires native Windows.'
 }
 
-. {{ includeTemplate "powershell-literal" (joinPath .chezmoi.sourceDir "bootstrap/windows/common.ps1") }}
 . {{ includeTemplate "powershell-literal" (joinPath .chezmoi.sourceDir "bootstrap/windows/user-path.ps1") }}
 
 $destination = {{ includeTemplate "powershell-literal" .chezmoi.destDir }}
@@ -16,3 +22,9 @@ $pathTarget = Get-HookUserPathTarget -Destination $destination -HomeDirectory $h
     -Destination $destination -ProfilePath $profilePath -RegistryPath $pathTarget.RegistryPath `
     -ProbeFixtureBin $env:OH_MY_DEVENV_WINDOWS_PROBE_BIN `
     -DesktopBaseline:${{ if (index . "desktopBaseline") }}true{{ else }}false{{ end }}
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+Write-LogNext -Message 'Open a new PowerShell session to load the managed profile and Path.'
+Write-LogNext -Message 'New to this baseline? Read docs/01-onboarding.md.'
+Write-LogNext -Message 'For machine-only settings or restricted networks, see docs/local-overlay-examples/.'
+Write-LogNext -Message 'If something is wrong, report it with the repository bug-report template.'

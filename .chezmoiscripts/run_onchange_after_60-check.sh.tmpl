@@ -38,7 +38,6 @@ bootstrap_dir='{{ joinPath .chezmoi.sourceDir "bootstrap" }}'
 scripts_dir="$bootstrap_dir/scripts"
 
 source "$scripts_dir/common.sh"
-install_error_trap "$0"
 
 bash "$scripts_dir/check.sh" {{ .chezmoi.configFile | quote }}
 
@@ -61,13 +60,12 @@ detect_shell_rc_file() {
   esac
 }
 
-log_info "Next steps:"
 if rc_file="$(detect_shell_rc_file)"; then
-  log_info "  - Reload your shell so this session sees the new PATH (try: source \"$rc_file\")."
+  log_next "Reload your shell so this session sees the new PATH (try: source \"$rc_file\")."
 else
-  log_info "  - Reload your shell (open a new terminal) so PATH picks up the baseline tools."
+  log_next "Reload your shell (open a new terminal) so PATH picks up the baseline tools."
 fi
-log_info "  - New to this baseline? Skim docs/01-onboarding.md — five-minute walkthrough of what just ran."
-log_info "  - Want machine-only tweaks? Copy starters from docs/local-overlay-examples/ (nothing there is deployed by default)."
-log_info "  - Need restricted-network overrides? Keep them local and start from docs/local-overlay-examples/ before the next apply."
-log_info "  - Something looks wrong? Open an issue using the repository's bug-report workflow so the report stays structured."
+log_next "New to this baseline? Skim docs/01-onboarding.md — five-minute walkthrough of what just ran."
+log_next "Want machine-only tweaks? Copy starters from docs/local-overlay-examples/ (nothing there is deployed by default)."
+log_next "Need restricted-network overrides? Keep them local and start from docs/local-overlay-examples/ before the next apply."
+log_next "Something looks wrong? Open an issue using the repository's bug-report workflow so the report stays structured."

@@ -1,7 +1,8 @@
 {{- $packageManager := includeTemplate "system-package-manager" . -}}
 {{ if eq $packageManager "unsupported" -}}
 #!/bin/bash
-printf 'ERROR: supported systems are macOS, Debian/Ubuntu, and Arch Linux families.\n' >&2
+set -euo pipefail
+printf '[error] supported systems are macOS, Debian/Ubuntu, and Arch Linux families.\n\n' >&2
 exit 1
 {{ else -}}
 #!/bin/bash
@@ -15,7 +16,7 @@ scripts_dir="$bootstrap_dir/scripts"
 source "$scripts_dir/common.sh"
 install_error_trap "$0"
 
-log_step "🚀" "Bootstrap: ensuring prerequisites..."
+log_phase "Bootstrap: ensuring prerequisites..."
 
 # Copy pre-existing file and symlink targets of the main source (skipping
 # dangling symlinks) to the same
@@ -36,7 +37,7 @@ backup_existing_managed_configs() {
     --persistent-state="$listing_state/chezmoistate.boltdb" \
     managed --include=files,symlinks --path-style=absolute --format=)"; then
     rm -rf "$listing_state"
-    printf 'ERROR: failed to list managed files for the first-run backup\n' >&2
+    log_error "failed to list managed files for the first-run backup"
     return 1
   fi
   rm -rf "$listing_state"
@@ -48,22 +49,21 @@ backup_existing_managed_configs() {
 
     if [[ -z "$backup_dir" ]]; then
       backup_dir="$(first_run_backup_root)/$(date -u +%Y%m%dT%H%M%SZ)"
-      log_warning "Found pre-existing managed config files. Backing them up before chezmoi overwrites them..."
+      log_warn "Found pre-existing managed config files. Backing them up before chezmoi overwrites them..."
     fi
 
     mkdir -p "$backup_dir$(dirname "$existing_path")"
     if ! cp -Lp "$existing_path" "$backup_dir$existing_path"; then
-      printf 'ERROR: failed to back up %s to %s (check permissions and available disk space)\n' \
-        "$existing_path" "$backup_dir$existing_path" >&2
+      log_error "failed to back up $existing_path to $backup_dir$existing_path (check permissions and available disk space)"
       return 1
     fi
-    log_info "Backed up $existing_path -> $backup_dir$existing_path"
+    log_ok backed-up "$existing_path to $backup_dir$existing_path"
   done <<<"$main_paths"
 
   if [[ -n "$backup_dir" ]]; then
-    log_warning "First-run backup completed. Review $backup_dir after chezmoi finishes if you need to merge any old settings."
+    log_warn "First-run backup completed. Review $backup_dir after chezmoi finishes if you need to merge any old settings."
   else
-    log_info "No pre-existing managed config files detected."
+    log_skip "No pre-existing managed config files detected."
   fi
 }
 
@@ -76,7 +76,7 @@ if ! command -v curl >/dev/null 2>&1 || ! command -v git >/dev/null 2>&1; then
 fi
 {{- else if eq $packageManager "apt" -}}
 if ! command -v curl >/dev/null 2>&1 || ! command -v git >/dev/null 2>&1; then
-  log_step "📦" "Installing essential prerequisites via apt..."
+  log_info "Installing essential prerequisites via apt..."
   require_sudo "install essential prerequisites via apt"
   sudo env DEBIAN_FRONTEND=noninteractive apt-get update -qq
   sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends git curl
@@ -86,14 +86,14 @@ fi
 if ! command -v brew >/dev/null 2>&1 \
   && [[ ! -x /opt/homebrew/bin/brew ]] \
   && [[ ! -x /usr/local/bin/brew ]]; then
-  log_step "🍺" "Installing Homebrew..."
+  log_info "Installing Homebrew..."
   /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 fi
 
 if ! command -v brew >/dev/null 2>&1 \
   && [[ ! -x /opt/homebrew/bin/brew ]] \
   && [[ ! -x /usr/local/bin/brew ]]; then
-  echo "ERROR: Homebrew installation finished but brew was not found" >&2
+  log_error "Homebrew installation finished but brew was not found"
   exit 1
 fi
 {{- end }}
@@ -101,5 +101,5 @@ fi
 # Ensure ~/.local/bin exists for tools installed outside the system package manager.
 mkdir -p "$HOME/.local/bin"
 
-log_step "✅" "Bootstrap prerequisites ready."
+log_phase_done
 {{ end -}}

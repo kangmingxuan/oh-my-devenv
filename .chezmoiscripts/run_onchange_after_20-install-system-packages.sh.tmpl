@@ -2,7 +2,8 @@
 {{- $bootstrapDir := joinPath .chezmoi.sourceDir "bootstrap" -}}
 {{ if eq $packageManager "unsupported" -}}
 #!/bin/bash
-echo "ERROR: unsupported system package manager" >&2
+set -euo pipefail
+printf '[error] unsupported system package manager\n\n' >&2
 exit 1
 {{ else -}}
 #!/bin/bash
@@ -19,19 +20,19 @@ install_error_trap "$0"
 {{ if eq .chezmoi.os "darwin" -}}
 # Brewfile hash: {{ include "bootstrap/manifests/system/Brewfile" | sha256sum }}
 # Homebrew installer hash: {{ include "bootstrap/scripts/install-brew-packages.sh" | sha256sum }}
-log_step "🍺" "Installing system packages via Homebrew..."
+log_phase "Installing system packages via Homebrew..."
 bash "$scripts_dir/install-brew-packages.sh" "$manifests_dir/system/Brewfile"
 {{- else if eq $packageManager "pacman" -}}
 # pacman-packages.txt hash: {{ include "bootstrap/manifests/system/pacman-packages.txt" | sha256sum }}
 # pacman installer hash: {{ include "bootstrap/scripts/install-pacman-packages.sh" | sha256sum }}
-log_step "📦" "Installing system packages via pacman..."
+log_phase "Installing system packages via pacman..."
 bash "$scripts_dir/install-pacman-packages.sh" "$manifests_dir/system/pacman-packages.txt"
 {{- else if eq $packageManager "apt" -}}
 # apt-packages.txt hash: {{ include "bootstrap/manifests/system/apt-packages.txt" | sha256sum }}
 # apt installer hash: {{ include "bootstrap/scripts/install-apt-packages.sh" | sha256sum }}
-log_step "📦" "Installing system packages via apt..."
+log_phase "Installing system packages via apt..."
 bash "$scripts_dir/install-apt-packages.sh" "$manifests_dir/system/apt-packages.txt"
 {{- end }}
 
-log_step "✅" "System packages installation complete."
+log_phase_done
 {{ end -}}
