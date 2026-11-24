@@ -148,4 +148,10 @@ Describe 'PowerShell CLI output' {
         $result.ExitCode | Should -Be 1
         $result.Stderr | Should -Match '\[error\].*did not finish within 1 seconds'
     }
+
+    It 'enforces PSAvoidUsingWriteHost in PSScriptAnalyzer settings' {
+        $settings = Join-Path $PSScriptRoot '../PSScriptAnalyzer.psd1'
+        $findings = @(Invoke-ScriptAnalyzer -Settings $settings -ScriptDefinition "Write-Host 'direct output'")
+        @($findings | Where-Object { $_.RuleName -ceq 'PSAvoidUsingWriteHost' }).Count | Should -BeGreaterThan 0
+    }
 }
