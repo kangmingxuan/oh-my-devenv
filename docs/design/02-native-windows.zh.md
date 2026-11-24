@@ -252,7 +252,7 @@ hook 10 在文件内容上沿用 Unix 的约定：首次 apply 覆盖目标之�
 
 使用当前用户、所有宿主的 profile，即 `$PROFILE.CurrentUserAllHosts`。没有重定向时，它的路径是用户 home 目录下的 `Documents\PowerShell\profile.ps1`。加载标准 profile 的 PowerShell 7 宿主会读取此文件。VS Code PowerShell 扩展的 `powershell.enableProfileLoading` 设置开启时（默认开启）也包括在内。profile 加载可以被关闭（例如 `pwsh -NoProfile`），也可能被执行策略阻止。写入这个当前用户文件通常不需要提权。`$PROFILE` 本身的值是当前用户、当前宿主的 profile：它取决于由哪个宿主解析，其他宿主不会加载它。
 
-profile 路径取决于 Documents 已知文件夹。OneDrive 文件夹重定向可能把该文件夹移走，用户修改 Documents 的位置也会。`Documents/PowerShell/...` 这样的 source 树名称只映射到一个固定的目标路径，不会跟随重定向。
+profile 路径取决于 Documents 已知文件夹。OneDrive 文件夹重定向可能把该文件夹移走，用户修改 Documents 的位置也会。`Documents/PowerShell/...` 这样的 source 树名称只映射到一个固定的目标路径，不会跟随重定向。重定向文件夹中的云文件占位符按普通文件处理。
 
 chezmoi 可以通过 `.chezmoiexternal` 用配置数据计算目标路径。Claude 选择了 stub，因为 profile 路径由 PowerShell 自己解析，stub 不需要额外的配置数据。
 

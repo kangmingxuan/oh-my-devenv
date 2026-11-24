@@ -44,21 +44,21 @@ function Resolve-RegularFile {
     }
     if ($attributes -band [IO.FileAttributes]::ReparsePoint) {
         $target = [IO.File]::ResolveLinkTarget($Path, $true)
-        if ($null -eq $target) {
-            throw "Unsupported reparse point '$Path'."
-        }
-        $attributes = Get-FileAttribute -Path $target.FullName
-        if ($null -eq $attributes) {
-            if ($SkipDangling) {
-                Write-LogSkip -Message "Dangling link '$Path'."
-                return
+        if ($null -ne $target) {
+            $attributes = Get-FileAttribute -Path $target.FullName
+            if ($null -eq $attributes) {
+                if ($SkipDangling) {
+                    Write-LogSkip -Message "Dangling link '$Path'."
+                    return
+                }
+                throw "Dangling link '$Path'."
             }
-            throw "Dangling link '$Path'."
+            if (($attributes -band [IO.FileAttributes]::ReparsePoint) -and
+                $null -ne [IO.File]::ResolveLinkTarget($target.FullName, $true)) {
+                throw "Unsupported link target '$($target.FullName)' for '$Path'."
+            }
+            $Path = $target.FullName
         }
-        if ($attributes -band [IO.FileAttributes]::ReparsePoint) {
-            throw "Unsupported link target '$($target.FullName)' for '$Path'."
-        }
-        $Path = $target.FullName
     }
     if ($attributes -band [IO.FileAttributes]::Directory) {
         throw "Expected a file, found a directory at '$Path'."

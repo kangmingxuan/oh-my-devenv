@@ -266,7 +266,7 @@ Two parsers, one in Bash and one in PowerShell, read each shared manifest. The P
 
 Use the current-user, all-hosts profile, `$PROFILE.CurrentUserAllHosts`. Without redirection, its path is `Documents\PowerShell\profile.ps1` in the user's home directory. PowerShell 7 hosts that load the standard profiles read this file. This includes the VS Code PowerShell extension while its `powershell.enableProfileLoading` setting is on, which is the default. Profile loading can be turned off, for example with `pwsh -NoProfile`, or blocked by the execution policy. Writing this current-user file normally needs no elevation. The plain `$PROFILE` value is the current-user, current-host profile: it depends on the host that resolves it, and other hosts do not load it.
 
-The profile path depends on the Documents known folder. OneDrive folder redirection can move that folder, and so can a user who changes the Documents location. A source-tree name such as `Documents/PowerShell/...` maps to one fixed target path, so it does not follow the redirection.
+The profile path depends on the Documents known folder. OneDrive folder redirection can move that folder, and so can a user who changes the Documents location. A source-tree name such as `Documents/PowerShell/...` maps to one fixed target path, so it does not follow the redirection. Cloud-file placeholders in a redirected folder are accepted as regular files.
 
 chezmoi could compute the target path from config data through `.chezmoiexternal`. Claude chose a stub instead, because PowerShell itself resolves the profile path and the stub needs no extra config data.
 

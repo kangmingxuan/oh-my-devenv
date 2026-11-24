@@ -110,6 +110,30 @@ Describe 'First-run backup' {
         Backup-ExistingFile -Paths @((Join-Path $TestDrive 'missing')) -BackupRoot $root
         $root | Should -Not -Exist
     }
+
+    It 'accepts a non-link reparse point file and still rejects a non-link reparse point directory' {
+        $placeholderFile = Join-Path $TestDrive 'cloud-profile.ps1'
+        $placeholderDir = Join-Path $TestDrive 'cloud-dir'
+        $linkToPlaceholder = Join-Path $TestDrive 'link-to-cloud-profile.ps1'
+        [IO.File]::WriteAllText($placeholderFile, '# cloud placeholder')
+        [void][IO.Directory]::CreateDirectory($placeholderDir)
+        $null = [IO.File]::CreateSymbolicLink($linkToPlaceholder, $placeholderFile)
+        Mock Get-FileAttribute {
+            if ($Path -eq $placeholderFile) {
+                return [IO.FileAttributes]::Archive -bor [IO.FileAttributes]::ReparsePoint
+            }
+            if ($Path -eq $placeholderDir) {
+                return [IO.FileAttributes]::Directory -bor [IO.FileAttributes]::ReparsePoint
+            }
+            [IO.File]::GetAttributes($Path)
+        }
+
+        $resolved = Resolve-RegularFile -Path $placeholderFile
+        $resolved.FullName | Should -BeExactly ([IO.FileInfo]::new($placeholderFile).FullName)
+        $resolvedLink = Resolve-RegularFile -Path $linkToPlaceholder
+        $resolvedLink.FullName | Should -BeExactly ([IO.FileInfo]::new($placeholderFile).FullName)
+        { Resolve-RegularFile -Path $placeholderDir } | Should -Throw '*found a directory*'
+    }
 }
 
 Describe 'Application and SSH diagnostics' {
