@@ -1,6 +1,6 @@
 # Technical Design: Native Windows Platform
 
-Status: accepted. Phases 3, 4, and 5 passed the hosted Windows smoke and apply jobs. During the first live validation, apply completed on a Windows ARM64 client after the Delve build and uv index issues were resolved. The account belonged to Administrators and ran unelevated (section 17). A clean standard-user Windows client remains unverified.
+Status: accepted. Phases 3, 4, and 5 passed the hosted Windows smoke and apply jobs. During the first live validation, apply completed on a Windows ARM64 client after the Delve build and uv index issues were resolved. The account belonged to Administrators and ran unelevated (section 17). A second live apply completed on a Windows 11 x64 client with a pre-existing mise when rerun in a new terminal; PR #79 later fixed the stale `GOROOT` failure. That account also belonged to Administrators and ran unelevated. Standard-user accounts are out of scope and unverified. A first apply on a clean client remains unverified.
 
 ## 1. Summary
 
@@ -31,6 +31,7 @@ The user made these decisions on 2026-11-20, except where another date is stated
 | Use the current-user, all-hosts PowerShell profile | Claude proposed this target and the user approved it. |
 | Ask for design reviews from Gemini 4 Argon and Kimi K3.1 Pro | The user asked Claude to weigh these reviews together with the Codex fact-checks. |
 | Persist the managed directories in the user `Path` | The user decided this on 2026-11-21, so that applications started outside PowerShell find the managed tools. Claude designed the mechanism in section 7. |
+| Target the default Windows account, not standard-user accounts | The user decided this on 2026-11-24. The user and most colleagues use the account that Windows creates at first sign-in with a Microsoft account. That account belongs to Administrators and runs unelevated. Hooks still install at user scope and do not request elevation. Standard-user accounts are out of scope and unverified. |
 
 Claude proposed every other decision in this document within the scope above. Section 16 lists which review findings Claude adopted. The user approved phase 3 on 2026-11-21 and deferred the first live Windows apply until after all planned phases. Claude decided the installation scope, installer and checker behavior, device-policy handling, desktop installation and validation, and the phase-3 uninstall boundary within that approval.
 
@@ -161,7 +162,7 @@ List returns owned scripts, including obsolete entries, for uninstall.
 - Write Windows hooks and helpers for PowerShell 7.6 or later only.
 - On Windows, `.chezmoi.toml.tmpl` sets `[interpreters.ps1]` to `pwsh -NoLogo -NoProfile -File`. Hooks run independently of the user's PowerShell profile. Hook 15 maintains the profile entry and hook 60 verifies startup in a separate shell. Run `chezmoi init` to refresh an existing configuration before apply. [chezmoi interpreter configuration](https://www.chezmoi.io/reference/configuration-file/interpreters/).
 - Install `pwsh` before starting chezmoi so every hook can resolve the interpreter from the initial `PATH`.
-- The WinGet `jdx.mise` package requires the Microsoft Visual C++ 2015+ Redistributable that matches its architecture (x64 or ARM64). The redistributable installs at machine scope. On a standard-user device that lacks it, ask the device administrator to provision it before apply. Hook 30 stops if WinGet fails.
+- The WinGet `jdx.mise` package requires the Microsoft Visual C++ 2015+ Redistributable that matches its architecture (x64 or ARM64). The redistributable installs at machine scope. If a device lacks it, an administrator must install it before apply; the hooks do not request elevation. Hook 30 stops if WinGet fails.
 - Hook 00 fails when the running PowerShell version is below 7.6. This is a compatibility floor only; hook 00 does not check support status. The user keeps PowerShell on a supported release with its latest servicing update, as for any other prerequisite. Record the minimum in `AGENTS.md` next to the Bash 3.2 rule.
 - Start every script with `Set-StrictMode -Version Latest` and `$ErrorActionPreference = 'Stop'`.
 - Check the exit code of every native command. `$ErrorActionPreference` does not stop on a failed native command by default.
@@ -340,7 +341,7 @@ WinGet applies the manifest's user scope to the Oh My Posh MSIX.
 | --- | --- |
 | `fd`, `bat`, `fzf` | `Get-ChildItem` and `Get-Content` cover routine file lookup and reading. PowerShell filtering covers routine selection. |
 | `yq`, `shellcheck`, `shfmt` | YAML editing and Unix shell maintenance have limited use in this Windows baseline. |
-| Everything | Fast NTFS indexing under a standard account uses a service that requires administrator rights to install. [Everything Service](https://www.voidtools.com/support/everything/everything_service/) |
+| Everything | Fast NTFS indexing without elevation uses a service that requires administrator rights to install. [Everything Service](https://www.voidtools.com/support/everything/everything_service/) |
 | 7-Zip | Windows 11 24H2 extracts ordinary 7z and RAR archives in File Explorer. [Microsoft Support](https://support.microsoft.com/en-gb/windows/experience/storage-filemanagement/zip-and-unzip-files) |
 | DevToys | The current DevToys app catalog entry is a 2.0 preview. [WinGet catalog](https://github.com/microsoft/winget-pkgs/tree/master/manifests/d/DevToys-app/DevToys) |
 | `gsudo` | Elevation is outside the baseline. |
@@ -458,7 +459,7 @@ The longest observed paths were 165 characters under the mise data directory
 and 203 under the uv tools directory. The captured apply log had no path-length
 error that matched the diagnostic patterns. These runner paths do not establish behavior for longer client paths. [Full CI run](https://github.com/kangmingxuan/oh-my-devenv/actions/runs/44985641100), [Windows smoke](https://github.com/kangmingxuan/oh-my-devenv/actions/runs/44985641100/job/137095504120), [Windows apply](https://github.com/kangmingxuan/oh-my-devenv/actions/runs/44985641100/job/137095504118).
 
-A clean standard-user Windows client remains unverified. The WinGet mise
+A first apply on a clean Windows client remains unverified. The WinGet mise
 package requires the architecture-matched Microsoft Visual C++ 2015+
 Redistributable at machine scope. If it is missing, ask the device
 administrator to provision it before apply.
@@ -468,7 +469,7 @@ Resolve each remaining item before the phase that depends on it.
 | Item | Phase |
 | --- | --- |
 | Whether the effective script execution policy lets chezmoi run the `.ps1` hooks, and the stop condition when it does not. Do not work around device policy. PowerShell 7 stores execution-policy settings separately from Windows PowerShell 5.1. Group Policy can make it use the Windows PowerShell policy settings, so check the effective policy under `pwsh`. | 2 |
-| First apply on a clean standard-user Windows client with the prerequisite described in section 7. | 4 |
+| First apply on a clean Windows client (no earlier mise or runtimes) with the prerequisite described in section 7. Standard-user accounts are out of scope (section 2). | 4 |
 
 The hosted phase 5 run on `c30194a` passed all jobs. Windows smoke passed
 132 Pester tests and skipped one. The Windows apply job installed seven
@@ -482,8 +483,8 @@ WinGet packages, mise, runtimes, and Go and uv tools remained installed.
 
 The first live apply ran on 2026-11-22 and 2026-11-23 on a Windows Enterprise
 ARM64 client with PowerShell 7.7.0 and chezmoi v2.74.1. The account belonged to
-Administrators and ran unelevated, so a clean standard-user client remains
-unverified. The `pwsh` execution policy was `RemoteSigned` from `LocalMachine`,
+Administrators and ran unelevated, so a clean standard-user client remained
+unverified at the time. The `pwsh` execution policy was `RemoteSigned` from `LocalMachine`,
 and chezmoi ran the `.ps1` hooks. The architecture-matched VC++ runtime was
 already present at machine scope.
 
@@ -495,13 +496,23 @@ already present at machine scope.
 - After PR #70, startup times were means of three runs. A `pwsh` without a profile took 251 ms. With the profile and redirected output, which skips the prompt and completions, it took 620 ms. With prompt and completion loading forced through `OH_MY_DEVENV_PROBE_PROMPT=1`, it took 1,403 ms. The user judged this acceptable.
 - Completion of a partial `mise` subcommand worked. After a trailing space, `mise <Tab>` offered file names, because the upstream generated completer drops the trailing space. [jdx/usage#1671](https://github.com/jdx/usage/issues/1671)
 
+The second live apply ran on 2026-11-24 on a personal Windows 11 Pro x64
+client, version 26H2, build 26300.10075, with PowerShell 7.7.0 and chezmoi
+v2.74.2. The account belonged to Administrators and ran unelevated. oh-my-devenv
+had not been installed before. mise and Go had been installed manually, and mise kept its tools under
+`C:\.mise-installs`.
+
+- The first apply ran in a terminal that had activated the earlier mise configuration. That terminal carried `GOROOT` for Go 1.25.12. Apply selected Go 1.27.1, and hook 50 stopped on its first `go install` with `compile: version "go1.25.12" does not match go tool version "go1.27.1"`. The same apply completed in a new terminal. The Go tool sync now ignores an inherited `GOROOT` on both platforms. [PR #79](https://github.com/kangmingxuan/oh-my-devenv/pull/79)
+- After the rerun, hook 60 printed `All checks passed.` with 10 core tools. It skipped the `bat` completion because `bat` was not on `PATH`.
+- Windows Terminal rendered the rich CLI output: the banner gradient and the `❯`, `✓`, and `›` marks. Legacy conhost was not checked. [PR #77](https://github.com/kangmingxuan/oh-my-devenv/pull/77)
+
 The first successful hosted ARM64 apply job ran on `b46276c`. The runner image
 was `win11-vs2026-arm64` 20261115.219.1 with PowerShell 7.6.10. The workflow
 installed WinGet v1.29.380 and the ARM64 chezmoi v2.74.1. WinGet installed mise
 2026.11.12 for `windows-arm64`. mise installed Go 1.27.1 for `windows/arm64`,
 and hook 50 built Delve v1.27.2. Hook 60 printed `All checks passed.` The job
-runs as the runner administrator, so it does not replace the clean
-standard-user client test. [Full CI run](https://github.com/kangmingxuan/oh-my-devenv/actions/runs/45130784147), [Windows ARM64 apply](https://github.com/kangmingxuan/oh-my-devenv/actions/runs/45130784147/job/137545577528).
+runs as the runner administrator, so it does not replace a first apply
+on a clean client. [Full CI run](https://github.com/kangmingxuan/oh-my-devenv/actions/runs/45130784147), [Windows ARM64 apply](https://github.com/kangmingxuan/oh-my-devenv/actions/runs/45130784147/job/137545577528).
 
 ## 18. Sources
 
