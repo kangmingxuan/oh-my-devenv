@@ -14,6 +14,13 @@ versioning and release policy lives in
   (system packages), 22 (desktop assets), 30 (mise), 40 (runtimes), and 50
   (ecosystem tools) because their helper hash changed. Hook 55 uses the new
   hash to refresh eligible PowerShell completions.
+- Accept OneDrive cloud-file placeholders, and other Windows reparse points
+  that are not links, as regular files. Previously, hook 15, the environment
+  check, and `uninstall.ps1 -Apply` failed with "Unsupported reparse point" when
+  the PowerShell profile sat in a OneDrive folder with Files On-Demand. Symbolic
+  links and junctions are still followed; a link whose final target is such a
+  placeholder now resolves to that file instead of failing. This fix adds no
+  change-triggered hook reruns.
 
 ## [0.4.0] - 2026-11-24
 
