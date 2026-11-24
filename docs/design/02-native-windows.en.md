@@ -1,6 +1,6 @@
 # Technical Design: Native Windows Platform
 
-Status: accepted. Phases 3, 4, and 5 passed the hosted Windows smoke and apply jobs. During the first live validation, apply completed on a Windows ARM64 client after the Delve build and uv index issues were resolved. The account belonged to Administrators and ran unelevated (section 17). A second live apply completed on a Windows 11 x64 client with a pre-existing mise when rerun in a new terminal; PR #79 later fixed the stale `GOROOT` failure. That account also belonged to Administrators and ran unelevated. Standard-user accounts are out of scope and unverified. A first apply on a clean client remains unverified.
+Status: accepted. Phases 3, 4, and 5 passed the hosted Windows smoke and apply jobs. During the first live validation, apply completed on a Windows ARM64 client after the Delve build and uv index issues were resolved. The account belonged to Administrators and ran unelevated (section 17). A second live apply completed on a Windows 11 x64 client with a pre-existing mise when rerun in a new terminal; PR #79 later fixed the stale `GOROOT` failure. That account also belonged to Administrators and ran unelevated. A third live apply was the first apply on a clean client: on a Windows 11 x64 client with no manually installed mise or runtimes, apply completed after PR #84 and a user-level uv index. Oh My Posh was installed manually after a transient WinGet failure. That account also belonged to Administrators and ran unelevated. Standard-user accounts are out of scope and unverified.
 
 ## 1. Summary
 
@@ -393,7 +393,7 @@ Add one Windows overlay, `profile.local.ps1` (section 9), in phase 2 together wi
 - A second hosted apply job runs the same fixture on a native ARM64 Windows 11 runner. Before provisioning, WinGet was not on the ARM64 runner's `PATH`, and the ARM64 VC++ runtime was not installed. The preinstalled Windows Terminal had no `wt.exe` alias for the runner user. Before the fixture runs, a workflow step provisions WinGet through the `Microsoft.WinGet.Client` module and the runtime through WinGet. It registers Terminal again for the runner user. The smoke job runs on x64 only.
 - Every Windows job installs chezmoi with WinGet, as the README does, and checks that the resolved chezmoi matches the runner architecture.
 - Phase 5 smoke tests cover shipped and generated completions, changes in command availability between applies, and font ownership. The hosted apply job runs the real hook 55 and measures completion load time in fresh PowerShell processes. When the runner provides an unredirected console, the profile probe uses `TabExpansion2` to require subcommand results for `chezmoi` and `uv`. The job verifies that uninstall removes owned assets while installed packages and tools remain, then restores the runner's font files, font registry values, user Path, and configuration files.
-- Section 17 records hosted coverage. The hosted jobs leave the clean-client install and the Oh My Posh app execution alias unverified. Section 17 also records the first live apply, which ran after all planned phases and covered the alias.
+- Section 17 records hosted coverage. The hosted jobs leave the clean-client install and the Oh My Posh app execution alias unverified. Section 17 also records the live applies, which ran after all planned phases. The first covered the alias, and the third was a first apply on a clean client.
 - Run both Windows jobs under the same `needs-checks` condition as the Unix jobs, and feed them into the existing single required check. This avoids a second path classifier that could skip Windows CI after a change to a shared file.
 - Live installs on a real Windows machine follow the same local validation policy as the Unix platforms.
 
@@ -450,7 +450,7 @@ and a local drop-in. These results apply to the tools on that runner.
 
 Sections 2, 9, 10, and 11 record the approved phase-3 baseline and its verification rules.
 
-The hosted phase-3 run on `905d27a` passed all jobs. Windows smoke passed 74 Pester tests and skipped one. Windows apply completed the user-scope WinGet imports, including PowerToys. It verified the managed prompt using a copy of the installed Oh My Posh executable. A separate plain `pwsh -File` loaded the profile and overlay and exited. The first apply and Oh My Posh app execution alias check on a user device remain pending. [Full CI run](https://github.com/kangmingxuan/oh-my-devenv/actions/runs/44912366118), [Windows smoke](https://github.com/kangmingxuan/oh-my-devenv/actions/runs/44912366118/job/136870704931), [Windows apply](https://github.com/kangmingxuan/oh-my-devenv/actions/runs/44912366118/job/136870704962).
+The hosted phase-3 run on `905d27a` passed all jobs. Windows smoke passed 74 Pester tests and skipped one. Windows apply completed the user-scope WinGet imports, including PowerToys. It verified the managed prompt using a copy of the installed Oh My Posh executable. A separate plain `pwsh -File` loaded the profile and overlay and exited. At that point, the first apply and Oh My Posh app execution alias check on a user device remained pending. [Full CI run](https://github.com/kangmingxuan/oh-my-devenv/actions/runs/44912366118), [Windows smoke](https://github.com/kangmingxuan/oh-my-devenv/actions/runs/44912366118/job/136870704931), [Windows apply](https://github.com/kangmingxuan/oh-my-devenv/actions/runs/44912366118/job/136870704962).
 
 The hosted phase-4 run on `edde9e9` passed all jobs. WinGet installed mise
 2026.11.12 on the x64 runner. mise installed all six shared tools: Go 1.27.1,
@@ -459,7 +459,7 @@ The longest observed paths were 165 characters under the mise data directory
 and 203 under the uv tools directory. The captured apply log had no path-length
 error that matched the diagnostic patterns. These runner paths do not establish behavior for longer client paths. [Full CI run](https://github.com/kangmingxuan/oh-my-devenv/actions/runs/44985641100), [Windows smoke](https://github.com/kangmingxuan/oh-my-devenv/actions/runs/44985641100/job/137095504120), [Windows apply](https://github.com/kangmingxuan/oh-my-devenv/actions/runs/44985641100/job/137095504118).
 
-A first apply on a clean Windows client remains unverified. The WinGet mise
+The third live apply below covers a first apply on a clean Windows client. The WinGet mise
 package requires the architecture-matched Microsoft Visual C++ 2015+
 Redistributable at machine scope. If it is missing, ask the device
 administrator to provision it before apply.
@@ -469,7 +469,6 @@ Resolve each remaining item before the phase that depends on it.
 | Item | Phase |
 | --- | --- |
 | Whether the effective script execution policy lets chezmoi run the `.ps1` hooks, and the stop condition when it does not. Do not work around device policy. PowerShell 7 stores execution-policy settings separately from Windows PowerShell 5.1. Group Policy can make it use the Windows PowerShell policy settings, so check the effective policy under `pwsh`. | 2 |
-| First apply on a clean Windows client (no earlier mise or runtimes) with the prerequisite described in section 7. Standard-user accounts are out of scope (section 2). | 4 |
 
 The hosted phase 5 run on `c30194a` passed all jobs. Windows smoke passed
 132 Pester tests and skipped one. The Windows apply job installed seven
@@ -505,6 +504,20 @@ had not been installed before. mise and Go had been installed manually, and mise
 - The first apply ran in a terminal that had activated the earlier mise configuration. That terminal carried `GOROOT` for Go 1.25.12. Apply selected Go 1.27.1, and hook 50 stopped on its first `go install` with `compile: version "go1.25.12" does not match go tool version "go1.27.1"`. The same apply completed in a new terminal. The Go tool sync now ignores an inherited `GOROOT` on both platforms. [PR #79](https://github.com/kangmingxuan/oh-my-devenv/pull/79)
 - After the rerun, hook 60 printed `All checks passed.` with 10 core tools. It skipped the `bat` completion because `bat` was not on `PATH`.
 - Windows Terminal rendered the rich CLI output: the banner gradient and the `❯`, `✓`, and `›` marks. Legacy conhost was not checked. [PR #77](https://github.com/kangmingxuan/oh-my-devenv/pull/77)
+
+The third live apply ran on 2026-11-24 on a Windows 11 Enterprise x64 client,
+version 10.0.26200, with PowerShell 7.6.10 and chezmoi v2.74.2. The account
+belonged to Administrators and ran unelevated. The effective `pwsh` execution
+policy was `RemoteSigned`. The user had not installed oh-my-devenv, mise, or language runtimes on it
+before, so this run was the first apply on a clean client.
+OneDrive redirected the Documents folder, and the console used code page 437.
+
+- On the first attempt, the Oh My Posh WinGet install failed with `0x800704c7` while the machine was unattended. A later manual install succeeded without a UAC prompt. Claude judged the failure transient and made no code change.
+- At code page 437, stderr status lines showed `?` in place of the glyph. Stderr now writes UTF-16 to an attached console. A later manual probe at code page 437 showed a red `✗` and a Chinese detail line. [PR #83](https://github.com/kangmingxuan/oh-my-devenv/pull/83)
+- Hook 15 stopped with `Unsupported reparse point` on the profile path. The profile was a OneDrive cloud-file placeholder (reparse tag `0x9000601a`) with no link target. A file reparse point that is not a link is now treated as a regular file. [PR #84](https://github.com/kangmingxuan/oh-my-devenv/pull/84)
+- Network policy blocked the public Python package hosts, so the uv tool installs stopped. A user-level uv index, as on the first live apply, resolved it.
+- After these changes, hook 60 printed `All checks passed.`
+- New terminals loaded the managed prompt. PowerShell reported profile load times of 4,972 ms and 2,765 ms in two sessions. The cause was not investigated.
 
 The first successful hosted ARM64 apply job ran on `b46276c`. The runner image
 was `win11-vs2026-arm64` 20261115.219.1 with PowerShell 7.6.10. The workflow
