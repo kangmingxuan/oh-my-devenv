@@ -25,6 +25,7 @@ if ($PSVersionTable.PSVersion -lt [version]'7.6') {
 . (Join-Path $PSScriptRoot 'desktop.ps1')
 . (Join-Path $PSScriptRoot 'user-path.ps1')
 . (Join-Path $PSScriptRoot 'mise.ps1')
+. (Join-Path $PSScriptRoot 'check-user-path.ps1')
 . (Join-Path $PSScriptRoot 'ecosystem.ps1')
 . (Join-Path $PSScriptRoot 'completions.ps1')
 
@@ -68,7 +69,9 @@ try {
     $configPath = Join-Path $Destination '.config/mise/config.toml'
     $checkName = 'User Path'
     $managedEntries = @(Get-ManagedProfilePathEntry)
-    $missingPath = @(Get-MissingUserPathEntry -PathValue (Read-UserPath -RegistryPath $RegistryPath) -Entries $managedEntries)
+    $userPath = Read-UserPath -RegistryPath $RegistryPath
+    Write-MiseUserPathWarning -PathValue $userPath -ShimsDirectory $managedEntries[0]
+    $missingPath = @(Get-MissingUserPathEntry -PathValue $userPath -Entries $managedEntries)
     if ($missingPath.Count) {
         throw "Missing directories in the user Path: $($missingPath -join '; '). Run chezmoi apply."
     }
