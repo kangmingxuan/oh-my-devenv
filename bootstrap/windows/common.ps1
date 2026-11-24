@@ -16,6 +16,67 @@ function Test-LogRich {
         $env:TERM -cne 'dumb' -and $PSStyle.OutputRendering -ne 'PlainText'
 }
 
+function Test-WindowsConsoleStderr {
+    $IsWindows -and -not [Console]::IsErrorRedirected
+}
+
+function Write-WindowsConsoleStderr {
+    param([AllowEmptyString()][string]$Message)
+
+    # Write UTF-16 directly to the stderr handle without changing the shared console code page.
+    if (-not ('OhMyDevEnv.WindowsConsole' -as [type])) {
+        Add-Type -TypeDefinition @'
+using System;
+using System.ComponentModel;
+using System.IO;
+using System.Runtime.InteropServices;
+
+namespace OhMyDevEnv {
+    public static class WindowsConsole {
+        private const int StdErrorHandle = -12;
+        private const int MaxChunkLength = 8192;
+
+        [DllImport("kernel32.dll", ExactSpelling = true, SetLastError = true)]
+        private static extern IntPtr GetStdHandle(int handle);
+
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, ExactSpelling = true, SetLastError = true)]
+        private static extern bool WriteConsoleW(IntPtr handle, string text, int length, out int written, IntPtr reserved);
+
+        public static void WriteErrorLine(string message) {
+            IntPtr handle = GetStdHandle(StdErrorHandle);
+            string text = message + Environment.NewLine;
+            int offset = 0;
+            while (offset < text.Length) {
+                int length = Math.Min(MaxChunkLength, text.Length - offset);
+                if (offset + length < text.Length && char.IsSurrogatePair(text, offset + length - 1)) {
+                    length--;
+                }
+                if (!WriteConsoleW(handle, text.Substring(offset, length), length, out int written, IntPtr.Zero)) {
+                    throw new Win32Exception();
+                }
+                if (written == 0) {
+                    throw new IOException("WriteConsoleW wrote no characters.");
+                }
+                offset += written;
+            }
+        }
+    }
+}
+'@
+    }
+    [OhMyDevEnv.WindowsConsole]::WriteErrorLine($Message)
+}
+
+function Write-LogStderr {
+    param([AllowEmptyString()][string]$Message)
+
+    if (Test-WindowsConsoleStderr) {
+        Write-WindowsConsoleStderr -Message $Message
+    } else {
+        [Console]::Error.WriteLine($Message)
+    }
+}
+
 function Write-LogLine {
     param(
         [string]$Level,
@@ -63,7 +124,7 @@ function Write-LogLine {
     }
 
     if ($plain) { $Message = "$plain $Message" }
-    if ($stderr) { [Console]::Error.WriteLine("$indent$Message") } else { Write-Host "$indent$Message" }
+    if ($stderr) { Write-LogStderr -Message "$indent$Message" } else { Write-Host "$indent$Message" }
 }
 
 $script:LogPhaseClock = $null
@@ -113,7 +174,7 @@ function Write-LogError {
     foreach ($line in $Details) {
         if ($line) { Write-LogDetail -Message $line }
     }
-    [Console]::Error.WriteLine()
+    Write-LogStderr -Message ''
 }
 function Write-LogWould {
     param([string]$Action, [string]$Target)

@@ -7,6 +7,14 @@ versioning and release policy lives in
 
 ## [Unreleased]
 
+### Fixed
+
+- Preserve Unicode status glyphs and diagnostic text on Windows console stderr
+  at any console code page. The next apply reruns the enabled Windows hooks 20
+  (system packages), 22 (desktop assets), 30 (mise), 40 (runtimes), and 50
+  (ecosystem tools) because their helper hash changed. Hook 55 uses the new
+  hash to refresh eligible PowerShell completions.
+
 ## [0.4.0] - 2026-11-24
 
 ### Breaking
