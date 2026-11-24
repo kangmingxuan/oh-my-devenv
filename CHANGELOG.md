@@ -21,6 +21,12 @@ versioning and release policy lives in
   PSReadLine previously used its Windows edit mode. Override either setting in
   `profile.local.ps1`.
 
+### Fixed
+
+- Sync Go tools with the Go executable selected by mise on Unix and Windows.
+  The installer ignores a stale `GOROOT` from the parent shell, and the Windows
+  post-install check does the same when it reads Go tool versions.
+
 ## [0.3.0] - 2026-11-23
 
 ### Breaking

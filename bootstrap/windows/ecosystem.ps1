@@ -99,7 +99,8 @@ function Confirm-EcosystemTool {
         $go = Get-MiseToolExecutable -Name go
         foreach ($tool in $goTools) {
             $binary = Confirm-ToolBinary -Name $tool.Name -Directory $env:GOBIN
-            $result = Invoke-NativeCommand -Executable $go -Arguments @('version', '-m', $binary)
+            $result = Invoke-NativeCommand -Executable $go -Arguments @('version', '-m', $binary) `
+                -Environment @{ GOROOT = $null }
             $buildInfo = $result.Stdout -split '\r?\n'
             $pathLines = @($buildInfo | Where-Object { $_ -cmatch '^\tpath\t' })
             if ($pathLines.Count -ne 1 -or ($pathLines[0] -csplit '\t', 3)[2] -cne $tool.ImportPath) {

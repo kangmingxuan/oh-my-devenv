@@ -29,8 +29,10 @@ function Install-GoTool {
         Write-LogSkip -Message 'No Go tools to install.'
         return
     }
+    # Let the resolved executable derive GOROOT from its own toolchain.
+    $goEnvironment = @{ GOROOT = $null }
     $targetArchitecture = (Invoke-NativeCommand -Executable $go -Arguments @('env', 'GOARCH') `
-            -WorkingDirectory "$env:SystemDrive\").Stdout.Trim()
+            -Environment $goEnvironment -WorkingDirectory "$env:SystemDrive\").Stdout.Trim()
     if (-not $targetArchitecture) { throw "'$go env GOARCH' reported no target architecture." }
     [void][IO.Directory]::CreateDirectory($env:GOBIN)
     Write-LogInfo -Message "Syncing Go tools from '$ManifestPath' into '$env:GOBIN'."
@@ -38,7 +40,8 @@ function Install-GoTool {
         # Rebuild every tool when the hook inputs change, including the Go version.
         Write-LogInfo -Message "Installing $($tool.Spec)"
         $arguments = Get-GoInstallArgument -Spec $tool.Spec -TargetArchitecture $targetArchitecture
-        $null = Invoke-NativeCommand -Executable $go -Arguments $arguments -WorkingDirectory "$env:SystemDrive\" -Live
+        $null = Invoke-NativeCommand -Executable $go -Arguments $arguments -Environment $goEnvironment `
+            -WorkingDirectory "$env:SystemDrive\" -Live
     }
 }
 

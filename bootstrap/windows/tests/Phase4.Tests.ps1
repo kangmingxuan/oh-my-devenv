@@ -155,6 +155,23 @@ Describe 'Windows phase 4 helpers' -Skip:(-not $IsWindows) {
             }
         }
 
+        It 'removes inherited GOROOT from the resolved Go probe and install only' {
+            [IO.File]::WriteAllText($manifest, 'example.com/fixture@v1.2.3')
+            $oldGoRoot = $env:GOROOT
+            $staleGoRoot = Join-Path $TestDrive 'old-go'
+            $env:GOROOT = $staleGoRoot
+            try {
+                Install-GoTool -ManifestPath $manifest
+                Should -Invoke Invoke-NativeCommand -Times 2 -Exactly -ParameterFilter {
+                    $Executable -eq 'managed-go.exe' -and $Arguments[0] -in 'env', 'install' -and
+                    $Environment -and $Environment.ContainsKey('GOROOT') -and $null -eq $Environment.GOROOT
+                }
+                $env:GOROOT | Should -BeExactly $staleGoRoot
+            } finally {
+                $env:GOROOT = $oldGoRoot
+            }
+        }
+
         It 'validates the entire Go manifest before installing any entry' {
             [IO.File]::WriteAllLines($manifest, @('example.com/first@v1.2.3', 'example.com/second@latest'))
             { Install-GoTool -ManifestPath $manifest } | Should -Throw '*must pin an exact module version*'
@@ -250,6 +267,10 @@ Describe 'Windows phase 4 helpers' -Skip:(-not $IsWindows) {
             $commands = @(Confirm-EcosystemTool -GoManifest $manifest -UvManifest $uvManifest)
             $commands.Count | Should -Be 1
             $commands[0].Path | Should -BeExactly (Join-Path $env:GOBIN 'tool.exe')
+            Should -Invoke Invoke-NativeCommand -Times 1 -Exactly -ParameterFilter {
+                $Executable -eq 'managed-go.exe' -and ($Arguments -join ' ') -like 'version -m *' -and
+                $Environment -and $Environment.ContainsKey('GOROOT') -and $null -eq $Environment.GOROOT
+            }
             $buildPath = 'example.com/module/cmd/another-tool'
             { Confirm-EcosystemTool -GoManifest $manifest -UvManifest $uvManifest } |
                 Should -Throw "*command path 'example.com/module/cmd/tool'*"
