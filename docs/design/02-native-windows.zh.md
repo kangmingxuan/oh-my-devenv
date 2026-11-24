@@ -1,6 +1,6 @@
 # 技术设计：原生 Windows 平台
 
-状态：已接受。阶段 3、阶段 4 和阶段 5 已通过托管 Windows smoke 和 apply 作业。首次实机验证中，解决 Delve 构建和 uv 索引问题后，apply 在一台 Windows ARM64 客户端上完成。测试账户属于 Administrators 组，以非提升权限运行（第 17 节）。第二次实机 apply 在一台已装有 mise 的 Windows 11 x64 客户端上于新开的终端中重跑完成；过期 `GOROOT` 导致的失败随后由 PR #79 修复。该账户同样属于 Administrators 组，以非提升权限运行。标准用户账户不在目标范围内，未经验证。在全新客户端上的首次 apply 仍待验证。
+状态：已接受。阶段 3、阶段 4 和阶段 5 已通过托管 Windows smoke 和 apply 作业。首次实机验证中，解决 Delve 构建和 uv 索引问题后，apply 在一台 Windows ARM64 客户端上完成。测试账户属于 Administrators 组，以非提升权限运行（第 17 节）。第二次实机 apply 在一台已装有 mise 的 Windows 11 x64 客户端上于新开的终端中重跑完成；过期 `GOROOT` 导致的失败随后由 PR #79 修复。该账户同样属于 Administrators 组，以非提升权限运行。第三次实机 apply 是在全新客户端上的首次 apply：在一台没有手动安装过 mise 或运行时的 Windows 11 x64 客户端上，apply 在 PR #84 和用户级 uv 索引之后完成。Oh My Posh 在一次偶发的 WinGet 失败后手动安装。该账户同样属于 Administrators 组，以非提升权限运行。标准用户账户不在目标范围内，未经验证。
 
 ## 1. 概要
 
@@ -377,7 +377,7 @@ WinGet 将清单要求的用户范围应用到 Oh My Posh MSIX。
 - 第二个托管 apply job 在原生 ARM64 的 Windows 11 runner 上运行同一个 fixture。预配前，ARM64 runner 的 `PATH` 上无法找到 WinGet，也没有安装 ARM64 VC++ 运行库。预装的 Windows Terminal 没有为 runner 用户提供 `wt.exe` 别名。fixture 运行前，工作流的一个步骤通过 `Microsoft.WinGet.Client` 模块预配 WinGet，并通过 WinGet 预配该运行库。该步骤为 runner 用户重新注册 Terminal。smoke job 只在 x64 上运行。
 - 每个 Windows job 都像 README 一样用 WinGet 安装 chezmoi，并检查解析到的 chezmoi 与 runner 架构一致。
 - 阶段 5 的 smoke 测试覆盖发行方补全脚本、生成补全、两次 apply 之间的命令可用性变化和字体归属。托管 apply 作业运行真实的 hook 55，并在新 PowerShell 进程中测量补全加载耗时。runner 提供无重定向控制台时，profile 探测使用 `TabExpansion2` 验证 `chezmoi` 和 `uv` 的子命令补全。作业检查卸载是否移除受管资产并保留已安装的软件包和工具，然后恢复 runner 的字体文件、字体注册值、用户 Path 和配置文件。
-- 第 17 节记录托管作业的覆盖范围。托管作业没有验证干净客户端上的安装和 Oh My Posh 应用执行别名。第 17 节还记录了在所有计划阶段完成后进行的首次实机 apply，该次 apply 覆盖了应用执行别名。
+- 第 17 节记录托管作业的覆盖范围。托管作业没有验证干净客户端上的安装和 Oh My Posh 应用执行别名。第 17 节还记录了在所有计划阶段完成后进行的实机 apply。首次实机 apply 覆盖了应用执行别名，第三次是在全新客户端上的首次 apply。
 - 两个 Windows job 都在与 Unix job 相同的 `needs-checks` 条件下运行，并汇入现有的单一 required check。这样不需要第二个路径分类器，避免共享文件改动后 Windows CI 被跳过。
 - 在真实 Windows 机器上的实际安装，遵循与 Unix 平台相同的本地验证策略。
 
@@ -433,7 +433,7 @@ Windows OpenSSH 9.5p2 读取了受管的默认配置，并拒绝了顶层配置�
 
 第 2、9、10 和 11 节记录了已批准的阶段 3 基线及其验证规则。
 
-`905d27a` 的阶段 3 托管运行通过了所有作业。Windows smoke 通过 74 项 Pester 测试，跳过 1 项。Windows apply 完成了用户范围的 WinGet 导入，包括 PowerToys。它使用已安装的 Oh My Posh 可执行文件副本验证了受管提示符。单独运行的普通 `pwsh -File` 加载了 profile 和 overlay，随后正常退出。用户设备上的首次 apply 和 Oh My Posh 应用执行别名检查仍待进行。[完整 CI 运行](https://github.com/kangmingxuan/oh-my-devenv/actions/runs/44912366118)、[Windows smoke](https://github.com/kangmingxuan/oh-my-devenv/actions/runs/44912366118/job/136870704931)、[Windows apply](https://github.com/kangmingxuan/oh-my-devenv/actions/runs/44912366118/job/136870704962)。
+`905d27a` 的阶段 3 托管运行通过了所有作业。Windows smoke 通过 74 项 Pester 测试，跳过 1 项。Windows apply 完成了用户范围的 WinGet 导入，包括 PowerToys。它使用已安装的 Oh My Posh 可执行文件副本验证了受管提示符。单独运行的普通 `pwsh -File` 加载了 profile 和 overlay，随后正常退出。当时，用户设备上的首次 apply 和 Oh My Posh 应用执行别名检查仍待进行。[完整 CI 运行](https://github.com/kangmingxuan/oh-my-devenv/actions/runs/44912366118)、[Windows smoke](https://github.com/kangmingxuan/oh-my-devenv/actions/runs/44912366118/job/136870704931)、[Windows apply](https://github.com/kangmingxuan/oh-my-devenv/actions/runs/44912366118/job/136870704962)。
 
 `edde9e9` 的阶段 4 托管运行通过了所有作业。WinGet 在 x64 runner 上安装了 mise
 2026.11.12。mise 安装了共享配置中的全部六项工具：Go 1.27.1、golangci-lint v2.14.0、
@@ -441,7 +441,7 @@ Node 24.21.0、Python 3.13.16、usage 6.12.0 和 uv 0.11.33。mise 数据目录�
 目录中观察到的最长路径分别为 165 和 203 个字符。采集到的 apply 日志中没有与诊断模式匹配的路径长度错误。这些 runner 路径不能说明更长的客户端路径的行为。
 [完整 CI 运行](https://github.com/kangmingxuan/oh-my-devenv/actions/runs/44985641100)、[Windows smoke](https://github.com/kangmingxuan/oh-my-devenv/actions/runs/44985641100/job/137095504120)、[Windows apply](https://github.com/kangmingxuan/oh-my-devenv/actions/runs/44985641100/job/137095504118)。
 
-在全新 Windows 客户端上的首次 apply 仍待验证。WinGet 的 mise 包需要在机器范围安装架构
+下文的第三次实机 apply 覆盖了在全新 Windows 客户端上的首次 apply。WinGet 的 mise 包需要在机器范围安装架构
 匹配的 Microsoft Visual C++ 2015+ Redistributable。缺少该运行库时，请在 apply 前
 由设备管理员预装。
 
@@ -450,7 +450,6 @@ Node 24.21.0、Python 3.13.16、usage 6.12.0 和 uv 0.11.33。mise 数据目录�
 | 事项 | 阶段 |
 | --- | --- |
 | 实际生效的脚本执行策略是否允许 chezmoi 运行 `.ps1` hook，以及不允许时的停止条件。不绕过设备策略。PowerShell 7 与 Windows PowerShell 5.1 分开存储执行策略设置。组策略可以让它使用 Windows PowerShell 的策略设置，所以要在 `pwsh` 下检查实际生效的策略。 | 2 |
-| 在满足第 7 节前置条件的全新 Windows 客户端（此前没有 mise 或运行时）上完成首次 apply。标准用户账户不在目标范围内（第 2 节）。 | 4 |
 
 阶段 5 在 `c30194a` 上的托管运行通过了所有作业。Windows smoke 通过了 132 项 Pester
 测试，跳过一项。Windows apply 作业安装了七个 PowerShell 补全。由于 `bat` 不在
@@ -483,6 +482,19 @@ Administrators 组，以非提升权限运行，因此全新的标准用户客�
 - 第一次 apply 在一个已激活旧 mise 配置的终端中运行。该终端带着 Go 1.25.12 的 `GOROOT`。apply 选定了 Go 1.27.1，hook 50 在第一个 `go install` 处停止，报错为 `compile: version "go1.25.12" does not match go tool version "go1.27.1"`。同样的 apply 在新开的终端中完成。Go 工具同步现在在两个平台上都忽略继承的 `GOROOT`。[PR #79](https://github.com/kangmingxuan/oh-my-devenv/pull/79)
 - 重新运行后，hook 60 输出 `All checks passed.`，共 10 个核心工具。由于 `bat` 不在 `PATH` 上，它跳过了 `bat` 补全。
 - Windows Terminal 正确显示了富文本 CLI 输出：banner 渐变色以及 `❯`、`✓`、`›` 标记。未检查旧版 conhost。[PR #77](https://github.com/kangmingxuan/oh-my-devenv/pull/77)
+
+第三次实机 apply 于 2026-11-24 在一台 Windows 11 企业版 x64 客户端上运行，
+版本 10.0.26200，使用 PowerShell 7.6.10 和 chezmoi v2.74.2。测试账户属于
+Administrators 组，以非提升权限运行。`pwsh` 实际生效的执行策略是 `RemoteSigned`。
+用户此前没有在这台电脑上安装过 oh-my-devenv、mise 或语言运行时，因此这次是在全新
+客户端上的首次 apply。OneDrive 重定向了 Documents 文件夹，控制台使用代码页 437。
+
+- 第一次尝试时，Oh My Posh 的 WinGet 安装在机器无人值守期间以 `0x800704c7` 失败。之后手动安装成功，没有出现 UAC 提示。Claude 判断这是偶发失败，没有修改代码。
+- 在代码页 437 下，stderr 状态行把图标显示成 `?`。stderr 现在向已连接的控制台写入 UTF-16。之后在代码页 437 下手动探测，显示出红色的 `✗` 和一行中文详情。[PR #83](https://github.com/kangmingxuan/oh-my-devenv/pull/83)
+- hook 15 在 profile 路径上以 `Unsupported reparse point` 停止。该 profile 是 OneDrive 云文件占位符（reparse 标签 `0x9000601a`），没有链接目标。不是链接的文件 reparse point 现在按普通文件处理。[PR #84](https://github.com/kangmingxuan/oh-my-devenv/pull/84)
+- 网络策略拦截了公共 Python 包主机，因此 uv 工具安装停止。与首次实机 apply 一样，用户级 uv 索引解决了这个问题。
+- 完成这些修改后，hook 60 输出 `All checks passed.`
+- 新终端加载了受管提示符。PowerShell 在两个会话中报告的 profile 加载耗时为 4,972 ms 和 2,765 ms。原因尚未调查。
 
 首次成功的托管 ARM64 apply job 在 `b46276c` 上运行。runner 镜像为
 `win11-vs2026-arm64` 20261115.219.1，使用 PowerShell 7.6.10。工作流安装了

@@ -13,7 +13,7 @@ Need the broader docs map first? Start at [`docs/README.md`](../README.md).
 | [`00-cross-platform-bootstrap.en.md`](00-cross-platform-bootstrap.en.md) | You need the authoritative rationale for the layered bootstrap model (system / runtime / ecosystem), the choice of chezmoi over alternatives, and how macOS and supported Linux distributions share one source of truth. English. |
 | [`00-cross-platform-bootstrap.zh.md`](00-cross-platform-bootstrap.zh.md) | Same document in Chinese. The two files are kept in sync by hand; if they diverge, treat the English version as the source of truth unless the commit message says otherwise. |
 | [`01-release-and-versioning.en.md`](01-release-and-versioning.en.md) | You need the repository's release, changelog, and tagging policy. English. |
-| [`02-native-windows.en.md`](02-native-windows.en.md) | You need the design for native Windows as a fourth platform: scope, layout, hook mapping, shared data, and phases. Status: accepted; phases 2–5 implemented; live validation passed on a Windows ARM64 client and a Windows x64 client; standard-user accounts are out of scope, and a first apply on a clean client remains unverified. English. |
+| [`02-native-windows.en.md`](02-native-windows.en.md) | You need the design for native Windows as a fourth platform: scope, layout, hook mapping, shared data, and phases. Status: accepted; phases 2–5 implemented; live validation passed on a Windows ARM64 client and two Windows x64 clients, including a first apply on a clean client; standard-user accounts are out of scope. English. |
 | [`02-native-windows.zh.md`](02-native-windows.zh.md) | Same document in Chinese. Treat the English version as the source of truth when they diverge. |
 
 ## When to add a design doc here
