@@ -5,6 +5,98 @@ param()
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+Describe 'mise install directories in the user Path' {
+    BeforeAll {
+        . (Join-Path $PSScriptRoot '../common.ps1')
+        . (Join-Path $PSScriptRoot '../check-user-path.ps1')
+
+        # Provide the command signature for mocks on hosts without the Windows mise helper.
+        function Invoke-GlobalMise {
+            param([string[]]$Arguments, [switch]$AllowFailure)
+            throw "Unexpected unmocked mise command '$($Arguments -join ' ')' with AllowFailure=$AllowFailure."
+        }
+    }
+
+    BeforeEach {
+        $oldInstallsDir = $env:MISE_INSTALLS_DIR
+        $env:MISE_INSTALLS_DIR = $null
+        $dataDir = Join-Path $TestDrive 'mise-data'
+        $installRoot = Join-Path $dataDir 'installs'
+        $shims = Join-Path $dataDir 'shims'
+        $stale = Join-Path $installRoot 'sample/1.0/bin'
+        Mock Write-LogWarn {}
+        Mock Write-LogDetail {}
+        Mock Invoke-GlobalMise {
+            @{ ExitCode = 0; Stdout = ConvertTo-Json -InputObject @{ dirs = @{ data = $dataDir } } }
+        }
+    }
+
+    AfterEach {
+        $env:MISE_INSTALLS_DIR = $oldInstallsDir
+    }
+
+    It 'warns once for each install entry and skips shims and directories outside the root' {
+        $second = Join-Path $installRoot 'another/2.0'
+        $sibling = "$installRoot-other/bin"
+        $escaped = "$installRoot/../unrelated"
+        $pathValue = @{ Kind = 'String'; Value = "$shims;$stale;$sibling;$escaped;$installRoot;$second;relative" }
+
+        Write-MiseUserPathWarning -PathValue $pathValue -ShimsDirectory $shims
+
+        Should -Invoke Write-LogWarn -Exactly -Times 2
+        Should -Invoke Write-LogWarn -Exactly -Times 1 -ParameterFilter { $Message.Contains("'$stale'") }
+        Should -Invoke Write-LogWarn -Exactly -Times 1 -ParameterFilter { $Message.Contains("'$second'") }
+        Should -Invoke Write-LogDetail -Exactly -Times 2 -ParameterFilter { $Message -like 'Remove this entry from the user Path.*shims*' }
+        Should -Invoke Invoke-GlobalMise -Exactly -Times 1 -ParameterFilter {
+            ($Arguments -join ' ') -eq 'doctor --json' -and $AllowFailure
+        }
+    }
+
+    It 'uses the custom install root and reports the original expandable entry' {
+        $env:MISE_INSTALLS_DIR = Join-Path $TestDrive 'custom installs'
+        $shims = Join-Path $env:MISE_INSTALLS_DIR 'managed-shims'
+        $entry = '"%MISE_INSTALLS_DIR%/sample/1.0/bin"'
+        $pathValue = @{ Kind = 'ExpandString'; Value = "$stale;$entry;$shims" }
+
+        Write-MiseUserPathWarning -PathValue $pathValue -ShimsDirectory $shims
+
+        Should -Invoke Invoke-GlobalMise -Exactly -Times 0
+        Should -Invoke Write-LogWarn -Exactly -Times 1
+        Should -Invoke Write-LogWarn -Exactly -Times 1 -ParameterFilter { $Message.Contains("'$entry'") }
+    }
+
+    It 'accepts usable JSON when mise doctor reports a diagnostic problem' {
+        Mock Invoke-GlobalMise {
+            @{ ExitCode = 1; Stdout = ConvertTo-Json -InputObject @{ dirs = @{ data = $dataDir }; errors = @('fixture') } }
+        }
+
+        Write-MiseUserPathWarning -PathValue @{ Kind = 'String'; Value = $stale } -ShimsDirectory $shims
+
+        Should -Invoke Write-LogWarn -Exactly -Times 1
+    }
+
+    It 'skips the advisory when the probe returns <Output> with exit <Code>' -ForEach @(
+        @{ Output = 'invalid JSON'; Code = 0 }
+        @{ Output = '{}'; Code = 1 }
+        @{ Output = ''; Code = 2 }
+    ) {
+        Mock Invoke-GlobalMise { @{ ExitCode = $Code; Stdout = $Output } }
+
+        { Write-MiseUserPathWarning -PathValue @{ Kind = 'String'; Value = $stale } -ShimsDirectory $shims } | Should -Not -Throw
+
+        Should -Invoke Write-LogWarn -Exactly -Times 0
+        Should -Invoke Write-LogDetail -Exactly -Times 0
+    }
+
+    It 'skips the advisory when mise cannot start' {
+        Mock Invoke-GlobalMise { throw 'Could not start mise.' }
+
+        { Write-MiseUserPathWarning -PathValue @{ Kind = 'String'; Value = $stale } -ShimsDirectory $shims } | Should -Not -Throw
+
+        Should -Invoke Write-LogWarn -Exactly -Times 0
+    }
+}
+
 Describe 'Windows phase 4 helpers' -Skip:(-not $IsWindows) {
     BeforeAll {
         $helpers = Join-Path $PSScriptRoot '..'

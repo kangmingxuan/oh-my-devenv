@@ -196,6 +196,9 @@ setting use plain mode on terminal streams as well.
 The level definitions are in [common.sh](../bootstrap/scripts/common.sh) and
 [common.ps1](../bootstrap/windows/common.ps1).
 
+On Windows, the environment check prints an advisory when the user `Path`
+contains a direct mise tool installation entry.
+
 ### Restricted networks
 
 Export each tool's native variable in

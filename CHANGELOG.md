@@ -7,6 +7,12 @@ versioning and release policy lives in
 
 ## [Unreleased]
 
+### Added
+
+- Warn when the Windows user `Path` contains direct mise tool installation
+  directories. The environment check suggests removing the entries and using
+  the managed shims.
+
 ### Changed
 
 - Bootstrap output uses the same plain labels and terminal glyphs on Unix and
