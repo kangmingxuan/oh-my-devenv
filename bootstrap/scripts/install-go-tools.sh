@@ -17,8 +17,10 @@ if [[ ! -f "$MANIFEST" ]]; then
   exit 1
 fi
 
-if ! command -v go >/dev/null 2>&1; then
-  log_error "go not found in PATH"
+# Resolve from / so project configuration and stale PATH entries cannot select Go.
+if ! go_executable="$(cd / 2>&1 && capture_probe mise which go)" ||
+  [[ "$go_executable" != /* || ! -x "$go_executable" ]]; then
+  log_error "could not resolve the mise-selected Go with 'mise which go' from /" "$go_executable"
   exit 1
 fi
 
@@ -42,12 +44,15 @@ done
 log_info "Syncing Go tools from $MANIFEST"
 log_info "Using GOBIN=$GOBIN"
 
+# Let the resolved executable derive GOROOT from its own toolchain.
+unset GOROOT
+
 # The ecosystem hook runs this script only when its inputs change, so every
 # tool is installed again. A Go upgrade must rebuild the tools, and the Go
 # build cache keeps reinstalling an unchanged tool fast.
 for tool in "${tools[@]}"; do
   log_info "Installing $tool"
-  go install "$tool"
+  "$go_executable" install "$tool"
 done
 
 log_ok Go "Tools synced."

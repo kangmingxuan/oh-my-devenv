@@ -1096,28 +1096,47 @@ EOF
 # These installers must parse and execute on Bash 3.2 through their normal CLI.
 # Put only fixture commands on PATH, so the apt and Go commands cannot escape.
 installer_fixture="$tmp_dir/installer-output"
-mkdir -p "$installer_fixture/bin" "$installer_fixture/home"
-for fixture_command in bash dirname mkdir sed; do
+mkdir -p "$installer_fixture/bin" "$installer_fixture/home" \
+  "$installer_fixture/old-go/bin" "$installer_fixture/selected-go/bin"
+for fixture_command in bash dirname mkdir mktemp rm sed; do
   ln -s "$(command -v "$fixture_command")" "$installer_fixture/bin/$fixture_command"
 done
 cat >"$installer_fixture/bin/sudo" <<'EOF'
 #!/bin/bash
 printf 'stub sudo: %s\n' "$*"
 EOF
-cat >"$installer_fixture/bin/go" <<'EOF'
+cat >"$installer_fixture/bin/mise" <<'EOF'
 #!/bin/bash
+[[ "$PWD" == / && "$*" == "which go" ]] || exit 1
+printf '%s\n' "$HOME/../selected-go/bin/go"
+EOF
+cat >"$installer_fixture/old-go/bin/go" <<'EOF'
+#!/bin/bash
+printf 'stale Go selected from PATH\n' >&2
+exit 1
+EOF
+cat >"$installer_fixture/selected-go/bin/go" <<'EOF'
+#!/bin/bash
+if [[ ${GOROOT+x} ]]; then
+  printf 'selected Go inherited GOROOT=%s\n' "$GOROOT" >&2
+  exit 1
+fi
 printf 'stub go: %s\n' "$*"
 EOF
-chmod +x "$installer_fixture/bin/sudo" "$installer_fixture/bin/go"
+chmod +x "$installer_fixture/bin/sudo" "$installer_fixture/bin/mise" \
+  "$installer_fixture/old-go/bin/go" "$installer_fixture/selected-go/bin/go"
 printf 'fixture-package\n' >"$installer_fixture/apt.txt"
 printf 'example.com/fixture@v1.2.3\n' >"$installer_fixture/go.txt"
-for installer_kind in apt go; do
-  if [[ "$installer_kind" == apt ]]; then installer=install-apt-packages; else installer=install-go-tools; fi
-  env -i PATH="$installer_fixture/bin" HOME="$installer_fixture/home" NO_COLOR=1 \
-    bash "$script_dir/$installer.sh" "$installer_fixture/$installer_kind.txt" >"$installer_fixture/$installer_kind.out"
-done
+env -i PATH="$installer_fixture/bin" HOME="$installer_fixture/home" NO_COLOR=1 \
+  bash "$script_dir/install-apt-packages.sh" "$installer_fixture/apt.txt" >"$installer_fixture/apt.out"
 assert_file_contains "$installer_fixture/apt.out" 'stub sudo: env DEBIAN_FRONTEND=noninteractive apt-get install'
-assert_file_contains "$installer_fixture/go.out" 'stub go: install example.com/fixture@v1.2.3'
+for path_go in old-go selected-go; do
+  env -i PATH="$installer_fixture/$path_go/bin:$installer_fixture/bin" HOME="$installer_fixture/home" \
+    GOROOT="$installer_fixture/old-go" NO_COLOR=1 \
+    bash "$script_dir/install-go-tools.sh" "$installer_fixture/go.txt" >"$installer_fixture/go.out" 2>&1 \
+    || fail_test "Go installer failed with $path_go first on PATH: $(<"$installer_fixture/go.out")"
+  assert_file_contains "$installer_fixture/go.out" 'stub go: install example.com/fixture@v1.2.3'
+done
 mkdir -p "$installer_fixture/home/.config/oh-my-devenv"
 cat >"$installer_fixture/home/.config/oh-my-devenv/bootstrap.env" <<'EOF'
 export CI=true
