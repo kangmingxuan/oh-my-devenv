@@ -1,3 +1,5 @@
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingWriteHost', '',
+    Justification = 'Writes the internal probe success marker directly to stdout rather than user-facing status output.')]
 param(
     [Parameter(Mandatory)][string]$SuccessMarker,
     [Parameter(Mandatory)][string]$ExpectedPoshConfig,

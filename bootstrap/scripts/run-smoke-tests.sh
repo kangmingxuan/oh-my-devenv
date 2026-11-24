@@ -3009,6 +3009,170 @@ assert_ci_needs_checks true $'docs/dot_bashrc.md\n'
 assert_ci_needs_checks true $'LICENSE\n'
 assert_ci_needs_checks true ''
 
+smoke_phase "Checking bootstrap Bash output uses renderer helpers..."
+# Hooks under .chezmoiscripts/ and Bash scripts under bootstrap/scripts/
+# (other than common.sh and this suite) must emit user-facing status lines
+# through common.sh helpers rather than bare printf/echo status markers.
+# Deliberate pre-source guards are explicitly allowlisted below and must remain
+# matched so stale entries fail the suite.
+output_lint_allow_files=()
+output_lint_allow_substrings=()
+output_lint_allow_hits=()
+allow_raw_output() {
+  output_lint_allow_files+=("$1")
+  output_lint_allow_substrings+=("$2")
+  output_lint_allow_hits+=(0)
+}
+# Pre-source XDG_CONFIG_HOME guard before common.sh is loaded.
+allow_raw_output ".chezmoiscripts/run_before_00-banner.sh.tmpl" "unsupported XDG_CONFIG_HOME="
+# Unsupported-OS branch exits without sourcing common.sh.
+allow_raw_output ".chezmoiscripts/run_once_before_10-bootstrap.sh.tmpl" "supported systems are macOS, Debian/Ubuntu, and Arch Linux families."
+# Unsupported package-manager branch exits without sourcing common.sh.
+allow_raw_output ".chezmoiscripts/run_onchange_after_20-install-system-packages.sh.tmpl" "unsupported system package manager"
+# Pre-source argument-count guard before common.sh is loaded.
+allow_raw_output "bootstrap/scripts/check.sh" "[error] %s [chezmoi-config-file]"
+# Pre-source XDG_CONFIG_HOME guard before common.sh is loaded.
+allow_raw_output "bootstrap/scripts/check.sh" "unsupported XDG_CONFIG_HOME="
+# Pre-source argument guard before common.sh is loaded.
+allow_raw_output "bootstrap/scripts/ci-apply.sh" "[error] %s <desktop-baseline: true|false>"
+# Pre-source CI=true guard before common.sh is loaded.
+allow_raw_output "bootstrap/scripts/ci-apply.sh" "applies to and uninstalls from the home directory."
+
+# Derive the renderer's plain bracketed status labels from the golden fixture
+# so the lint stays in sync with common.sh and does not flag TOML/INI section
+# headers such as [tools].
+output_lint_plain_labels="$(
+  LC_ALL=C awk -F '\t' '
+    $1 == "plain" {
+      s = $4
+      sub(/^[[:space:]]+/, "", s)
+      if (s ~ /^\[[a-z][a-z-]*\]/) {
+        sub(/\].*$/, "", s)
+        sub(/^\[/, "", s)
+        if (!seen[s]++) {
+          out = (out == "" ? s : out "|" s)
+        }
+      }
+    }
+    END { print out }
+  ' "$output_fixtures/cli-output.tsv"
+)"
+[[ -n "$output_lint_plain_labels" ]] \
+  || fail_test "no plain status labels derived from $output_fixtures/cli-output.tsv"
+
+# Match printf/echo logical lines (joining backslash continuations and reporting
+# the first physical line number) whose printed text starts with a plain
+# renderer label, phase/warning marker (==>, ! ), renderer glyph (✓, ✗, ❯, ›,
+# ▸), or emoji (UTF-8 F0 9F.. or E2 98..9E). Using LC_ALL=C with octal byte
+# ranges keeps matching identical across macOS BSD awk and Linux gawk
+# regardless of locale.
+find_raw_status_output() {
+  LC_ALL=C awk -v labels="$output_lint_plain_labels" '
+    function ends_with_continuation(line,    n, i) {
+      n = 0
+      for (i = length(line); i >= 1 && substr(line, i, 1) == "\\"; i--) {
+        n++
+      }
+      return (n % 2) == 1
+    }
+    function flush_line() {
+      if (buf != "" && buf ~ pat) {
+        printf "%d:%s\n", start_nr, buf
+      }
+      buf = ""
+    }
+    BEGIN {
+      emoji = "(\360\237|\342[\230-\236]|\342\200\272|\342\226\270)"
+      marker = "(\\[(" labels ")\\]|==>|[!] |" emoji ")"
+      fmt = "([\"'\''][[:space:]]*%[sb][^\"'\'']*[\"'\''][[:space:]]+)?"
+      esc = "(\\\\n|\\\\r|\\\\033\\[[0-9;]*m|\\\\e\\[[0-9;]*m|\\\\x1b\\[[0-9;]*m)"
+      pat = "(^|[[:space:];|&`(])(printf|echo)([[:space:]]+-[neE]+|[[:space:]]+--)*[[:space:]]+" fmt "\\$?[\"'\'']?[[:space:]]*" esc "*[[:space:]]*" marker
+      buf = ""
+      start_nr = 0
+    }
+    {
+      if (buf == "") {
+        if ($0 ~ /^[[:space:]]*#/) next
+        start_nr = NR
+        buf = $0
+      } else {
+        buf = substr(buf, 1, length(buf) - 1) $0
+      }
+      if (ends_with_continuation(buf)) next
+      flush_line()
+    }
+    END { flush_line() }
+  ' "$1"
+}
+
+# Self-check the matcher on synthetic cases: TOML/INI section headers are data
+# writes (must pass), while backslash-continued status lines must fail on their
+# first physical line number.
+cat >"$tmp_dir/output-lint-toml.sh" <<'EOF'
+#!/usr/bin/env bash
+printf '[tools]\n' >"$config"
+EOF
+if [[ -n "$(find_raw_status_output "$tmp_dir/output-lint-toml.sh")" ]]; then
+  fail_test "output lint must not flag TOML section data writes"
+fi
+cat >"$tmp_dir/output-lint-continued.sh" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' \
+  '[ok] installed'
+EOF
+output_lint_continued_match="$(find_raw_status_output "$tmp_dir/output-lint-continued.sh")"
+if [[ "$output_lint_continued_match" != 2:* ]]; then
+  fail_test "output lint must catch backslash-continued status lines on their first line (got: $output_lint_continued_match)"
+fi
+
+output_lint_violations=()
+for output_lint_file in "$repo_root"/.chezmoiscripts/*.sh.tmpl "$repo_root"/bootstrap/scripts/*.sh; do
+  output_lint_rel="${output_lint_file#"$repo_root"/}"
+  case "$output_lint_rel" in
+    bootstrap/scripts/common.sh|bootstrap/scripts/run-smoke-tests.sh) continue ;;
+  esac
+  output_lint_matches="$(find_raw_status_output "$output_lint_file")"
+  [[ -n "$output_lint_matches" ]] || continue
+  while IFS= read -r output_lint_match; do
+    [[ -n "$output_lint_match" ]] || continue
+    output_lint_line_no="${output_lint_match%%:*}"
+    output_lint_line_text="${output_lint_match#*:}"
+    output_lint_allowed=0
+    output_lint_idx=0
+    while [[ "$output_lint_idx" -lt "${#output_lint_allow_files[@]}" ]]; do
+      if [[ "${output_lint_allow_files[$output_lint_idx]}" == "$output_lint_rel" \
+        && "$output_lint_line_text" == *"${output_lint_allow_substrings[$output_lint_idx]}"* ]]; then
+        output_lint_allow_hits[output_lint_idx]=$((output_lint_allow_hits[output_lint_idx] + 1))
+        output_lint_allowed=1
+      fi
+      output_lint_idx=$((output_lint_idx + 1))
+    done
+    if [[ "$output_lint_allowed" -eq 0 ]]; then
+      output_lint_violations+=("$output_lint_rel:$output_lint_line_no: $output_lint_line_text")
+    fi
+  done <<<"$output_lint_matches"
+done
+if [[ "${#output_lint_violations[@]}" -gt 0 ]]; then
+  for output_lint_violation in "${output_lint_violations[@]}"; do
+    log_detail "$output_lint_violation"
+  done
+  fail_test "hand-written status output found in bootstrap Bash code; use common.sh renderer helpers"
+fi
+output_lint_stale=()
+output_lint_idx=0
+while [[ "$output_lint_idx" -lt "${#output_lint_allow_files[@]}" ]]; do
+  if [[ "${output_lint_allow_hits[$output_lint_idx]}" -eq 0 ]]; then
+    output_lint_stale+=("${output_lint_allow_files[$output_lint_idx]} (${output_lint_allow_substrings[$output_lint_idx]})")
+  fi
+  output_lint_idx=$((output_lint_idx + 1))
+done
+if [[ "${#output_lint_stale[@]}" -gt 0 ]]; then
+  for output_lint_entry in "${output_lint_stale[@]}"; do
+    log_detail "$output_lint_entry"
+  done
+  fail_test "stale output-lint allowlist entries matched no violating line"
+fi
+
 smoke_phase "Running shellcheck on bootstrap scripts..."
 shellcheck "$repo_root"/bootstrap/scripts/*.sh \
   "$repo_root/docs/local-overlay-examples/git-pre-push.example"

@@ -720,8 +720,21 @@ function prompt {{ 'overlay prompt> ' }}
             Set-FixtureText -Path (Join-Path $renderedRoot $hook.BaseName) -Content $rendered.Stdout
         }
         $settings = Join-Path $helpers 'PSScriptAnalyzer.psd1'
+        $allowWriteHostSettings = Import-PowerShellDataFile -LiteralPath $settings
+        $allowWriteHostSettings.ExcludeRules = @($allowWriteHostSettings.ExcludeRules) + @('PSAvoidUsingWriteHost')
+        $commonHelperPath = [IO.Path]::GetFullPath((Join-Path $helpers 'common.ps1'))
+        $testsDirectoryPrefix = [IO.Path]::GetFullPath($PSScriptRoot) + [IO.Path]::DirectorySeparatorChar
         $findings = @(
-            Invoke-ScriptAnalyzer -Settings $settings -Path $helpers -Recurse
+            foreach ($helperFile in Get-ChildItem -LiteralPath $helpers -Recurse -File |
+                Where-Object { $_.Extension -in '.ps1', '.psm1', '.psd1' }) {
+                $fullPath = [IO.Path]::GetFullPath($helperFile.FullName)
+                if ($fullPath.Equals($commonHelperPath, [StringComparison]::OrdinalIgnoreCase) -or
+                    $fullPath.StartsWith($testsDirectoryPrefix, [StringComparison]::OrdinalIgnoreCase)) {
+                    Invoke-ScriptAnalyzer -Settings $allowWriteHostSettings -Path $fullPath
+                } else {
+                    Invoke-ScriptAnalyzer -Settings $settings -Path $fullPath
+                }
+            }
             Invoke-ScriptAnalyzer -Settings $settings -Path $renderedRoot -Recurse
             Invoke-ScriptAnalyzer -Settings $settings -Path (Join-Path $source 'dot_config/oh-my-devenv/powershell') -Recurse
         )

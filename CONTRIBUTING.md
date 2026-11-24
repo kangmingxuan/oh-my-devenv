@@ -96,7 +96,9 @@ macOS provides all three tools.
 - Tests verify parsing, rendering, syntax, permissions, management boundaries, and user-visible behavior. Do not duplicate literal configuration values in test code; the configuration file is their source of truth.
 
 Send user-facing bootstrap output through the renderer helpers in
-`bootstrap/scripts/common.sh` and `bootstrap/windows/common.ps1`.
+`bootstrap/scripts/common.sh` and `bootstrap/windows/common.ps1`. The smoke
+suite and `PSScriptAnalyzer` enforce this rule for Bash and PowerShell
+bootstrap scripts.
 
 ## Manifest Contracts
 
