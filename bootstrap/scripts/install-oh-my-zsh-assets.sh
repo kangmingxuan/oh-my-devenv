@@ -1,31 +1,31 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck disable=SC1091
+source "$script_dir/common.sh"
+
 MANIFEST="${1:-}"
 
 if [[ -z "$MANIFEST" ]]; then
-  echo "USAGE: $0 <manifest-path>" >&2
+  log_error "$0 <manifest-path>"
   exit 1
 fi
 
 if [[ ! -f "$MANIFEST" ]]; then
-  echo "ERROR: $MANIFEST not found" >&2
+  log_error "$MANIFEST not found"
   exit 1
 fi
 
 if ! command -v git >/dev/null 2>&1; then
-  echo "ERROR: git not found in PATH" >&2
+  log_error "git not found in PATH"
   exit 1
 fi
 
 if ! command -v zsh >/dev/null 2>&1; then
-  echo "ERROR: zsh not found in PATH" >&2
+  log_error "zsh not found in PATH"
   exit 1
 fi
-
-script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck disable=SC1091
-source "$script_dir/common.sh"
 
 ZSH_DIR="$(oh_my_devenv_oh_my_zsh_dir)"
 ZSH_CUSTOM_DIR="$ZSH_DIR/custom"
@@ -45,19 +45,19 @@ clone_or_update_repo() {
   fi
 
   if [[ ! -d "$target_dir/.git" ]]; then
-    echo "WARNING: $target_dir exists but is not a git repository, skipping" >&2
+    log_warn "$target_dir exists but is not a git repository, skipping"
     return 0
   fi
 
   if [[ -n "$(git -C "$target_dir" status --porcelain 2>/dev/null)" ]]; then
-    echo "WARNING: $target_dir has local changes, skipping update" >&2
+    log_warn "$target_dir has local changes, skipping update"
     return 0
   fi
 
   git -C "$target_dir" pull --ff-only --quiet
 }
 
-echo "==> Ensuring oh-my-zsh is installed in $ZSH_DIR"
+log_info "Ensuring oh-my-zsh is installed in $ZSH_DIR"
 clone_or_update_repo "$OH_MY_ZSH_REPO" "$ZSH_DIR"
 
 mkdir -p "$ZSH_CUSTOM_DIR"
@@ -68,21 +68,21 @@ while IFS= read -r plugin; do
 done < <(manifest_entries "$MANIFEST")
 
 if [[ ${#plugins[@]} -eq 0 ]]; then
-  echo "No oh-my-zsh plugins to install."
+  log_skip "No oh-my-zsh plugins to install."
   exit 0
 fi
 
-echo "==> Ensuring oh-my-zsh plugins from $MANIFEST"
+log_info "Ensuring oh-my-zsh plugins from $MANIFEST"
 for plugin in "${plugins[@]}"; do
   read -r repo path extra <<<"$plugin"
 
   if [[ -z "$repo" || -z "$path" || -n "$extra" ]]; then
-    echo "ERROR: invalid plugin entry '$plugin' in $MANIFEST" >&2
+    log_error "invalid plugin entry '$plugin' in $MANIFEST"
     exit 1
   fi
 
-  echo "  -> $repo"
+  log_info "Syncing $repo"
   clone_or_update_repo "https://github.com/$repo.git" "$ZSH_CUSTOM_DIR/$path"
 done
 
-echo "==> oh-my-zsh assets are ready."
+log_ok oh-my-zsh "Assets ready."

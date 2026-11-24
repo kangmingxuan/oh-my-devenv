@@ -174,18 +174,27 @@ Every generated file carries an ownership comment marker. A leading `#compdef`
 line is preserved and the marker follows it; otherwise the marker is the first
 line. When a command leaves the manifest or a native completion replaces a
 generated asset, the next `install` prunes its marked files after the current
-entries install. `check` reports them as `[stale]`, and `list` includes existing owned files at
+entries install. `check` reports them as missing with a `stale:` detail, and `list` includes existing owned files at
 current and obsolete targets so `uninstall.sh` can remove them. Uninstall
 rechecks ownership before deletion. Uninstall and obsolete-file cleanup leave
 unmarked files and symlinks in those directories untouched.
 
 ### Output
 
-| Variable | Default | Effect |
-|----------|---------|--------|
-| `NO_LOGO=1` | off | Hide the startup banner. |
-| `NO_EMOJI=1` | off | Disable emoji in bootstrap output. |
-| `NO_COLOR=1` | off | Disable colored output. |
+Bootstrap commands choose the output mode independently for stdout and stderr.
+Terminal streams use colored status glyphs. Redirected streams use plain-text
+labels. `TERM=dumb` and the PowerShell `$PSStyle.OutputRendering = 'PlainText'`
+setting use plain mode on terminal streams as well.
+
+| Variable | Effect |
+|----------|--------|
+| `NO_LOGO=1` | Hide the startup banner. |
+| `NO_COLOR` (non-empty) | Use plain labels and show the banner without color. |
+| `CI` (non-empty) | Use plain labels and hide the banner. |
+| `COLORTERM=truecolor`, `COLORTERM=24bit`, or a set `WT_SESSION` | Use a truecolor gradient on the banner when rich mode is active. Other rich terminals use magenta. |
+
+The level definitions are in [common.sh](../bootstrap/scripts/common.sh) and
+[common.ps1](../bootstrap/windows/common.ps1).
 
 ### Restricted networks
 

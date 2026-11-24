@@ -21,9 +21,9 @@ setup_go_env
 
 export_tool_path "$GOBIN"
 
-log_step "🔄" "Syncing ecosystem tools..."
+log_phase "Syncing ecosystem tools..."
 
 bash "$scripts_dir/install-go-tools.sh" "$manifests_dir/ecosystem/go-tools.txt"
 bash "$scripts_dir/install-uv-tools.sh" "$manifests_dir/ecosystem/uv-tools.txt"
 
-log_step "✅" "Ecosystem tools synced."
+log_phase_done

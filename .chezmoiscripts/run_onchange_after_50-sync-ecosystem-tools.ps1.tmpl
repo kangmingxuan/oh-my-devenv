@@ -11,8 +11,23 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+. {{ includeTemplate "powershell-literal" (joinPath .chezmoi.sourceDir "bootstrap/windows/common.ps1") }}
+
+trap {
+    Write-BootstrapFailure $_
+    exit (Get-BootstrapExitCode $_)
+}
+
 if (-not $IsWindows) { throw 'This hook requires native Windows.' }
 
+. {{ includeTemplate "powershell-literal" (joinPath .chezmoi.sourceDir "bootstrap/windows/mise.ps1") }}
+. {{ includeTemplate "powershell-literal" (joinPath .chezmoi.sourceDir "bootstrap/windows/ecosystem.ps1") }}
+. {{ includeTemplate "powershell-literal" (joinPath .chezmoi.sourceDir "bootstrap/windows/install-go-tools.ps1") }}
+. {{ includeTemplate "powershell-literal" (joinPath .chezmoi.sourceDir "bootstrap/windows/install-uv-tools.ps1") }}
+
+Write-LogPhase 'Syncing ecosystem tools...'
+Update-HookPath -Managed
 $manifests = {{ includeTemplate "powershell-literal" (joinPath .chezmoi.sourceDir "bootstrap/manifests/ecosystem") }}
-& {{ includeTemplate "powershell-literal" (joinPath .chezmoi.sourceDir "bootstrap/windows/install-go-tools.ps1") }} -ManifestPath (Join-Path $manifests 'go-tools.txt')
-& {{ includeTemplate "powershell-literal" (joinPath .chezmoi.sourceDir "bootstrap/windows/install-uv-tools.ps1") }} -ManifestPath (Join-Path $manifests 'uv-tools.txt')
+Install-GoTool -ManifestPath (Join-Path $manifests 'go-tools.txt')
+Install-UvTool -ManifestPath (Join-Path $manifests 'uv-tools.txt')
+Write-LogPhaseDone

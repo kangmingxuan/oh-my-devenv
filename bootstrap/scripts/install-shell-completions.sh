@@ -2,8 +2,12 @@
 
 set -euo pipefail
 
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck disable=SC1091
+source "$script_dir/common.sh"
+
 usage() {
-  printf 'Usage: %s <install|check|list> <linux|darwin> <manifest-path>\n' "${0##*/}" >&2
+  log_error "${0##*/} <install|check|list> <linux|darwin> <manifest-path>"
 }
 
 if [[ $# -ne 3 ]]; then
@@ -32,13 +36,9 @@ case "$platform" in
 esac
 
 if [[ ! -f "$manifest" ]]; then
-  printf 'ERROR: completion manifest not found: %s\n' "$manifest" >&2
+  log_error "completion manifest not found: $manifest"
   exit 1
 fi
-
-script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck disable=SC1091
-source "$script_dir/common.sh"
 
 bash_completion_dir="$XDG_DATA_HOME/bash-completion/completions"
 zsh_completion_dir="$XDG_DATA_HOME/zsh/site-functions"
@@ -113,15 +113,15 @@ load_completion_manifest() {
 
     read -r command_name extra <<<"$entry"
     if [[ -z "$command_name" || -n "$extra" ]]; then
-      printf 'ERROR: completion manifest entry must be "<command>": %s\n' "$entry" >&2
+      log_error "completion manifest entry must be \"<command>\": $entry"
       exit 1
     fi
     if [[ ! "$command_name" =~ $completion_command_pattern ]]; then
-      printf 'ERROR: invalid completion command name in %s: %s\n' "$manifest" "$command_name" >&2
+      log_error "invalid completion command name in $manifest: $command_name"
       exit 1
     fi
     if [[ "$seen_commands" == *" $command_name "* ]]; then
-      printf 'ERROR: duplicate completion command in %s: %s\n' "$manifest" "$command_name" >&2
+      log_error "duplicate completion command in $manifest: $command_name"
       exit 1
     fi
     seen_commands+="$command_name "
@@ -283,7 +283,7 @@ generate_completion() {
       "$command_name" completion "$shell_name"
       ;;
     *)
-      printf 'ERROR: unsupported completion generator: %s\n' "$command_name" >&2
+      log_error "unsupported completion generator: $command_name"
       return 1
       ;;
   esac
@@ -294,10 +294,10 @@ install_generated_completion() {
   local shell_name="$2"
   local target="$3"
   local target_dir=""
-  local temporary=""
+  local temporary="" diagnostic="" status=0
 
   if ! command -v "$command_name" >/dev/null 2>&1; then
-    printf 'ERROR: completion generator is not on PATH: %s\n' "$command_name" >&2
+    log_error "completion generator is not on PATH: $command_name"
     return 1
   fi
 
@@ -306,12 +306,14 @@ install_generated_completion() {
   temporary="$(mktemp "$target.tmp.XXXXXX")"
   register_completion_temp_file "$temporary"
 
-  if ! generate_completion "$command_name" "$shell_name" >"$temporary"; then
+  diagnostic="$(generate_completion "$command_name" "$shell_name" 2>&1 >"$temporary")" || status=$?
+  if (( status )); then
     rm -f "$temporary"
-    return 1
+    log_error "$command_name $shell_name completion generation failed (exit $status)." "$diagnostic"
+    return "$status"
   fi
   if [[ ! -s "$temporary" ]]; then
-    printf 'ERROR: %s generated an empty %s completion\n' "$command_name" "$shell_name" >&2
+    log_error "$command_name generated an empty $shell_name completion"
     rm -f "$temporary"
     return 1
   fi
@@ -342,16 +344,16 @@ check_bat_completion_source() {
   source_file="$(bat_completion_source "$shell_name")"
 
   if [[ ! -r "$source_file" ]]; then
-    printf 'ERROR: package-owned bat %s completion is missing: %s\n' "$shell_name" "$source_file" >&2
+    log_error "package-owned bat $shell_name completion is missing: $source_file"
     return 1
   fi
 
   if [[ "$shell_name" == bash ]] && ! grep -Eq '^_bat[[:space:]]*\(\)' "$source_file"; then
-    printf 'ERROR: unexpected package-owned bat Bash completion contract: %s\n' "$source_file" >&2
+    log_error "unexpected package-owned bat Bash completion contract: $source_file"
     return 1
   fi
   if [[ "$shell_name" == zsh ]] && ! head -n 1 "$source_file" | grep -Eq '^#compdef bat(cat)?$'; then
-    printf 'ERROR: unexpected package-owned bat Zsh completion contract: %s\n' "$source_file" >&2
+    log_error "unexpected package-owned bat Zsh completion contract: $source_file"
     return 1
   fi
 }
@@ -419,7 +421,7 @@ install_all() {
   while IFS= read -r target; do
     completion_file_owned "$target" || continue
     rm -f "$target"
-    printf 'Removed obsolete shell completion: %s\n' "$target"
+    log_ok removed "obsolete shell completion: $target"
   done <<<"$obsolete_targets"
 }
 
@@ -435,9 +437,9 @@ check_all() {
   if [[ -n "$entries" ]]; then
     while IFS=$'\t' read -r command_name shell_name target; do
       if [[ -s "$target" ]]; then
-        printf '[ok] shell completion: %s\n' "$target"
+        log_ok "$command_name" "shell completion: $target"
       else
-        printf '[missing] shell completion: %s\n' "$target" >&2
+        log_missing "$command_name" "shell completion: $target"
         errors=$((errors + 1))
       fi
 
@@ -450,7 +452,12 @@ check_all() {
   obsolete_targets="$(obsolete_completion_targets)"
   if [[ -n "$obsolete_targets" ]]; then
     while IFS= read -r target; do
-      printf '[stale] shell completion: %s\n' "$target" >&2
+      command_name="${target##*/}"
+      case "$target" in
+        "$zsh_completion_dir/"*) command_name="${command_name#_}" ;;
+        *) command_name="${command_name%.bash}" ;;
+      esac
+      log_missing "$command_name" "stale: $target"
       errors=$((errors + 1))
     done <<<"$obsolete_targets"
   fi

@@ -3,6 +3,215 @@ $ErrorActionPreference = 'Stop'
 
 . (Join-Path $PSScriptRoot '../../dot_config/oh-my-devenv/powershell/environment.ps1')
 
+# Keep host output on the information stream and diagnostics on native stderr.
+function Test-LogTerminal {
+    param([switch]$Stderr)
+    if ($Stderr) { return -not [Console]::IsErrorRedirected }
+    -not [Console]::IsOutputRedirected
+}
+
+function Test-LogRich {
+    param([switch]$Stderr)
+    (Test-LogTerminal -Stderr:$Stderr) -and -not $env:NO_COLOR -and -not $env:CI -and
+        $env:TERM -cne 'dumb' -and $PSStyle.OutputRendering -ne 'PlainText'
+}
+
+function Write-LogLine {
+    param(
+        [string]$Level,
+        [AllowEmptyString()][string]$Message,
+        [string]$Detail
+    )
+
+    $indent = '  '
+    $plain = $rich = $style = $detailStyle = ''
+    $stderr = $false
+    switch ($Level) {
+        'phase'          { $indent = ''; $plain = '==>'; $rich = '❯'; $style = '1;36' }
+        'done'           { $plain = '[done]'; $rich = '✓ done'; $style = '2' }
+        'ok'             { $plain = '[ok]'; $rich = '✓'; $style = '32'; $detailStyle = '2' }
+        'skip'           { $plain = '[skip]'; $rich = '›'; $style = '2' }
+        'info'           { $plain = '[info]'; $rich = '›' }
+        'missing'        { $stderr = $true; $plain = '[missing]'; $rich = '✗'; $style = '31' }
+        'warn'           { $stderr = $true; $plain = '[warn]'; $rich = '!'; $style = '1;33' }
+        'error'          { $stderr = $true; $plain = '[error]'; $rich = '✗'; $style = '1;31' }
+        'detail'         { $stderr = $true; $indent = '    ' }
+        'would'          { $plain = '[would]'; $rich = '▸'; $style = '36' }
+        'next'           { $plain = '[next]'; $rich = 'next'; $style = '36' }
+        'summary'        { $indent = ''; $rich = '✓'; $style = '1;32'; $detailStyle = '2' }
+        'summaryFailed'  { $stderr = $true; $indent = ''; $plain = '[failed]'; $rich = '✗'; $style = '1;31'; $detailStyle = '2' }
+    }
+
+    $richMode = Test-LogRich -Stderr:$stderr
+    if ($richMode) {
+        if ($style) {
+            if ($Level -in 'phase', 'done', 'error', 'summary', 'summaryFailed') {
+                $Message = "`e[${style}m$rich $Message`e[0m"
+                $rich = ''
+            } else {
+                $rich = "`e[${style}m$rich`e[0m"
+            }
+        }
+        $plain = $rich
+    }
+
+    if ($Detail) {
+        if ($richMode -and $Level -in 'ok', 'missing') { $Message = $Message.PadRight(16) }
+        if ($Level -in 'summary', 'summaryFailed') { $Detail = "($Detail)" }
+        if ($richMode -and $detailStyle) { $Detail = "`e[${detailStyle}m$Detail`e[0m" }
+        $Message += " $Detail"
+    }
+
+    if ($plain) { $Message = "$plain $Message" }
+    if ($stderr) { [Console]::Error.WriteLine("$indent$Message") } else { Write-Host "$indent$Message" }
+}
+
+$script:LogPhaseClock = $null
+
+function Write-LogPhase {
+    param([string]$Message)
+    $script:LogPhaseClock = [Diagnostics.Stopwatch]::StartNew()
+    Write-LogLine phase $Message
+}
+
+function Write-LogPhaseDone {
+    param([int]$DurationSeconds)
+    if (-not $PSBoundParameters.ContainsKey('DurationSeconds')) {
+        $DurationSeconds = [Math]::Floor($script:LogPhaseClock.Elapsed.TotalSeconds)
+    }
+    if ($DurationSeconds -ge 1) { Write-LogLine done "in ${DurationSeconds}s" }
+    Write-Host ''
+}
+
+function Write-LogOk {
+    param([string]$Name, [string]$Detail)
+    Write-LogLine ok $Name $Detail
+}
+function Write-LogSkip {
+    param([string]$Message)
+    Write-LogLine skip $Message
+}
+function Write-LogInfo {
+    param([string]$Message)
+    Write-LogLine info $Message
+}
+function Write-LogMissing {
+    param([string]$Name, [string]$Detail)
+    Write-LogLine missing $Name $Detail
+}
+function Write-LogWarn {
+    param([string]$Message)
+    Write-LogLine warn $Message
+}
+function Write-LogDetail {
+    param([string]$Message)
+    foreach ($line in ($Message -split '\r?\n')) { Write-LogLine detail $line }
+}
+function Write-LogError {
+    param([string]$Message, [string[]]$Details)
+    Write-LogLine error $Message
+    foreach ($line in $Details) {
+        if ($line) { Write-LogDetail $line }
+    }
+    [Console]::Error.WriteLine()
+}
+function Write-LogWould {
+    param([string]$Action, [string]$Target)
+    Write-LogLine would $Action $Target
+}
+function Write-LogNext {
+    param([string]$Message)
+    Write-LogLine next $Message
+}
+function Write-LogSummary {
+    param([string]$Message, [string]$Counts)
+    Write-LogLine summary $Message $Counts
+}
+function Write-LogSummaryFailed {
+    param([string]$Message, [string]$Counts)
+    Write-LogLine summaryFailed $Message $Counts
+}
+
+function Get-LogTerminalWidth {
+    try {
+        $columns = [Console]::WindowWidth
+    } catch [IO.IOException] {
+        return 80
+    }
+    if ($columns -gt 0) { return $columns }
+    80
+}
+
+function Write-StartupBanner {
+    param([string]$Platform)
+    if (-not (Test-LogTerminal) -or $env:NO_LOGO -ceq '1' -or $env:CI) { return }
+
+    $assets = Join-Path $PSScriptRoot '../assets'
+    $columns = Get-LogTerminalWidth
+    $art = Get-Content -LiteralPath (Join-Path $assets 'banner-wide.txt')
+    $width = ($art | Measure-Object -Property Length -Maximum).Maximum
+    if ($columns -lt ($width + 2)) {
+        $art = Get-Content -LiteralPath (Join-Path $assets 'banner-narrow.txt')
+        $width = ($art | Measure-Object -Property Length -Maximum).Maximum
+    }
+    $span = $width - 1
+    $colored = Test-LogRich
+    $truecolor = $env:COLORTERM -cin 'truecolor', '24bit' -or $null -ne $env:WT_SESSION
+    foreach ($line in $art) {
+        if (-not $colored) {
+            Write-Host $line
+            continue
+        }
+        $rendered = [Text.StringBuilder]::new()
+        for ($column = 0; $column -lt $line.Length; $column++) {
+            $character = $line[$column]
+            if ($character -eq ' ') {
+                [void]$rendered.Append($character)
+                continue
+            }
+            $style = '35'
+            if ($truecolor) {
+                $red = 255 - [Math]::Floor(80 * $column / $span)
+                $green = 95 + [Math]::Floor(40 * $column / $span)
+                $blue = 175 + [Math]::Floor(80 * $column / $span)
+                $style = "38;2;$red;$green;$blue"
+            }
+            [void]$rendered.Append("`e[${style}m$character`e[0m")
+        }
+        Write-Host $rendered.ToString()
+    }
+    foreach ($line in 'bootstrap your dev env at lightning speed', $Platform) {
+        $padding = ' ' * [Math]::Max(0, $width - $line.Length)
+        if ($colored) { $line = "`e[2m$line`e[0m" }
+        Write-Host "$padding$line"
+    }
+    Write-Host ''
+}
+
+function New-NativeCommandFailure {
+    param([string]$Message, [hashtable]$Result)
+    foreach ($output in $Result['Stderr'], $Result['Stdout']) {
+        if ($output) { $Message += "`n" + $output.TrimEnd("`r`n") }
+    }
+    $exception = [InvalidOperationException]::new($Message)
+    $exception.Data['NativeExitCode'] = $Result.ExitCode
+    $exception
+}
+
+function Get-BootstrapExitCode {
+    param([Management.Automation.ErrorRecord]$Failure)
+    for ($exception = $Failure.Exception; $null -ne $exception; $exception = $exception.InnerException) {
+        if ($exception.Data.Contains('NativeExitCode')) { return $exception.Data['NativeExitCode'] }
+    }
+    1
+}
+
+function Write-BootstrapFailure {
+    param([Management.Automation.ErrorRecord]$Failure)
+    $message, $details = $Failure.Exception.Message -split '\r?\n', 2
+    Write-LogError $message -Details $details
+}
+
 function Get-HookPath {
     # Retain commands available to the caller, including CI tool paths.
     $parts = @(
@@ -69,15 +278,18 @@ function Invoke-NativeCommand {
         [hashtable]$Environment = @{},
         [string]$WorkingDirectory,
         [ValidateRange(0, 2147483)][int]$TimeoutSeconds = 0,
-        [switch]$AllowFailure
+        [switch]$AllowFailure,
+        [switch]$Live
     )
 
     $start = [Diagnostics.ProcessStartInfo]::new($Executable)
     $start.UseShellExecute = $false
-    $start.RedirectStandardOutput = $true
-    $start.RedirectStandardError = $true
-    $start.StandardOutputEncoding = [Text.Encoding]::UTF8
-    $start.StandardErrorEncoding = [Text.Encoding]::UTF8
+    if (-not $Live) {
+        $start.RedirectStandardOutput = $true
+        $start.RedirectStandardError = $true
+        $start.StandardOutputEncoding = [Text.Encoding]::UTF8
+        $start.StandardErrorEncoding = [Text.Encoding]::UTF8
+    }
     if ($WorkingDirectory) { $start.WorkingDirectory = $WorkingDirectory }
     foreach ($argument in $Arguments) {
         $start.ArgumentList.Add($argument)
@@ -92,28 +304,31 @@ function Invoke-NativeCommand {
 
     $process = [Diagnostics.Process]::Start($start)
     try {
-        $stdoutRead = $process.StandardOutput.ReadToEndAsync()
-        $stderrRead = $process.StandardError.ReadToEndAsync()
-        if ($TimeoutSeconds) {
-            $tasks = [Threading.Tasks.Task[]]@($process.WaitForExitAsync(), $stdoutRead, $stderrRead)
-            if (-not [Threading.Tasks.Task]::WaitAll($tasks, [TimeSpan]::FromSeconds($TimeoutSeconds))) {
-                if (-not $process.HasExited) {
-                    try { $process.Kill($true) } catch [InvalidOperationException] {
-                        if (-not $process.HasExited) { throw }
-                    }
-                }
-                throw "'$Executable' did not finish within $TimeoutSeconds seconds."
-            }
-        } else {
-            $process.WaitForExit()
+        $exitTask = $process.WaitForExitAsync()
+        $tasks = @($exitTask)
+        if (-not $Live) {
+            $stdoutRead = $process.StandardOutput.ReadToEndAsync()
+            $stderrRead = $process.StandardError.ReadToEndAsync()
+            $tasks += @($stdoutRead, $stderrRead)
         }
-        $result = @{
-            Stdout = $stdoutRead.GetAwaiter().GetResult()
-            Stderr = $stderrRead.GetAwaiter().GetResult()
-            ExitCode = $process.ExitCode
+
+        $timeout = if ($TimeoutSeconds) { $TimeoutSeconds * 1000 } else { -1 }
+        if (-not [Threading.Tasks.Task]::WaitAll([Threading.Tasks.Task[]]$tasks, [int]$timeout)) {
+            if (-not $process.HasExited) {
+                try { $process.Kill($true) } catch [InvalidOperationException] {
+                    if (-not $process.HasExited) { throw }
+                }
+                $process.WaitForExit()
+            }
+            throw "'$Executable' did not finish within $TimeoutSeconds seconds."
+        }
+        $result = @{ Stdout = ''; Stderr = ''; ExitCode = $process.ExitCode }
+        if (-not $Live) {
+            $result.Stdout = $stdoutRead.GetAwaiter().GetResult()
+            $result.Stderr = $stderrRead.GetAwaiter().GetResult()
         }
         if ($result.ExitCode -ne 0 -and -not $AllowFailure) {
-            throw "'$Executable' exited with code $($result.ExitCode).`n$($result.Stderr)`n$($result.Stdout)"
+            throw (New-NativeCommandFailure -Message "'$Executable' exited with code $($result.ExitCode)." -Result $result)
         }
         $result
     } finally {
@@ -138,7 +353,8 @@ function Get-ManagedFile {
         )
         $result.Stdout -split '\r?\n' | Where-Object { $_ -ne '' }
     } catch {
-        throw "Could not list managed files from '$Source' to '$Destination'. $_"
+        throw [InvalidOperationException]::new("Could not list managed files from '$Source' to '$Destination'. $($_.Exception.Message)",
+            $_.Exception)
     } finally {
         [IO.Directory]::Delete($stateDirectory, $true)
     }

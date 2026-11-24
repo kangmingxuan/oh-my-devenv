@@ -15,16 +15,22 @@ eval "$("$BREW_CMD" shellenv)"
 export PATH="$HOME/.local/bin:$PATH"
 {{ end -}}
 
+log_phase "Setting up mise..."
 if command -v mise >/dev/null 2>&1; then
-  log_info "mise is already installed."
+  log_skip "mise is already installed."
 else
-  log_step "🛠️" "Installing mise..."
+  log_info "Installing mise..."
 {{ if eq .chezmoi.os "darwin" -}}
   "$BREW_CMD" install mise
 {{ else -}}
   curl -fsSL "${DOTFILES_MISE_INSTALL_URL:-https://mise.run}" | sh
 {{ end -}}
-  log_step "✅" "mise installed successfully."
 fi
 
-mise --version
+mise_version="$(capture_probe mise --version)" || {
+  probe_status=$?
+  _bootstrap_error_handler "$probe_status" "$LINENO" "$0" "$mise_version"
+  exit "$probe_status"
+}
+log_ok mise "$mise_version"
+log_phase_done

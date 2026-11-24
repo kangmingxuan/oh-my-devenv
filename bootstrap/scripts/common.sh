@@ -1,159 +1,191 @@
 #!/usr/bin/env bash
 
-stdout_is_tty() {
-  [[ -t 1 ]] && [[ "${TERM:-}" != "dumb" ]]
+# Decide against the destination descriptor before writing anything.
+_log_rich() {
+  [[ -t "$1" && -z "${NO_COLOR:-}" && -z "${CI:-}" && "${TERM:-}" != dumb ]]
 }
 
-emoji_enabled() {
-  stdout_is_tty && [[ "${NO_EMOJI:-0}" != "1" ]]
+_log_render() {
+  local level="$1" message="$2" detail="${3:-}"
+  local fd=1 indent='  ' plain='' rich='' style='' rich_mode=0
+  local detail_style='' reset=$'\033[0m' esc=$'\033['
+
+  case "$level" in
+    phase)          indent=''; plain='==>'; rich='❯'; style='1;36' ;;
+    done)           plain='[done]'; rich='✓ done'; style=2 ;;
+    ok)             plain='[ok]'; rich='✓'; style=32; detail_style=2 ;;
+    skip)           plain='[skip]'; rich='›'; style=2 ;;
+    info)           plain='[info]'; rich='›' ;;
+    missing)        fd=2; plain='[missing]'; rich='✗'; style=31 ;;
+    warn)           fd=2; plain='[warn]'; rich='!'; style='1;33' ;;
+    error)          fd=2; plain='[error]'; rich='✗'; style='1;31' ;;
+    detail)         fd=2; indent='    ' ;;
+    would)          plain='[would]'; rich='▸'; style=36 ;;
+    next)           plain='[next]'; rich='next'; style=36 ;;
+    summary)        indent=''; rich='✓'; style='1;32'; detail_style=2 ;;
+    summary_failed) fd=2; indent=''; plain='[failed]'; rich='✗'; style='1;31'; detail_style=2 ;;
+  esac
+
+  if _log_rich "$fd"; then
+    rich_mode=1
+    if [[ -n "$style" ]]; then
+      case "$level" in
+        phase|done|error|summary|summary_failed)
+          message="$esc${style}m$rich $message$reset"
+          rich=''
+          ;;
+        *) rich="$esc${style}m$rich$reset" ;;
+      esac
+    fi
+    plain="$rich"
+  fi
+  if [[ -n "$detail" ]]; then
+    case "$level" in
+      ok|missing)
+        if (( rich_mode )); then
+          message="$(printf '%-16s' "$message")"
+        fi
+        ;;
+      summary|summary_failed) detail="($detail)" ;;
+    esac
+    if (( rich_mode )) && [[ -n "$detail_style" ]]; then
+      detail="$esc${detail_style}m$detail$reset"
+    fi
+  fi
+  printf '%s%s%s%s\n' "$indent" "${plain:+$plain }" "$message" "${detail:+ $detail}" >&"$fd"
 }
 
-color_enabled() {
-  stdout_is_tty && [[ "${NO_COLOR:-0}" != "1" ]]
+log_phase() {
+  log_phase_started=$SECONDS
+  _log_render phase "$*"
 }
 
-logo_enabled() {
-  stdout_is_tty && [[ "${NO_LOGO:-0}" != "1" ]]
-}
-
-terminal_columns() {
-  local cols=""
-
-  if [[ -n "${COLUMNS:-}" ]] && [[ "${COLUMNS}" =~ ^[0-9]+$ ]]; then
-    cols="$COLUMNS"
-  elif stdout_is_tty && command -v tput >/dev/null 2>&1; then
-    cols="$(tput cols 2>/dev/null || true)"
+log_phase_done() {
+  local duration="${1:-$((SECONDS - log_phase_started))}"
+  if (( duration >= 1 )); then
+    _log_render 'done' "in ${duration}s"
   fi
-
-  if [[ -z "$cols" ]] && stdout_is_tty && [[ -r /dev/tty ]]; then
-    cols="$(stty size </dev/tty 2>/dev/null | awk '{print $2}')"
-  fi
-
-  if [[ "$cols" =~ ^[0-9]+$ ]]; then
-    printf '%s\n' "$cols"
-  else
-    printf '120\n'
-  fi
-}
-
-print_startup_banner() {
-  local cols=120
-  local subtitle='bootstrap your dev env at lightning speed'
-  local line1=""
-  local line2=""
-  local line3=""
-  local line4=""
-  local line5=""
-  local banner_width=0
-  local subtitle_padding=0
-  local wide_banner_width=72
-  local magenta=""
-  local dim=""
-  local reset=""
-
-  if ! logo_enabled; then
-    return 0
-  fi
-
-  if color_enabled; then
-    magenta='\033[38;5;205m'
-    dim='\033[2m'
-    reset='\033[0m'
-  fi
-
-  cols="$(terminal_columns)"
-
-  if [[ "$cols" -ge $((wide_banner_width + 2)) ]]; then
-    line1='   ____  __  __   __  _____  __   ____  _______    _________   ___    __'
-    line2='  / __ \/ / / /  /  |/  /\ \/ /  / __ \/ ____/ |  / / ____/ | / / |  / /'
-    line3=' / / / / /_/ /  / /|_/ /  \  /  / / / / __/  | | / / __/ /  |/ /| | / / '
-    line4='/ /_/ / __  /  / /  / /   / /  / /_/ / /___  | |/ / /___/ /|  / | |/ /  '
-    line5='\____/_/ /_/  /_/  /_/   /_/  /_____/_____/  |___/_____/_/ |_/  |___/   '
-  else
-    line1='  ___  _  _   __  ____   __  ___  _____   _____ _  ___   __'
-    line2=' / _ \| || | |  \/  \ \ / / |   \| __\ \ / / __| \| \ \ / /'
-    line3='| (_) | __ | | |\/| |\ V /  | |) | _| \ V /| _|| .` |\ V / '
-    line4=' \___/|_||_| |_|  |_| |_|   |___/|___| \_/ |___|_|\_| \_/  '
-  fi
-
-  printf '%b%s%b\n' "$magenta" "$line1" "$reset"
-  printf '%b%s%b\n' "$magenta" "$line2" "$reset"
-  printf '%b%s%b\n' "$magenta" "$line3" "$reset"
-  if [[ -n "$line4" ]]; then
-    printf '%b%s%b\n' "$magenta" "$line4" "$reset"
-  fi
-  if [[ -n "$line5" ]]; then
-    printf '%b%s%b\n' "$magenta" "$line5" "$reset"
-  fi
-
-  banner_width=${#line1}
-  if [[ ${#line2} -gt $banner_width ]]; then
-    banner_width=${#line2}
-  fi
-  if [[ ${#line3} -gt $banner_width ]]; then
-    banner_width=${#line3}
-  fi
-  if [[ ${#line4} -gt $banner_width ]]; then
-    banner_width=${#line4}
-  fi
-  if [[ ${#line5} -gt $banner_width ]]; then
-    banner_width=${#line5}
-  fi
-
-  subtitle_padding=$((banner_width - ${#subtitle}))
-  if [[ $subtitle_padding -lt 1 ]]; then
-    subtitle_padding=1
-  fi
-
-  printf '%*s%b%s%b\n' "$subtitle_padding" '' "$dim" "$subtitle" "$reset"
   printf '\n'
 }
 
-log_step() {
-  local icon="$1"
+log_ok()             { _log_render ok "$1" "${2:-}"; }
+log_skip()           { _log_render skip "$*"; }
+log_info()           { _log_render info "$*"; }
+log_missing()        { _log_render missing "$1" "${2:-}"; }
+log_warn()           { _log_render warn "$*"; }
+log_would()          { _log_render would "$1" "$2"; }
+log_next()           { _log_render next "$*"; }
+log_summary()        { _log_render summary "$1" "${2:-}"; }
+log_summary_failed() { _log_render summary_failed "$1" "${2:-}"; }
+
+log_detail() {
+  local line
+  while IFS= read -r line; do
+    _log_render detail "${line%$'\r'}"
+  done <<<"$1"
+}
+
+log_error() {
+  _log_render error "$1"
   shift
+  local detail
+  for detail in "$@"; do
+    [[ -z "$detail" ]] || log_detail "$detail"
+  done
+  printf '\n' >&2
+}
 
-  if emoji_enabled && [[ -n "$icon" ]]; then
-    printf '%s ==> %s\n' "$icon" "$*"
+# Capture stdout on success. On failure return both streams through the
+# substitution so the caller can render them under its diagnostic header.
+capture_probe() {
+  local error_file output status=0
+  error_file="$(mktemp 2>&1)" || {
+    status=$?
+    printf '%s\n' "$error_file"
+    return "$status"
+  }
+  output="$("$@" 2>"$error_file")" || status=$?
+  if [[ -n "$output" ]]; then
+    printf '%s\n' "$output"
+  fi
+  if (( status )) && [[ -s "$error_file" ]]; then
+    printf '%s\n' "$(<"$error_file")"
+  fi
+  rm -f "$error_file"
+  return "$status"
+}
+
+terminal_columns() {
+  local cols="${COLUMNS:-}"
+  if [[ ! "$cols" =~ ^[1-9][0-9]*$ ]]; then
+    cols="$(tput cols 2>/dev/null || true)"
+  fi
+  if [[ ! "$cols" =~ ^[1-9][0-9]*$ ]]; then
+    cols="$( { stty size </dev/tty; } 2>/dev/null | awk '{print $2}' || true)"
+  fi
+  if [[ "$cols" =~ ^[1-9][0-9]*$ ]]; then
+    printf '%s\n' "$cols"
   else
-    printf '==> %s\n' "$*"
+    printf '80\n'
   fi
 }
 
-log_info() {
-  if emoji_enabled; then
-    printf 'ℹ️  ==> %s\n' "$*"
-  else
-    printf 'INFO: %s\n' "$*"
-  fi
+_banner_width() {
+  awk 'length > width { width = length } END { print width }' "$1"
 }
 
-log_check_ok() {
-  local name="$1"
+print_startup_banner() {
+  [[ -t 1 && "${NO_LOGO:-}" != 1 && -z "${CI:-}" ]] || return 0
 
-  if emoji_enabled; then
-    printf '  ✅ %s\n' "$name"
-  else
-    printf '  OK %s\n' "$name"
+  local art="$common_repo_root/bootstrap/assets/banner-wide.txt"
+  local width cols line i ch span style r g b
+  local colored=0 truecolor=0 dim='' reset=''
+  local subtitle='bootstrap your dev env at lightning speed'
+
+  width="$(_banner_width "$art")"
+  cols="$(terminal_columns)"
+  if (( cols < width + 2 )); then
+    art="$common_repo_root/bootstrap/assets/banner-narrow.txt"
+    width="$(_banner_width "$art")"
   fi
-}
+  span=$((width - 1))
 
-log_check_missing() {
-  local name="$1"
-
-  if emoji_enabled; then
-    printf '  ❌ %s not found\n' "$name" >&2
-  else
-    printf '  MISSING %s\n' "$name" >&2
+  if _log_rich 1; then
+    colored=1
+    dim=$'\033[2m'
+    reset=$'\033[0m'
+    if [[ "${COLORTERM:-}" == truecolor || "${COLORTERM:-}" == 24bit || "${WT_SESSION+x}" == x ]]; then
+      truecolor=1
+    fi
   fi
-}
 
-log_warning() {
-  if emoji_enabled; then
-    printf '⚠️  ==> %s\n' "$*" >&2
-  else
-    printf 'WARNING: %s\n' "$*" >&2
-  fi
+  while IFS= read -r line; do
+    if (( ! colored )); then
+      printf '%s\n' "$line"
+      continue
+    fi
+    for (( i=0; i<${#line}; i++ )); do
+      ch="${line:i:1}"
+      if [[ "$ch" == ' ' ]]; then
+        printf ' '
+        continue
+      fi
+      style=35
+      if (( truecolor )); then
+        r=$((255 - 80 * i / span))
+        g=$((95 + 40 * i / span))
+        b=$((175 + 80 * i / span))
+        style="38;2;$r;$g;$b"
+      fi
+      printf '\033[%sm%s%s' "$style" "$ch" "$reset"
+    done
+    printf '\n'
+  done <"$art"
+
+  for line in "$subtitle" "$1"; do
+    printf '%*s%s%s%s\n' "$((width - ${#line}))" '' "$dim" "$line" "$reset"
+  done
+  printf '\n'
 }
 
 require_sudo() {
@@ -164,12 +196,12 @@ require_sudo() {
   fi
 
   if ! command -v sudo >/dev/null 2>&1; then
-    printf 'ERROR: sudo is required to %s\n' "$purpose" >&2
+    log_error "sudo is required to $purpose"
     return 1
   fi
 
   if ! sudo -v; then
-    printf 'ERROR: failed to acquire sudo credentials to %s\n' "$purpose" >&2
+    log_error "failed to acquire sudo credentials to $purpose"
     return 1
   fi
 }
@@ -189,26 +221,18 @@ maple_mono_font_marker() {
   printf '%s\n' "$(maple_mono_font_dir)/.oh-my-devenv-managed"
 }
 
-# Shared "what to try next" hints, printed to stderr. Used by both the
-# bootstrap error trap and the final environment check so the guidance lives
-# in one place instead of drifting across two copies.
-print_diagnostic_hints() {
+# Shared "what to try next" text for the error trap and the final check.
+diagnostic_hints() {
   local backup_root=""
 
   backup_root="$(first_run_backup_root)"
 
-  printf 'What to try next:\n' >&2
-  printf '  1. Re-run with verbose output:\n' >&2
-  printf '       chezmoi apply --verbose --debug\n' >&2
-  printf '  2. If network calls failed, check connectivity to your distro package mirrors,\n' >&2
-  printf '     Homebrew, get.chezmoi.io / mise.run, github.com, and your\n' >&2
-  printf '     Go / PyPI proxies.\n' >&2
-  printf '  3. If a single step repeatedly fails, run only that step:\n' >&2
-  printf '       chezmoi apply --verbose <script-under-.chezmoiscripts>\n' >&2
-  printf '  4. Your pre-bootstrap configs (if any) were backed up under:\n' >&2
-  printf '       %s/\n' "$backup_root" >&2
-  printf '  5. If this looks like a baseline bug, file an issue with the\n' >&2
-  printf '     failing script / line / exit code.\n' >&2
+  printf '%s\n' "What to try next:
+1. Re-run with verbose output: chezmoi apply --verbose --debug
+2. Check connectivity to your package mirrors, Homebrew, get.chezmoi.io, mise.run, github.com, and your Go / PyPI proxies.
+3. If a step repeatedly fails, run it with chezmoi apply --verbose <script-under-.chezmoiscripts>.
+4. Look for pre-bootstrap config backups under $backup_root/.
+5. Report the failing script, line, and exit code when filing an issue."
 }
 
 _bootstrap_error_handler() {
@@ -216,15 +240,8 @@ _bootstrap_error_handler() {
   local line_no="$2"
   local script="${3:-${BASH_SOURCE[1]:-unknown}}"
 
-  printf '\n' >&2
-  printf '================================================================\n' >&2
-  printf 'Bootstrap step failed.\n' >&2
-  printf '  script : %s\n' "$script" >&2
-  printf '  line   : %s\n' "$line_no" >&2
-  printf '  exit   : %s\n' "$exit_code" >&2
-  printf '\n' >&2
-  print_diagnostic_hints
-  printf '================================================================\n' >&2
+  log_error "Bootstrap step failed (exit $exit_code)." \
+    "script: $script, line $line_no" "${4:-}" "$(diagnostic_hints)"
 }
 
 # Install a trap that reports the failing script, line, and exit code before
@@ -239,7 +256,7 @@ manifest_entries() {
   local manifest="$1"
 
   if [[ ! -f "$manifest" ]]; then
-    printf 'ERROR: %s not found\n' "$manifest" >&2
+    log_error "$manifest not found"
     return 1
   fi
 
@@ -273,19 +290,22 @@ uv_tool_binary_name() {
 # Set MISE_PYTHON and MISE_PYTHON_VERSION from global mise configuration.
 # Resolve from / so project configuration cannot change ecosystem runtimes.
 resolve_mise_python() {
+  local output
   MISE_PYTHON=""
   MISE_PYTHON_VERSION=""
 
-  if ! MISE_PYTHON="$(cd / && mise which python 2>/dev/null)" || [[ -z "$MISE_PYTHON" ]]; then
-    printf "ERROR: could not resolve the mise-selected Python with 'mise which python' from /\n" >&2
+  if ! output="$(cd / 2>&1 && capture_probe mise which python)" || [[ -z "$output" ]]; then
+    log_error "could not resolve the mise-selected Python with 'mise which python' from /" "$output"
+    return 1
+  fi
+  MISE_PYTHON="$output"
+  if ! output="$(capture_probe "$MISE_PYTHON" -c 'import sys; print("%d.%d.%d" % sys.version_info[:3])')"; then
+    log_error "could not read the mise-selected Python version: $MISE_PYTHON" "$output"
     return 1
   fi
   # install-uv-tools.sh and check.sh consume this public output.
   # shellcheck disable=SC2034
-  if ! MISE_PYTHON_VERSION="$("$MISE_PYTHON" -c 'import sys; print("%d.%d.%d" % sys.version_info[:3])')"; then
-    printf 'ERROR: could not read the mise-selected Python version: %s\n' "$MISE_PYTHON" >&2
-    return 1
-  fi
+  MISE_PYTHON_VERSION="$output"
 }
 
 # Succeed when <tool-dir>/<name> runs on both its recorded Python version and
@@ -323,7 +343,7 @@ go_tool_version() {
   version="${tool##*@}"
 
   if [[ "$version" == "$tool" || ! "$version" =~ $version_pattern ]]; then
-    printf 'ERROR: Go tool entry must pin an exact module version (module@vX.Y.Z): %s\n' "$1" >&2
+    log_error "Go tool entry must pin an exact module version (module@vX.Y.Z): $1"
     return 1
   fi
 
@@ -365,7 +385,7 @@ brew_command() {
   elif [[ -x /usr/local/bin/brew ]]; then
     printf '/usr/local/bin/brew\n'
   else
-    printf 'ERROR: brew not found in PATH or common install locations\n' >&2
+    log_error "brew not found in PATH or common install locations"
     return 1
   fi
 }
@@ -381,7 +401,7 @@ desktop_font_manifest_load() {
   local sha256_pattern='^[0-9a-f]{64}$'
 
   if [[ ! -f "$manifest" ]]; then
-    printf 'ERROR: %s not found\n' "$manifest" >&2
+    log_error "$manifest not found"
     return 1
   fi
 
@@ -409,27 +429,25 @@ desktop_font_manifest_load() {
     MAPLE_MONO_URL \
     MAPLE_MONO_SHA256; do
     if [[ -z "${!required_value:-}" ]]; then
-      printf 'ERROR: %s does not define %s\n' "$manifest" "$required_value" >&2
+      log_error "$manifest does not define $required_value"
       return 1
     fi
   done
 
   if [[ ! "$MAPLE_MONO_FAMILY" =~ $family_pattern ]]; then
-    printf 'ERROR: MAPLE_MONO_FAMILY must contain only letters, digits, spaces, and hyphens: %s\n' \
-      "$MAPLE_MONO_FAMILY" >&2
+    log_error "MAPLE_MONO_FAMILY must contain only letters, digits, spaces, and hyphens: $MAPLE_MONO_FAMILY"
     return 1
   fi
 
   for postscript_name in $MAPLE_MONO_POSTSCRIPT_NAMES; do
     if [[ ! "$postscript_name" =~ $postscript_pattern ]]; then
-      printf 'ERROR: MAPLE_MONO_POSTSCRIPT_NAMES contains an invalid PostScript name: %s\n' \
-        "$postscript_name" >&2
+      log_error "MAPLE_MONO_POSTSCRIPT_NAMES contains an invalid PostScript name: $postscript_name"
       return 1
     fi
   done
 
   if [[ ! "$MAPLE_MONO_SHA256" =~ $sha256_pattern ]]; then
-    printf 'ERROR: MAPLE_MONO_SHA256 is not a lowercase SHA-256 digest\n' >&2
+    log_error "MAPLE_MONO_SHA256 is not a lowercase SHA-256 digest"
     return 1
   fi
 }
@@ -443,4 +461,4 @@ source "$common_repo_root/dot_local/share/oh-my-devenv/xdg.sh"
 oh_my_devenv_setup_xdg_dirs
 oh_my_devenv_source_env_file "$XDG_CONFIG_HOME/oh-my-devenv/bootstrap.env"
 
-unset common_script_dir common_repo_root
+unset common_script_dir

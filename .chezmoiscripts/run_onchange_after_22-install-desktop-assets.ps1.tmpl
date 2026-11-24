@@ -8,17 +8,25 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+. {{ includeTemplate "powershell-literal" (joinPath .chezmoi.sourceDir "bootstrap/windows/common.ps1") }}
+
+trap {
+    Write-BootstrapFailure $_
+    exit (Get-BootstrapExitCode $_)
+}
+
 if (-not $IsWindows) {
     throw 'This hook requires native Windows.'
 }
 
-. {{ includeTemplate "powershell-literal" (joinPath .chezmoi.sourceDir "bootstrap/windows/common.ps1") }}
 . {{ includeTemplate "powershell-literal" (joinPath .chezmoi.sourceDir "bootstrap/windows/desktop.ps1") }}
 . {{ includeTemplate "powershell-literal" (joinPath .chezmoi.sourceDir "bootstrap/windows/system-packages.ps1") }}
 
+Write-LogPhase 'Installing the Windows desktop baseline...'
 Update-HookPath
 $localData = Get-DesktopLocalData -Destination {{ includeTemplate "powershell-literal" .chezmoi.destDir }}
 $target = Get-DesktopFontTarget -LocalData $localData
 $manifest = Read-DesktopFontManifest -Path {{ includeTemplate "powershell-literal" (joinPath .chezmoi.sourceDir "bootstrap/manifests/desktop/maple-mono-nf-cn.env") }}
 Install-WinGetPackage -ManifestPath {{ includeTemplate "powershell-literal" (joinPath .chezmoi.sourceDir "bootstrap/manifests/desktop/winget-packages.json") }}
 Install-DesktopFont -Manifest $manifest @target
+Write-LogPhaseDone

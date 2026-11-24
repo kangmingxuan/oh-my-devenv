@@ -1,9 +1,15 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+. {{ includeTemplate "powershell-literal" (joinPath .chezmoi.sourceDir "bootstrap/windows/common.ps1") }}
+
+trap {
+    Write-BootstrapFailure $_
+    exit (Get-BootstrapExitCode $_)
+}
+
 if (-not $IsWindows) { throw 'This hook requires native Windows.' }
 
-. {{ includeTemplate "powershell-literal" (joinPath .chezmoi.sourceDir "bootstrap/windows/common.ps1") }}
 . {{ includeTemplate "powershell-literal" (joinPath .chezmoi.sourceDir "bootstrap/windows/backup.ps1") }}
 . {{ includeTemplate "powershell-literal" (joinPath .chezmoi.sourceDir "bootstrap/windows/profile.ps1") }}
 . {{ includeTemplate "powershell-literal" (joinPath .chezmoi.sourceDir "bootstrap/windows/user-path.ps1") }}

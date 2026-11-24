@@ -6,13 +6,14 @@
 set -euo pipefail
 
 if [[ $# -ne 1 || ( "$1" != true && "$1" != false ) ]]; then
-  printf 'USAGE: %s <desktop-baseline: true|false>\n' "$0" >&2
+  printf '[error] %s <desktop-baseline: true|false>\n\n' "$0" >&2
   exit 2
 fi
 desktop_baseline="$1"
 
+# Require CI=true from the caller before loading the local overlay.
 if [[ "${CI:-}" != true ]]; then
-  printf 'ERROR: %s applies to and uninstalls from the home directory. Run it only in a disposable environment with CI=true.\n' "$0" >&2
+  printf '[error] %s applies to and uninstalls from the home directory. Run it only in a disposable environment with CI=true.\n\n' "$0" >&2
   exit 2
 fi
 
@@ -26,7 +27,8 @@ work_dir="$(mktemp -d)"
 default_config_root="$HOME/.config"
 
 step() {
-  printf '\n==> %s\n' "$*"
+  if [[ -n "${log_phase_started:-}" ]]; then log_phase_done; fi
+  log_phase "$*"
 }
 
 apply_baseline() {
@@ -36,7 +38,7 @@ apply_baseline() {
 
 assert_hooks_ran() {
   if ! grep -Fq "All checks passed." "$1"; then
-    printf 'ERROR: the final hook did not report success in %s.\n' "$1" >&2
+    log_error "the final hook did not report success in $1."
     exit 1
   fi
 }
@@ -73,7 +75,7 @@ grep -Fxq 'unmanaged_sentinel = true' "$backup_root"/*"$default_config_root/mise
 step "Reapply without changes"
 apply_baseline "$work_dir/apply-again.log"
 if grep -Fq "All checks passed." "$work_dir/apply-again.log"; then
-  printf 'ERROR: an unchanged reapply reran the change-triggered final hook.\n' >&2
+  log_error "an unchanged reapply reran the change-triggered final hook."
   exit 1
 fi
 bash "$script_dir/check.sh"
@@ -84,13 +86,13 @@ bash "$script_dir/uninstall.sh" --confirm --no-backup
 for bucket in scriptState entryState; do
   bucket_contents="$(chezmoi --source="$repo_root" state get-bucket --bucket="$bucket")"
   if [[ "$bucket_contents" != "{}" ]]; then
-    printf 'ERROR: uninstall left entries in the chezmoi %s bucket.\n' "$bucket" >&2
+    log_error "uninstall left entries in the chezmoi $bucket bucket."
     exit 1
   fi
 done
 if bash "$script_dir/check.sh" >"$work_dir/check-after-uninstall.log" 2>&1; then
   cat "$work_dir/check-after-uninstall.log"
-  printf 'ERROR: the environment check passed after uninstall.\n' >&2
+  log_error "the environment check passed after uninstall."
   exit 1
 fi
 
@@ -99,4 +101,5 @@ apply_baseline "$work_dir/apply-restore.log"
 assert_hooks_ran "$work_dir/apply-restore.log"
 bash "$script_dir/check.sh"
 
-step "Round trip passed"
+log_phase_done
+log_summary "Round trip passed."

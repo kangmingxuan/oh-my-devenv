@@ -56,14 +56,13 @@ function Install-WinGetPackage {
     $result = Invoke-NativeCommand -Executable $winget.Source -Arguments @(
         'import', '--import-file', $ManifestPath, '--no-upgrade', '--accept-package-agreements'
         '--accept-source-agreements', '--disable-interactivity'
-    ) -AllowFailure
+    ) -AllowFailure -Live
     if ($result.ExitCode -ne 0) {
-        throw "WinGet import from source 'winget' failed (exit $($result.ExitCode)). Device policy may block this source or an installer. Manifest package IDs: $($ids -join ', ').`n$($result.Stderr)`n$($result.Stdout)"
+        throw (New-NativeCommandFailure -Result $result -Message (
+            "WinGet import from source 'winget' failed (exit $($result.ExitCode)). Device policy may block this source or an installer. Manifest package IDs: $($ids -join ', ')."
+        ))
     }
-    Write-Host $result.Stdout.Trim()
-    if ($result.Stderr) {
-        Write-Host $result.Stderr.Trim()
-    }
+    Write-LogOk WinGet "Imported '$ManifestPath'."
 }
 
 function Confirm-WinGetPackage {
@@ -83,7 +82,9 @@ function Confirm-WinGetPackage {
             # APPINSTALLER_CLI_ERROR_NO_APPLICATIONS_FOUND means there is nothing to export.
             $installedIds = @()
         } elseif ($result.ExitCode -ne 0) {
-            throw "WinGet could not export installed packages from source 'winget' (exit $($result.ExitCode)). Device policy may block this source.`n$($result.Stderr)`n$($result.Stdout)"
+            throw (New-NativeCommandFailure -Result $result -Message (
+                "WinGet could not export installed packages from source 'winget' (exit $($result.ExitCode)). Device policy may block this source."
+            ))
         } else {
             $inventory = Get-Content -LiteralPath $inventoryPath -Raw | ConvertFrom-Json -AsHashtable
             $installedIds = @(
@@ -102,7 +103,8 @@ function Confirm-WinGetPackage {
 
     $missing = @($ids | Where-Object { $_ -cnotin $installedIds })
     if ($missing) {
+        foreach ($id in $missing) { Write-LogMissing $id "WinGet user package" }
         throw "Missing WinGet packages: $($missing -join ', '). Install them from the winget source using user scope."
     }
-    Write-Host "WinGet reported all $($ids.Count) packages from the enabled layers."
+    Write-LogOk WinGet "Reported all $($ids.Count) packages from the enabled layers."
 }

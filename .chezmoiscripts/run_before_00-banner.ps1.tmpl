@@ -1,6 +1,13 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+. {{ includeTemplate "powershell-literal" (joinPath .chezmoi.sourceDir "bootstrap/windows/common.ps1") }}
+
+trap {
+    Write-BootstrapFailure $_
+    exit (Get-BootstrapExitCode $_)
+}
+
 if (-not $IsWindows) {
     throw 'This hook requires native Windows.'
 }
@@ -8,10 +15,10 @@ if ($PSVersionTable.PSVersion -lt [version]'7.6') {
     throw "PowerShell 7.6 or later is required. Running $($PSVersionTable.PSVersion). Install PowerShell and ensure pwsh is on PATH."
 }
 
-Write-Host "oh-my-devenv for Windows (PowerShell $($PSVersionTable.PSVersion))"
+$architecture = [Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString().ToLowerInvariant()
+Write-StartupBanner "Windows, $architecture"
 {{ if (index . "desktopBaseline") -}}
 
-. {{ includeTemplate "powershell-literal" (joinPath .chezmoi.sourceDir "bootstrap/windows/common.ps1") }}
 . {{ includeTemplate "powershell-literal" (joinPath .chezmoi.sourceDir "bootstrap/windows/desktop.ps1") }}
 
 # Validate the destination before chezmoi writes the Terminal fragment.

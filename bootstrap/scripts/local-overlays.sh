@@ -21,11 +21,11 @@ local_overlay_load() {
   fi
 
   if [[ ! -f "$manifest" ]]; then
-    printf 'ERROR: local overlay inventory not found: %s\n' "$manifest" >&2
+    log_error "local overlay inventory not found: $manifest"
     return 1
   fi
 
-  inventory="$(awk -F '\t' '
+  if ! inventory="$(awk -F '\t' '
     /^#/ || /^[[:space:]]*$/ { next }
     {
       rows++
@@ -35,60 +35,64 @@ local_overlay_load() {
       match_type = $4
     }
     NF != 4 {
-      printf "ERROR: invalid local overlay inventory row %d: expected 4 fields, got %d\n", NR, NF > "/dev/stderr"
+      printf "invalid local overlay inventory row %d: expected 4 fields, got %d\n", NR, NF
       invalid = 1
       next
     }
     id !~ /^[a-z][a-z0-9_]*$/ {
-      printf "ERROR: invalid local overlay id on row %d: %s\n", NR, id > "/dev/stderr"
+      printf "invalid local overlay id on row %d: %s\n", NR, id
       invalid = 1
     }
     example !~ /\.example$/ {
-      printf "ERROR: invalid local overlay example on row %d: %s\n", NR, example > "/dev/stderr"
+      printf "invalid local overlay example on row %d: %s\n", NR, example
       invalid = 1
     }
     location !~ /^\$(HOME|XDG_CONFIG_HOME)\// {
-      printf "ERROR: invalid local overlay location on row %d: %s\n", NR, location > "/dev/stderr"
+      printf "invalid local overlay location on row %d: %s\n", NR, location
       invalid = 1
     }
     match_type != "exact" && match_type != "glob" {
-      printf "ERROR: invalid local overlay match type on row %d: %s\n", NR, match_type > "/dev/stderr"
+      printf "invalid local overlay match type on row %d: %s\n", NR, match_type
       invalid = 1
     }
     {
       has_glob = index(location, "*") || index(location, "?") || index(location, "[")
       if (match_type == "exact" && has_glob) {
-        printf "ERROR: exact local overlay contains a glob on row %d: %s\n", NR, location > "/dev/stderr"
+        printf "exact local overlay contains a glob on row %d: %s\n", NR, location
         invalid = 1
       }
       if (match_type == "glob" && !has_glob) {
-        printf "ERROR: glob local overlay has no pattern on row %d: %s\n", NR, location > "/dev/stderr"
+        printf "glob local overlay has no pattern on row %d: %s\n", NR, location
         invalid = 1
       }
     }
     {
       if (seen_id[id]++) {
-        printf "ERROR: duplicate local overlay id on row %d: %s\n", NR, id > "/dev/stderr"
+        printf "duplicate local overlay id on row %d: %s\n", NR, id
         invalid = 1
       }
       if (seen_example[example]++) {
-        printf "ERROR: duplicate local overlay example on row %d: %s\n", NR, example > "/dev/stderr"
+        printf "duplicate local overlay example on row %d: %s\n", NR, example
         invalid = 1
       }
       if (seen_location[location]++) {
-        printf "ERROR: duplicate local overlay location on row %d: %s\n", NR, location > "/dev/stderr"
+        printf "duplicate local overlay location on row %d: %s\n", NR, location
         invalid = 1
       }
     }
-    { print }
+    { entries[rows] = $0 }
     END {
       if (rows == 0) {
-        printf "ERROR: local overlay inventory is empty\n" > "/dev/stderr"
+        printf "local overlay inventory is empty\n"
         invalid = 1
       }
-      exit invalid ? 1 : 0
+      if (invalid) { exit 1 }
+      for (i = 1; i <= rows; i++) { print entries[i] }
     }
-  ' "$manifest")" || return 1
+  ' "$manifest" 2>&1)"; then
+    log_error "Invalid local overlay inventory: $manifest" "$inventory"
+    return 1
+  fi
 
   while IFS= read -r row; do
     rows[${#rows[@]}]="$row"
@@ -124,7 +128,7 @@ local_overlay_expand() {
       base="${XDG_CONFIG_HOME%/}"
       ;;
     *)
-      printf 'ERROR: unsupported local overlay location: %s\n' "$location" >&2
+      log_error "unsupported local overlay location: $location"
       return 1
       ;;
   esac
@@ -154,7 +158,7 @@ local_overlay_location() {
     fi
   done
 
-  printf 'ERROR: local overlay id not found: %s\n' "$wanted_id" >&2
+  log_error "local overlay id not found: $wanted_id"
   return 1
 }
 

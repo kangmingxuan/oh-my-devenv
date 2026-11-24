@@ -2,10 +2,9 @@
 
 set -euo pipefail
 
-# Check the inherited value before common.sh resolves shell directories or
-# reads bootstrap.env. A failed before script stops apply before file updates.
+# Check the inherited value before common.sh resolves XDG paths or reads bootstrap.env.
 if [[ "${XDG_CONFIG_HOME+x}" == x && "${XDG_CONFIG_HOME-}" != "$HOME/.config" ]]; then
-  printf "ERROR: unsupported XDG_CONFIG_HOME='%s'; unset it or set it to %s\n" \
+  printf "[error] unsupported XDG_CONFIG_HOME='%s'; unset it or set it to %s\n\n" \
     "$XDG_CONFIG_HOME" "$HOME/.config" >&2
   exit 1
 fi
@@ -15,4 +14,5 @@ scripts_dir="$bootstrap_dir/scripts"
 
 source "$scripts_dir/common.sh"
 
-print_startup_banner
+platform='{{ if eq .chezmoi.os "darwin" }}macOS{{ else }}Linux{{ end }}'
+print_startup_banner "$platform, {{ .chezmoi.arch }}"

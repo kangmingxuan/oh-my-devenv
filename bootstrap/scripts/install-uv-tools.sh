@@ -1,26 +1,26 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck disable=SC1091
+source "$script_dir/common.sh"
+
 MANIFEST="${1:-}"
 
 if [[ -z "$MANIFEST" ]]; then
-  echo "USAGE: $0 <manifest-path>" >&2
+  log_error "$0 <manifest-path>"
   exit 1
 fi
 
 if [[ ! -f "$MANIFEST" ]]; then
-  echo "ERROR: $MANIFEST not found" >&2
+  log_error "$MANIFEST not found"
   exit 1
 fi
 
 if ! command -v uv >/dev/null 2>&1; then
-  echo "ERROR: uv not found in PATH" >&2
+  log_error "uv not found in PATH"
   exit 1
 fi
-
-script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck disable=SC1091
-source "$script_dir/common.sh"
 
 # When DOTFILES_FORCE_REINSTALL=1 the script skips the idempotency probe and
 # rebuilds every installed tool. Useful for recovering from a partially broken
@@ -33,7 +33,7 @@ while IFS= read -r tool; do
 done < <(manifest_entries "$MANIFEST")
 
 if [[ ${#tools[@]} -eq 0 ]]; then
-  echo "No uv tools to install."
+  log_skip "No uv tools to install."
   exit 0
 fi
 
@@ -41,11 +41,15 @@ if ! resolve_mise_python; then
   exit 1
 fi
 
-echo "==> Syncing uv tools from $MANIFEST"
+log_info "Syncing uv tools from $MANIFEST"
 
 # Snapshot the current `uv tool list` once. Output format is stable as
 # "<package> v<version>" lines followed by indented binary entries.
-installed_snapshot="$(uv tool list)"
+installed_snapshot="$(capture_probe uv tool list)" || {
+  probe_status=$?
+  log_error "could not list installed uv tools (exit $probe_status)." "$installed_snapshot"
+  exit "$probe_status"
+}
 
 installed_version_for() {
   local name="$1"
@@ -68,7 +72,11 @@ requirement_version_spec() {
   esac
 }
 
-tool_dir="$(uv tool dir)"
+tool_dir="$(capture_probe uv tool dir)" || {
+  probe_status=$?
+  log_error "could not resolve the uv tool directory (exit $probe_status)." "$tool_dir"
+  exit "$probe_status"
+}
 
 # `uv tool install --reinstall` keeps the environment's pyvenv.cfg, so an
 # environment built on another Python must be removed and created again.
@@ -88,23 +96,23 @@ for tool in "${tools[@]}"; do
 
   if [[ -n "$current" ]]; then
     if [[ "$force_reinstall" == "1" ]]; then
-      echo "  -> $tool (force reinstall)"
+      log_info "Installing $tool (force reinstall)"
       rebuild_tool "$name" "$tool"
       continue
     fi
     if ! problem="$(uv_tool_env_healthy "$tool_dir" "$name" "$MISE_PYTHON_VERSION")"; then
-      echo "  -> $tool (rebuilding: $problem)"
+      log_info "Installing $tool (rebuilding: $problem)"
       rebuild_tool "$name" "$tool"
       continue
     fi
     if [[ -n "$wanted" && "$current" == "$wanted" ]]; then
-      echo "  == $tool (already at $current, skipping)"
+      log_skip "$tool (already at $current, skipping)"
       continue
     fi
   fi
 
-  echo "  -> $tool"
+  log_info "Installing $tool"
   uv tool install --python "$MISE_PYTHON" "$tool"
 done
 
-echo "==> uv tools synced."
+log_ok uv "Tools synced."

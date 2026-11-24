@@ -12,6 +12,7 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+
 if (-not $IsWindows) { throw 'This hook requires native Windows.' }
 
 & {{ includeTemplate "powershell-literal" (joinPath .chezmoi.sourceDir "bootstrap/windows/install-shell-completions.ps1") }} `
@@ -19,3 +20,4 @@ if (-not $IsWindows) { throw 'This hook requires native Windows.' }
     -Fingerprint '{{ join "" $inputs | sha256sum }}' `
     -ManifestPath {{ includeTemplate "powershell-literal" (joinPath .chezmoi.sourceDir "bootstrap/manifests/shell/completions.txt") }} `
     -Destination {{ includeTemplate "powershell-literal" .chezmoi.destDir }}
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

@@ -6,16 +6,18 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+. {{ includeTemplate "powershell-literal" (joinPath .chezmoi.sourceDir "bootstrap/windows/common.ps1") }}
+
+trap {
+    Write-BootstrapFailure $_
+    exit (Get-BootstrapExitCode $_)
+}
+
 if (-not $IsWindows) { throw 'This hook requires native Windows.' }
 
-. {{ includeTemplate "powershell-literal" (joinPath .chezmoi.sourceDir "bootstrap/windows/common.ps1") }}
 . {{ includeTemplate "powershell-literal" (joinPath .chezmoi.sourceDir "bootstrap/windows/mise.ps1") }}
 
+Write-LogPhase 'Syncing mise-managed runtimes and tools...'
 Update-HookPath -Managed
-Write-Host 'Syncing mise-managed runtimes and tools.'
-$result = Invoke-GlobalMise -Arguments @('install', '--yes')
-if ($result.Stdout) { Write-Host $result.Stdout }
-if ($result.Stderr) { Write-Host $result.Stderr }
-$result = Invoke-GlobalMise -Arguments @('list')
-Write-Host $result.Stdout
-if ($result.Stderr) { Write-Host $result.Stderr }
+$null = Invoke-GlobalMise -Arguments @('install', '--yes') -Live
+Write-LogPhaseDone

@@ -49,7 +49,7 @@ function Get-PowerShellCompletionSource {
     $arguments = @(Get-PowerShellCompletionArgument -Name $Name)
     $command = Get-PathApplication -Name $Name -Optional
     if (-not $command) {
-        Write-Host "Skipping PowerShell completion for '$Name': application is not on PATH."
+        Write-LogSkip "PowerShell completion for '$Name': application is not on PATH."
         return
     }
     # This is the upstream mise --install location on Windows. PowerShell
@@ -80,7 +80,7 @@ function Invoke-PowerShellCompletion {
     }
 
     $targets = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
-    $problems = [Collections.Generic.List[string]]::new()
+    $missing = 0
     foreach ($name in $names) {
         $source = Get-PowerShellCompletionSource -Name $name -LocalData $LocalData
         if (-not $source) { continue }
@@ -89,9 +89,10 @@ function Invoke-PowerShellCompletion {
         if ($Action -eq 'check') {
             if ((Test-OwnedPowerShellCompletion -Path $target) -and
                 (Get-Content -LiteralPath $target -TotalCount 2 | Select-Object -Skip 1)) {
-                Write-Host "[ok] PowerShell completion: $target"
+                Write-LogOk $name "PowerShell completion: $target"
             } else {
-                $problems.Add("[missing] Owned PowerShell completion: $target")
+                Write-LogMissing $name "Owned PowerShell completion: $target"
+                $missing++
             }
             continue
         }
@@ -127,16 +128,17 @@ function Invoke-PowerShellCompletion {
         } finally {
             [IO.File]::Delete($temporary)
         }
-        Write-Host "Installed PowerShell completion: $target"
+        Write-LogOk $name "Installed PowerShell completion: $target"
     }
     foreach ($file in Get-OwnedPowerShellCompletion -Directory $directory) {
         if ($targets.Contains($file.FullName)) { continue }
         if ($Action -eq 'check') {
-            $problems.Add("[stale] PowerShell completion: $($file.FullName)")
+            Write-LogMissing $file.BaseName "stale: $($file.FullName)"
+            $missing++
         } elseif (Test-OwnedPowerShellCompletion -Path $file.FullName) {
             [IO.File]::Delete($file.FullName)
-            Write-Host "Removed obsolete PowerShell completion: $($file.FullName)"
+            Write-LogOk removed "obsolete PowerShell completion: $($file.FullName)"
         }
     }
-    if ($problems.Count) { throw ($problems -join "`n") }
+    if ($missing) { throw "PowerShell completion check found $($missing) missing or stale files." }
 }

@@ -72,7 +72,9 @@ font. To disable the desktop option, set `desktopBaseline = false` in your
 chezmoi configuration and apply again. This removes the project's Terminal
 fragment and keeps the installed packages and fonts. Apply prints `All checks passed.` after
 the configuration, packages, runtimes, tools, user `Path`, PowerShell
-completions, and any enabled desktop assets pass inspection.
+completions, and any enabled desktop assets pass inspection. The check lists
+core tool versions before the summary. Apply then prints the steps to load the
+managed profile and find local settings.
 
 On the first apply, review any backup under
 `%LOCALAPPDATA%\oh-my-devenv\chezmoi-first-run-backup`. The path follows the
@@ -222,13 +224,19 @@ The last hook calls `bootstrap/scripts/check.sh`. Run the same check directly at
 bash "$(chezmoi source-path)/bootstrap/scripts/check.sh"
 ```
 
-The script resolves the repository from its own location. You can run it from any directory. On success you should see:
+The script resolves the repository from its own location. You can run it from
+any directory. Apply uses the same check and adds next steps after the summary.
+For example, the end of a successful apply can look like this in plain mode:
 
-- The line **`All checks passed.`**
-- A block titled **`Core tools in this environment:`** listing versions for `chezmoi`, `git`, `mise`, and every tool in the current mise configuration (for example `go`, `node`, `python`, `uv`, and `golangci-lint`).
-- A short **`Next steps:`** list at the very end of apply (shell reload hint, this onboarding doc, `docs/local-overlay-examples/`, restricted-network overrides, and the Bug issue template) so you are not dropped back to a silent prompt after a long apply. Direct checks do not print this list.
+```text
+  [info] Core tools in this environment:
+  [ok] git 2.47.1
 
-If anything fails, the script exits non-zero and prints diagnostic hints — see **Something broke** below.
+All checks passed. (8 core tools)
+  [next] Reload your shell (open a new terminal) so PATH picks up the baseline tools.
+```
+
+If a check fails, the script exits with a nonzero status and prints diagnostics.
 
 ---
 
