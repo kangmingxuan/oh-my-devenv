@@ -7,6 +7,12 @@
 [user]
     name = {{ .name | quote }}
     email = {{ .email | quote }}
+{{- if eq .chezmoi.os "windows" }}
+
+[core]
+    autocrlf = input
+    longpaths = true
+{{- end }}
 
 [include]
     path = {{ joinPath $xdgConfigHome "oh-my-devenv/git/config" | quote }}

@@ -313,6 +313,8 @@ Add a `.gitattributes` file with `* text=auto eol=lf` in phase 2, and list it in
 
 The file is required, not optional. The Git for Windows installer sets `core.autocrlf=true` in the system Git config by default. Without a repository LF rule, an effective `core.autocrlf=true` can check out text sources with CRLF line endings. chezmoi can preserve those endings in managed output; templates can also generate LF line endings.
 
+On Windows only, `dot_gitconfig.tmpl` also sets `core.autocrlf = input` and `core.longpaths = true` before the local Git include. With `core.autocrlf = input`, Git normalizes CRLF to LF when new text files without overriding attributes are added, and checkout does not convert LF to CRLF; text already stored with CRLF stays CRLF. With `core.longpaths = true`, Git built-ins handle paths longer than 260 characters. Both settings can be overridden in the local Git include, and `.gitattributes` remains required because the source repository can be checked out before the managed Git config is applied.
+
 ## 10. System Packages
 
 Use `winget import` with a JSON file in the format that `winget export` produces.

@@ -7,6 +7,16 @@ versioning and release policy lives in
 
 ## [Unreleased]
 
+### Changed
+
+- On Windows only, the managed global Git configuration sets
+  `core.autocrlf = input` and `core.longpaths = true` before the local Git
+  include; Unix configuration is unchanged. Override either setting in the
+  local Git include. Applying this change does not rewrite existing worktrees,
+  and `core.longpaths` applies to Git built-in commands only (not external
+  tools or Windows path policy). This change adds no change-triggered hook
+  reruns.
+
 ## [0.4.1] - 2026-11-24
 
 ### Fixed
