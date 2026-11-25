@@ -918,6 +918,18 @@ for hook_platform in "${hook_platforms[@]}" "windows|$windows_chezmoi_data"; do
   managed_platform="$(chezmoi --source="$repo_root" --destination="$HOME" \
     --override-data-file "$tmp_data_file" --override-data "$platform_override" managed --format=)"
   if [[ "$hook_platform_name" == windows ]]; then
+    windows_git_keys="$(git -C "$tmp_dir" config --file "$tmp_dir/windows-dot_gitconfig" --list | cut -d= -f1)"
+    grep -Fxq 'core.autocrlf' <<<"$windows_git_keys" \
+      || fail_test 'Windows gitconfig does not define core.autocrlf'
+    grep -Fxq 'core.longpaths' <<<"$windows_git_keys" \
+      || fail_test 'Windows gitconfig does not define core.longpaths'
+    windows_core_line="$(grep -n '^\[core\]$' "$tmp_dir/windows-dot_gitconfig" | head -n 1 | cut -d: -f1)"
+    windows_include_line="$(grep -n '^\[include\]$' "$tmp_dir/windows-dot_gitconfig" | head -n 1 | cut -d: -f1)"
+    [[ -n "$windows_core_line" && -n "$windows_include_line" && "$windows_core_line" -lt "$windows_include_line" ]] \
+      || fail_test 'Windows gitconfig must place [core] before [include]'
+    windows_last_git_key="$(tail -n 1 <<<"$windows_git_keys")"
+    [[ "$windows_last_git_key" == 'include.path' ]] \
+      || fail_test "Windows gitconfig must keep include.path last; got '$windows_last_git_key'"
     windows_dispatch="$(chezmoi --source="$repo_root" --override-data "$platform_override" \
       execute-template '{{ includeTemplate "system-package-manager" . }} {{ includeTemplate "desktop-platform-supported" . }}')"
     [[ "$windows_dispatch" == 'winget true' ]] || fail_test "unexpected Windows dispatch: $windows_dispatch"
@@ -1011,6 +1023,10 @@ for hook_platform in "${hook_platforms[@]}" "windows|$windows_chezmoi_data"; do
         || fail_test "Windows does not manage $hook_template"
     done
     continue
+  fi
+  assert_file_not_contains "$tmp_dir/$hook_platform_name-dot_gitconfig" '[core]'
+  if git -C "$tmp_dir" config --file "$tmp_dir/$hook_platform_name-dot_gitconfig" --get-regexp '^core\.' >/dev/null 2>&1; then
+    fail_test "Unix $hook_platform_name gitconfig unexpectedly defines core.* settings"
   fi
   if grep -Eq '^([.]chezmoiscripts/.*[.]ps1|[.]config/oh-my-devenv(/|$)|AppData(/|$))' <<<"$managed_platform"; then
     fail_test "$hook_platform_name manages a Windows-only target, including the PowerShell profile and theme"

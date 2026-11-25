@@ -91,6 +91,124 @@ function Assert-UnsafeSshAcl {
     }
 }
 
+function Assert-FixtureGitDefault {
+    $fsPolicy = Get-ItemProperty -LiteralPath 'HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem' `
+        -Name 'LongPathsEnabled' -ErrorAction SilentlyContinue
+    $longPathsEnabled = if ($null -ne $fsPolicy) { $fsPolicy.LongPathsEnabled } else { $null }
+    Write-Host "Runner HKLM LongPathsEnabled: $(if ($null -eq $longPathsEnabled) { '<unset>' } else { $longPathsEnabled })"
+
+    $gitFixtureRoot = [IO.Directory]::CreateDirectory((Join-Path $fixture 'git-defaults')).FullName
+    $gitFixtureHome = [IO.Directory]::CreateDirectory((Join-Path $gitFixtureRoot 'home')).FullName
+    $gitFixtureXdg = [IO.Directory]::CreateDirectory((Join-Path $gitFixtureRoot 'xdg')).FullName
+    $gitSystemConfig = Join-Path $gitFixtureRoot 'system.gitconfig'
+    Set-FixtureText -Path $gitSystemConfig -Content "[core]`n    autocrlf = true`n"
+    $gitEnv = @{
+        HOME = $gitFixtureHome
+        XDG_CONFIG_HOME = $gitFixtureXdg
+        GIT_CONFIG_GLOBAL = $gitConfig
+        GIT_CONFIG_SYSTEM = $gitSystemConfig
+        GIT_CONFIG_NOSYSTEM = $null
+    }
+
+    try {
+        $effectiveAutoCrlf = (Invoke-NativeCommand -Executable $git.Source -Arguments @(
+            '-C', $gitFixtureRoot, 'config', '--show-origin', '--show-scope', '--get', 'core.autocrlf'
+        ) -Environment $gitEnv).Stdout.Trim()
+        $effectiveLongPaths = (Invoke-NativeCommand -Executable $git.Source -Arguments @(
+            '-C', $gitFixtureRoot, 'config', '--show-origin', '--show-scope', '--get', 'core.longpaths'
+        ) -Environment $gitEnv).Stdout.Trim()
+        Write-Host "Effective core.autocrlf: $effectiveAutoCrlf"
+        Write-Host "Effective core.longpaths: $effectiveLongPaths"
+        if ($effectiveAutoCrlf -notmatch '^global\s' -or $effectiveLongPaths -notmatch '^global\s') {
+            throw "Expected global scope for managed Git core defaults. Got '$effectiveAutoCrlf' and '$effectiveLongPaths'."
+        }
+
+        $eolRepo = [IO.Directory]::CreateDirectory((Join-Path $gitFixtureRoot 'eol-repo')).FullName
+        $null = Invoke-NativeCommand -Executable $git.Source -Arguments @('-C', $eolRepo, 'init', '-q') -Environment $gitEnv
+        $sampleFile = Join-Path $eolRepo 'sample.txt'
+        [byte[]]$crlfBytes = [Text.Encoding]::ASCII.GetBytes("line1`r`nline2`r`n")
+        [byte[]]$lfBytes = [Text.Encoding]::ASCII.GetBytes("line1`nline2`n")
+        [IO.File]::WriteAllBytes($sampleFile, $crlfBytes)
+        $null = Invoke-NativeCommand -Executable $git.Source -Arguments @('-C', $eolRepo, 'add', 'sample.txt') -Environment $gitEnv
+        $null = Invoke-NativeCommand -Executable $git.Source -Arguments @('-C', $eolRepo, 'commit', '-q', '-m', 'add crlf sample') -Environment $gitEnv
+        $eolInfo = (Invoke-NativeCommand -Executable $git.Source -Arguments @(
+            '-C', $eolRepo, 'ls-files', '--eol', '--', 'sample.txt'
+        ) -Environment $gitEnv).Stdout.Trim()
+        if ($eolInfo -notmatch '^i/lf\s+w/\S+\s+attr/\s+sample\.txt$') {
+            throw "Expected newly added CRLF text without attributes to be stored as LF. Got '$eolInfo'."
+        }
+        [IO.File]::Delete($sampleFile)
+        $null = Invoke-NativeCommand -Executable $git.Source -Arguments @('-C', $eolRepo, 'checkout', '--', 'sample.txt') -Environment $gitEnv
+        if (-not [Linq.Enumerable]::SequenceEqual[byte]([IO.File]::ReadAllBytes($sampleFile), $lfBytes)) {
+            throw 'Expected fresh checkout of LF blob without attributes to remain LF.'
+        }
+
+        $originalOverlayBytes = [IO.File]::ReadAllBytes($gitOverlay)
+        try {
+            $overrideContent = [IO.File]::ReadAllText($gitOverlay) + "`n[core]`n    autocrlf = true`n"
+            Set-FixtureText -Path $gitOverlay -Content $overrideContent
+            $overriddenAutoCrlf = (Invoke-NativeCommand -Executable $git.Source -Arguments @(
+                '-C', $gitFixtureRoot, 'config', '--show-origin', '--show-scope', '--get', 'core.autocrlf'
+            ) -Environment $gitEnv).Stdout.Trim()
+            Write-Host "Overridden core.autocrlf: $overriddenAutoCrlf"
+            if ($overriddenAutoCrlf -notmatch '\strue$') {
+                throw "Local Git include did not override core.autocrlf. Got '$overriddenAutoCrlf'."
+            }
+            [IO.File]::Delete($sampleFile)
+            $null = Invoke-NativeCommand -Executable $git.Source -Arguments @('-C', $eolRepo, 'checkout', '--', 'sample.txt') -Environment $gitEnv
+            if (-not [Linq.Enumerable]::SequenceEqual[byte]([IO.File]::ReadAllBytes($sampleFile), $crlfBytes)) {
+                throw 'Overriding core.autocrlf in the local Git include did not affect checkout bytes.'
+            }
+        } finally {
+            [IO.File]::WriteAllBytes($gitOverlay, $originalOverlayBytes)
+        }
+
+        $longRepo = [IO.Directory]::CreateDirectory((Join-Path $gitFixtureRoot 'long-repo')).FullName
+        $null = Invoke-NativeCommand -Executable $git.Source -Arguments @('-C', $longRepo, 'init', '-q') -Environment $gitEnv
+        $longSegments = @(1..7 | ForEach-Object { "seg$_-" + ('a' * 36) }) + @('deep-file.txt')
+        $longRelative = $longSegments -join '/'
+        $longFullPath = Join-Path $longRepo ($longSegments -join '\')
+        if ($longFullPath.Length -le 260) {
+            throw "Fixture path length $($longFullPath.Length) must exceed 260 characters."
+        }
+        $extendedLongFile = "\\?\$longFullPath"
+        [void][IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($extendedLongFile))
+        [IO.File]::WriteAllText($extendedLongFile, "long path payload`n")
+        $null = Invoke-NativeCommand -Executable $git.Source -Arguments @('-C', $longRepo, 'add', '--', $longRelative) -Environment $gitEnv
+        $null = Invoke-NativeCommand -Executable $git.Source -Arguments @('-C', $longRepo, 'commit', '-q', '-m', 'add long path') -Environment $gitEnv
+        $longClone = Join-Path $gitFixtureRoot 'long-clone'
+        $null = Invoke-NativeCommand -Executable $git.Source -Arguments @('clone', '-q', $longRepo, $longClone) -Environment $gitEnv
+        $clonedLongFile = "\\?\$longClone\$($longSegments -join '\')"
+        if (-not [IO.File]::Exists($clonedLongFile)) {
+            throw "Git clone did not check out the >260-character path at '$clonedLongFile'."
+        }
+        Write-Host "Git add and clone succeeded for $($longFullPath.Length)-character path."
+
+        $longCloneDisabled = Join-Path $gitFixtureRoot 'long-clone-disabled'
+        $disabledGitEnv = $gitEnv.Clone()
+        $disabledGitEnv.LC_ALL = 'C'
+        $disabledGitEnv.LANG = 'C'
+        $disabledResult = Invoke-NativeCommand -Executable $git.Source -Arguments @(
+            '-c', 'core.longpaths=false', 'clone', '-q', $longRepo, $longCloneDisabled
+        ) -Environment $disabledGitEnv -AllowFailure
+        if ($disabledResult.ExitCode -eq 0 -or $disabledResult.Stderr -notmatch 'Filename too long') {
+            throw "Expected git clone with core.longpaths=false to fail with a path-length error. Exit $($disabledResult.ExitCode).`n$($disabledResult.Stderr)"
+        }
+        Write-Host "Git clone with core.longpaths=false failed as expected (exit $($disabledResult.ExitCode)): $($disabledResult.Stderr.Trim())"
+    } finally {
+        $extendedRoot = "\\?\$gitFixtureRoot"
+        if ([IO.Directory]::Exists($extendedRoot)) {
+            foreach ($file in [IO.Directory]::EnumerateFiles($extendedRoot, '*', [IO.SearchOption]::AllDirectories)) {
+                $attributes = [IO.File]::GetAttributes($file)
+                if (($attributes -band [IO.FileAttributes]::ReadOnly) -ne 0) {
+                    [IO.File]::SetAttributes($file, [IO.FileAttributes]::Normal)
+                }
+            }
+            [IO.Directory]::Delete($extendedRoot, $true)
+        }
+    }
+}
+
 function Assert-FixtureCheckFailure {
     param([string]$Pattern)
 
@@ -878,6 +996,7 @@ function prompt {{ 'overlay prompt> ' }}
     if ($include.Stdout.TrimEnd() -notmatch '\sloaded$') {
         throw 'Git did not load the local include.'
     }
+    Assert-FixtureGitDefault
 
     if ($Mode -eq 'smoke') {
         $completion = $ownedCompletions[0]

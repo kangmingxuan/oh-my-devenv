@@ -299,6 +299,8 @@ hook 00 的 XDG 根目录检查仍只用于 Unix。Windows 不导出 `XDG_*` 变
 
 这个文件是必需的，不是可选项。Git for Windows 安装器默认在系统级 Git 配置中设置 `core.autocrlf=true`。没有仓库级 LF 规则时，实际生效的 `core.autocrlf=true` 可能以 CRLF 换行检出文本源文件。chezmoi 可能在受管输出中保留这些换行；模板也可能生成 LF 换行。
 
+仅在 Windows 上，`dot_gitconfig.tmpl` 还在本地 Git include 之前设置了 `core.autocrlf = input` 和 `core.longpaths = true`。启用 `core.autocrlf = input` 后，添加未设置覆盖属性的新文本文件时，Git 会将 CRLF 规范化为 LF，且检出时不会将 LF 转换为 CRLF；仓库中已按 CRLF 存储的文本文件检出时仍保持 CRLF。启用 `core.longpaths = true` 后，Git 内置命令支持超过 260 个字符的路径。两项设置均可在本地 Git include 中覆盖；由于源码仓库可能在受管 Git 配置部署前检出，`.gitattributes` 仍然是必需的。
+
 ## 10. 系统包
 
 使用 `winget import`，输入文件采用 `winget export` 产生的 JSON 格式。
