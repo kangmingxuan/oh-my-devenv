@@ -14,6 +14,7 @@
 - 桌面基线中用 Windows Terminal 代替 Ghostty。
 
 WSL 不属于本设计。WSL 是 Linux 环境，继续走现有的 Linux 路径。
+检出目录的存放位置见[原生 Windows 和 WSL](../01-onboarding.md#native-windows-and-wsl)。
 
 ## 2. 决策与归属
 
@@ -337,7 +338,8 @@ WinGet 将清单要求的用户范围应用到 Oh My Posh MSIX。
 | `curl`、`wget`、`tree`、`zip`、`unzip` | Windows 提供 `curl.exe` 及内置的目录和归档工具。 |
 | `ca-certificates`、`bash-completion`、`zsh` | 这些 Unix 包不适用于 Windows 基线。 |
 | `direnv` | 它用 Bash 执行 `.envrc`。[上游实现](https://github.com/direnv/direnv#how-it-works) |
-| 原生工具链、终端复用器、`gnupg`、`pinentry` | 完成 Windows 工具盘点后再决定。 |
+| 原生构建工具链 | 按项目需要安装。见[原生构建前置条件](../01-onboarding.md#native-build-prerequisites)。 |
+| 终端复用器、`gnupg`、`pinentry` | 完成 Windows 工具盘点后再决定。 |
 
 ## 11. 桌面基线
 
@@ -357,6 +359,9 @@ WinGet 将清单要求的用户范围应用到 Oh My Posh MSIX。
 ## 12. 本地 Overlay
 
 以下现有 overlay 在 Windows 上同样适用：`gitconfig`、`git_hooks`、`ssh_config`、`npmrc` 和 `mise`。
+
+SSH 客户端的可选设置见 [Windows 上的 Git SSH](../01-onboarding.md#git-ssh-on-windows)。
+缓存位置的设置见 [Dev Drive 缓存](../01-onboarding.md#dev-drive-caches)。
 
 以下 overlay 在 Windows 上不适用：`env`、`bootstrap_env`、`secrets`、`zshrc`、`bashrc` 和 `ghostty`。
 

@@ -7,6 +7,12 @@ versioning and release policy lives in
 
 ## [Unreleased]
 
+### Added
+
+- Document Git's SSH client selection on Windows, project-specific native
+  build prerequisites, optional Dev Drive caches, and when to use WSL.
+  These documentation changes add no change-triggered hook reruns.
+
 ### Changed
 
 - On Windows only, the managed global Git configuration sets
