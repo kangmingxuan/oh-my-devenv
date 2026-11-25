@@ -49,6 +49,16 @@ chezmoi 是唯一入口：它先渲染你的 dotfiles，再运行有序的引导
 
 ## 快速开始
 
+在 Windows 机器上，按项目目标选择环境。
+
+| 项目目标 | 使用方式 |
+| --- | --- |
+| Windows 可执行文件、Windows SDK 或桌面集成 | [原生 Windows 快速开始](#原生-windows-快速开始) |
+| Linux 可执行文件、Linux 构建脚本或 Linux CI | 在已有的 Ubuntu WSL 发行版中，按 [macOS 和 Linux](#macos-和-linux) 的 Ubuntu / Debian 步骤操作 |
+| 同时面向 Windows 和 Linux | 分别执行两套快速开始，使用各自的检出目录和 home 目录 |
+
+检出目录的存放位置见[原生 Windows 和 WSL](docs/01-onboarding.md#native-windows-and-wsl)。
+
 ### 原生 Windows 快速开始
 
 在可以运行 winget 的终端中安装前置工具。

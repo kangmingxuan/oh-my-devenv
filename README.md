@@ -51,6 +51,16 @@ chezmoi is the single entry point: it renders your dotfiles, then runs ordered b
 
 This is the default first-run path for a clean machine. You should be able to finish it without opening another doc.
 
+On a Windows machine, choose the environment that matches your project.
+
+| If your project targets | Use |
+| --- | --- |
+| Windows executables, Windows SDKs, or desktop integration | [Native Windows quick start](#native-windows-quick-start) |
+| Linux executables, Linux build scripts, or Linux CI | The Ubuntu / Debian instructions under [macOS and Linux](#macos-and-linux) from inside an existing Ubuntu WSL distribution |
+| Both Windows and Linux | Both quick starts, with separate checkouts and home directories |
+
+See [Native Windows and WSL](docs/01-onboarding.md#native-windows-and-wsl) for where to keep each checkout.
+
 ### Native Windows Quick Start
 
 Install the prerequisites from a terminal with winget.

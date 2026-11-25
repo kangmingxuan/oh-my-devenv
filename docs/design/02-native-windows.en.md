@@ -14,6 +14,7 @@ Add native Windows as a fourth platform in this repository. Windows is a reduced
 - Use Windows Terminal instead of Ghostty in the desktop baseline.
 
 WSL is not part of this design. WSL is a Linux environment and keeps the existing Linux path.
+See [Native Windows and WSL](../01-onboarding.md#native-windows-and-wsl) for checkout placement.
 
 ## 2. Decisions and Ownership
 
@@ -351,7 +352,8 @@ WinGet applies the manifest's user scope to the Oh My Posh MSIX.
 | `curl`, `wget`, `tree`, `zip`, `unzip` | Windows supplies `curl.exe` and built-in directory and archive tools. |
 | `ca-certificates`, `bash-completion`, `zsh` | These Unix packages do not apply to the Windows baseline. |
 | `direnv` | It evaluates `.envrc` in Bash. [Upstream implementation](https://github.com/direnv/direnv#how-it-works) |
-| Native toolchain, multiplexer, `gnupg`, `pinentry` | Decide after the Windows tool inventory. |
+| Native build toolchains | Install them as project prerequisites. See [Native build prerequisites](../01-onboarding.md#native-build-prerequisites). |
+| Multiplexer, `gnupg`, `pinentry` | Decide after the Windows tool inventory. |
 
 ## 11. Desktop Baseline
 
@@ -371,6 +373,10 @@ On Windows, the desktop baseline includes PowerToys, Maple Mono NF CN, and the W
 ## 12. Local Overlays
 
 These existing overlays also apply on Windows: `gitconfig`, `git_hooks`, `ssh_config`, `npmrc`, and `mise`.
+
+See [Git SSH on Windows](../01-onboarding.md#git-ssh-on-windows) for the optional
+client selection and [Dev Drive caches](../01-onboarding.md#dev-drive-caches)
+for cache placement.
 
 These overlays do not apply on Windows: `env`, `bootstrap_env`, `secrets`, `zshrc`, `bashrc`, and `ghostty`.
 
