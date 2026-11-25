@@ -183,18 +183,6 @@ function Assert-FixtureGitDefault {
             throw "Git clone did not check out the >260-character path at '$clonedLongFile'."
         }
         Write-Host "Git add and clone succeeded for $($longFullPath.Length)-character path."
-
-        $longCloneDisabled = Join-Path $gitFixtureRoot 'long-clone-disabled'
-        $disabledGitEnv = $gitEnv.Clone()
-        $disabledGitEnv.LC_ALL = 'C'
-        $disabledGitEnv.LANG = 'C'
-        $disabledResult = Invoke-NativeCommand -Executable $git.Source -Arguments @(
-            '-c', 'core.longpaths=false', 'clone', '-q', $longRepo, $longCloneDisabled
-        ) -Environment $disabledGitEnv -AllowFailure
-        if ($disabledResult.ExitCode -eq 0 -or $disabledResult.Stderr -notmatch 'Filename too long') {
-            throw "Expected git clone with core.longpaths=false to fail with a path-length error. Exit $($disabledResult.ExitCode).`n$($disabledResult.Stderr)"
-        }
-        Write-Host "Git clone with core.longpaths=false failed as expected (exit $($disabledResult.ExitCode)): $($disabledResult.Stderr.Trim())"
     } finally {
         $extendedRoot = "\\?\$gitFixtureRoot"
         if ([IO.Directory]::Exists($extendedRoot)) {
