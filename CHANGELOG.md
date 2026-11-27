@@ -7,6 +7,17 @@ versioning and release policy lives in
 
 ## [Unreleased]
 
+### Changed
+
+- Redesign the README around a shorter first run: a logo, a terminal demo, a
+  feature overview, collapsible per-platform install steps, and a
+  "Safe to try" section on preview, backup, and uninstall. Platform edge cases
+  stay in the [onboarding guide](docs/01-onboarding.md), which now holds the
+  Windows and WSL choice table. The README now links the `XDG_CONFIG_HOME`
+  migration note to the 0.3.0 entry instead of the empty `[Unreleased]`
+  section. These
+  documentation changes add no change-triggered hook reruns.
+
 ## [0.5.0] - 2026-11-25
 
 ### Added
