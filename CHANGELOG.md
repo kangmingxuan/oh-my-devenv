@@ -7,6 +7,8 @@ versioning and release policy lives in
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-11-27
+
 ### Changed
 
 - Redesign the README around a shorter first run: a logo, a terminal demo, a
@@ -15,8 +17,7 @@ versioning and release policy lives in
   stay in the [onboarding guide](docs/01-onboarding.md), which now holds the
   Windows and WSL choice table. The README now links the `XDG_CONFIG_HOME`
   migration note to the 0.3.0 entry instead of the empty `[Unreleased]`
-  section. These
-  documentation changes add no change-triggered hook reruns.
+  section. These documentation changes add no change-triggered hook reruns.
 
 - Reorder the onboarding guide around the first apply and move optional Windows
   developer setup to [a separate page](docs/05-windows-dev-setup.md). These
@@ -364,7 +365,8 @@ Before the next apply, migrate manually:
   again when the mise configuration changes, and the environment check reports
   stale uv tool environments.
 
-[Unreleased]: https://github.com/kangmingxuan/oh-my-devenv/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/kangmingxuan/oh-my-devenv/compare/v0.5.1...HEAD
+[0.5.1]: https://github.com/kangmingxuan/oh-my-devenv/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/kangmingxuan/oh-my-devenv/compare/v0.4.1...v0.5.0
 [0.4.1]: https://github.com/kangmingxuan/oh-my-devenv/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/kangmingxuan/oh-my-devenv/compare/v0.3.0...v0.4.0
