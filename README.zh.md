@@ -32,20 +32,20 @@
 
 <table>
   <tr>
-    <td width="50%"><strong>一条命令</strong><br><code>chezmoi init --apply</code> 通过有序 hook 安装每一层。首次 apply 最后会运行环境检查。重复运行是安全的。</td>
-    <td width="50%"><strong>一份来源，覆盖受支持的平台</strong><br>macOS（Intel 和 Apple Silicon）、Ubuntu / Debian 与 Arch Linux 共用一套模板化基线。原生 Windows 有自己的 hook。</td>
+    <td width="50%" valign="top"><strong>一条命令</strong><br><code>chezmoi init --apply</code> 通过有序 hook 安装每一层。首次 apply 最后会运行环境检查。重复运行是安全的。</td>
+    <td width="50%" valign="top"><strong>一份来源，覆盖受支持的平台</strong><br>macOS（Intel 和 Apple Silicon）、Ubuntu / Debian 与 Arch Linux 共用一套模板化基线。原生 Windows 有自己的 hook。</td>
   </tr>
   <tr>
-    <td><strong>锁定版本的运行时</strong><br>通过 <a href="https://mise.jdx.dev/">mise</a> 管理 Go、Node、Python 与 golangci-lint，外加 <code>gopls</code>、<code>dlv</code>、<code>ruff</code>、<code>basedpyright</code> 和 <code>pre-commit</code>。</td>
-    <td><strong>顺手的 shell</strong><br>macOS 和 Linux：Zsh 带 oh-my-zsh、自动建议、语法高亮和生成的补全，Linux 上还管理 Bash。Windows：PowerShell 带 Oh My Posh 和补全。</td>
+    <td valign="top"><strong>锁定版本的运行时</strong><br>通过 <a href="https://mise.jdx.dev/">mise</a> 管理 Go、Node、Python 与 golangci-lint，外加 <code>gopls</code>、<code>dlv</code>、<code>ruff</code>、<code>basedpyright</code> 和 <code>pre-commit</code>。</td>
+    <td valign="top"><strong>顺手的 shell</strong><br>macOS 和 Linux：Zsh 带 oh-my-zsh、自动建议、语法高亮和生成的补全，Linux 上还管理 Bash。Windows：PowerShell 带 Oh My Posh 和补全。</td>
   </tr>
   <tr>
-    <td><strong>现代 CLI 工具箱</strong><br>macOS 和 Linux：ripgrep、fd、bat、fzf、jq、direnv、tmux、shellcheck、shfmt 等。Windows 安装一套较小的 WinGet 工具。</td>
-    <td><strong>私密信息留在本地</strong><br>凭据、私有主机和机器专属值放在本地 overlay 中，公开基线可以放心克隆。</td>
+    <td valign="top"><strong>现代 CLI 工具箱</strong><br>macOS 和 Linux：ripgrep、fd、bat、fzf、jq、direnv、tmux、shellcheck、shfmt 等。Windows 安装一套较小的 WinGet 工具。</td>
+    <td valign="top"><strong>私密信息留在本地</strong><br>凭据、私有主机和机器专属值放在本地 overlay 中，公开基线可以放心克隆。</td>
   </tr>
   <tr>
-    <td><strong>可选桌面基线</strong><br>支持桌面基线的平台安装 Maple Mono NF CN。macOS 和受支持的 Linux 安装 Ghostty，macOS 额外安装 OrbStack。Windows 安装 PowerToys 和 Windows Terminal 设置。首次运行时选择一次即可。</td>
-    <td><strong>有备份，可移除</strong><br>首次 apply 会备份受管路径上已有文件的内容。卸载脚本先预览它可能移除的文件和目录，确认后再移除。</td>
+    <td valign="top"><strong>可选桌面基线</strong><br>支持桌面基线的平台安装 Maple Mono NF CN。macOS 和受支持的 Linux 安装 Ghostty，macOS 额外安装 OrbStack。Windows 安装 PowerToys 和 Windows Terminal 设置。首次运行时选择一次即可。</td>
+    <td valign="top"><strong>有备份，可移除</strong><br>首次 apply 会备份受管路径上已有文件的内容。卸载脚本先预览它可能移除的文件和目录，确认后再移除。</td>
   </tr>
 </table>
 

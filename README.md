@@ -32,20 +32,20 @@
 
 <table>
   <tr>
-    <td width="50%"><strong>One command</strong><br><code>chezmoi init --apply</code> installs every layer through ordered hooks. The first apply ends with an environment check. Re-running is safe.</td>
-    <td width="50%"><strong>One source for supported platforms</strong><br>macOS (Intel and Apple Silicon), Ubuntu / Debian, and Arch Linux share one templated baseline. Native Windows has its own hooks.</td>
+    <td width="50%" valign="top"><strong>One command</strong><br><code>chezmoi init --apply</code> installs every layer through ordered hooks. The first apply ends with an environment check. Re-running is safe.</td>
+    <td width="50%" valign="top"><strong>One source for supported platforms</strong><br>macOS (Intel and Apple Silicon), Ubuntu / Debian, and Arch Linux share one templated baseline. Native Windows has its own hooks.</td>
   </tr>
   <tr>
-    <td><strong>Pinned runtimes</strong><br>Go, Node, Python, and golangci-lint through <a href="https://mise.jdx.dev/">mise</a>, plus <code>gopls</code>, <code>dlv</code>, <code>ruff</code>, <code>basedpyright</code>, and <code>pre-commit</code>.</td>
-    <td><strong>Shells that feel finished</strong><br>On macOS and Linux: Zsh with oh-my-zsh, autosuggestions, syntax highlighting, and generated completions, plus managed Bash on Linux. On Windows: PowerShell with Oh My Posh and completions.</td>
+    <td valign="top"><strong>Pinned runtimes</strong><br>Go, Node, Python, and golangci-lint through <a href="https://mise.jdx.dev/">mise</a>, plus <code>gopls</code>, <code>dlv</code>, <code>ruff</code>, <code>basedpyright</code>, and <code>pre-commit</code>.</td>
+    <td valign="top"><strong>Shells that feel finished</strong><br>On macOS and Linux: Zsh with oh-my-zsh, autosuggestions, syntax highlighting, and generated completions, plus managed Bash on Linux. On Windows: PowerShell with Oh My Posh and completions.</td>
   </tr>
   <tr>
-    <td><strong>Modern CLI toolkit</strong><br>On macOS and Linux: ripgrep, fd, bat, fzf, jq, direnv, tmux, shellcheck, shfmt, and more. Windows gets a smaller WinGet set.</td>
-    <td><strong>Secrets stay local</strong><br>Credentials, private hosts, and machine-only values live in local overlays, so the public baseline is safe to clone.</td>
+    <td valign="top"><strong>Modern CLI toolkit</strong><br>On macOS and Linux: ripgrep, fd, bat, fzf, jq, direnv, tmux, shellcheck, shfmt, and more. Windows gets a smaller WinGet set.</td>
+    <td valign="top"><strong>Secrets stay local</strong><br>Credentials, private hosts, and machine-only values live in local overlays, so the public baseline is safe to clone.</td>
   </tr>
   <tr>
-    <td><strong>Optional desktop baseline</strong><br>Maple Mono NF CN on every desktop-baseline platform. Ghostty on macOS and supported Linux, plus OrbStack on macOS. PowerToys and Windows Terminal settings on Windows. You choose it once at first run.</td>
-    <td><strong>Backed up and removable</strong><br>The first apply backs up the contents of existing files at managed paths. An uninstall script previews the files and directories it can remove, then removes them on confirmation.</td>
+    <td valign="top"><strong>Optional desktop baseline</strong><br>Maple Mono NF CN on every desktop-baseline platform. Ghostty on macOS and supported Linux, plus OrbStack on macOS. PowerToys and Windows Terminal settings on Windows. You choose it once at first run.</td>
+    <td valign="top"><strong>Backed up and removable</strong><br>The first apply backs up the contents of existing files at managed paths. An uninstall script previews the files and directories it can remove, then removes them on confirmation.</td>
   </tr>
 </table>
 
@@ -116,7 +116,7 @@ Use `git@github.com:kangmingxuan/oh-my-devenv.git` instead if you clone over SSH
 chezmoi asks for your Git name, email, and whether to install the desktop
 baseline. On Linux, the system package step asks for `sudo`.
 
-**3. Look for the success line.** Look for `All checks passed.` in the
+**3. Check the result.** Look for `All checks passed.` in the
 environment-check summary. Open a new terminal so that your shell picks up the new tools.
 
 ### Native Windows Quick Start
