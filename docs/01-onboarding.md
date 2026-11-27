@@ -121,7 +121,15 @@ If apply used a custom configuration file, pass the same file to uninstall with
 
 ### Native Windows and WSL
 
-Choose a path in the [Quick Start](../README.md#quick-start). Apply the baseline
+Choose the environment that matches your project:
+
+| If your project targets | Use |
+| --- | --- |
+| Windows executables, Windows SDKs, or desktop integration | The [native Windows quick start](../README.md#native-windows-quick-start) |
+| Linux executables, Linux build scripts, or Linux CI | The [macOS and Linux steps](../README.md#macos-and-linux) for Ubuntu / Debian, from inside an existing Ubuntu WSL distribution |
+| Both Windows and Linux | Both quick starts, with separate checkouts and home directories |
+
+Apply the baseline
 separately in the Windows home and the WSL home if you use both environments.
 Keep separate checkouts and dependency trees. Put native builds on the Windows
 filesystem. Put Linux builds under your WSL home, for example `~/src`. A Dev

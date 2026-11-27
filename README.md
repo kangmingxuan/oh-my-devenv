@@ -1,114 +1,62 @@
-# oh-my-devenv
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/logo-dark.svg">
+    <img src="docs/assets/logo-light.svg" alt="oh-my-devenv" width="420">
+  </picture>
+</p>
 
-**English** | [中文](README.zh.md)
+<p align="center">
+  <strong>One command turns a clean machine into a ready-to-code development environment.</strong><br>
+  macOS · Ubuntu / Debian · Arch Linux · native Windows — managed by <a href="https://www.chezmoi.io/">chezmoi</a>
+</p>
 
-> One command takes a clean **macOS**, **Ubuntu / Debian**, or **Arch Linux** machine to a fully configured shell, pinned language runtimes, and a modern CLI toolchain — managed by [chezmoi](https://www.chezmoi.io/).
+<p align="center">
+  <a href="https://github.com/kangmingxuan/oh-my-devenv/actions/workflows/ci.yml"><img src="https://github.com/kangmingxuan/oh-my-devenv/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT"></a>
+  <img src="https://img.shields.io/badge/platforms-macOS%20%7C%20Linux%20%7C%20Windows-informational" alt="Platforms: macOS, Linux, Windows">
+</p>
 
-[![CI](https://github.com/kangmingxuan/oh-my-devenv/actions/workflows/ci.yml/badge.svg)](https://github.com/kangmingxuan/oh-my-devenv/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-![Platforms](https://img.shields.io/badge/platforms-macOS%20%7C%20Ubuntu%2FDebian%20%7C%20Arch%20Linux-informational)
+<p align="center">
+  <a href="#quick-start">Quick start</a> ·
+  <a href="#what-you-get">What you get</a> ·
+  <a href="#safe-to-try">Safe to try</a> ·
+  <a href="docs/README.md">Docs</a> ·
+  <a href="README.zh.md">中文</a>
+</p>
 
-oh-my-devenv is an opinionated, declarative development environment. It publishes one maintainer's current choices as a coherent baseline: use it when those choices fit, and do not use it when they do not. Point `chezmoi` at it on a fresh machine and minutes later you have managed shells, language runtimes, and a curated CLI toolchain — all from a single source of truth. Secrets and private machine facts stay in local overlays so the public baseline remains safe to clone.
-
-Native Windows has a [quick start](#native-windows-quick-start) for the shared runtimes and ecosystem tools, WinGet system packages, and optional desktop baseline.
+<p align="center">
+  <img src="docs/assets/demo.gif" alt="A terminal session after apply: pinned runtimes, the environment check, Zsh autosuggestions, ripgrep, and bat" width="820">
+</p>
 
 ## What you get
 
-- **Cross-platform from one source** — macOS (Intel + Apple Silicon), Ubuntu / Debian, and Arch Linux share the same templated baseline.
-- **One-command bootstrap** — `chezmoi init --apply` installs everything through ordered hooks; re-running is idempotent and safe.
-- **Layered and declarative** — chezmoi orchestrates system packages, optional desktop assets, shell assets, [mise](https://mise.jdx.dev/) runtimes, and per-language tools, each from its own manifest. Only the runtime and tool layers pin versions, so two installs at different times can differ in the other layers.
-- **Managed shells** — first-class completion for Zsh everywhere and Bash on Linux, with intentionally limited Bash support on macOS.
-- **Pinned runtimes** — Go, Node, Python, and golangci-lint via mise, plus ecosystem tools such as `gopls`, `dlv`, `ruff`, `basedpyright`, and `pre-commit`. System packages, mise itself, and oh-my-zsh with its plugins track their upstream releases.
-- **Modern CLI toolkit** — ripgrep, fd, bat, fzf, jq, direnv, tmux, shellcheck, shfmt, and more.
-- **Opt-in desktop baseline** — Maple Mono NF CN on supported workstations, Windows Terminal settings on native Windows, and Ghostty on macOS and supported Linux workstations. macOS also gets OrbStack. Ubuntu 26.04+ includes a Ghostty-specific Fontconfig workaround.
-- **Safe first run** — backs up any existing managed dotfiles and prompts once for your Git identity and desktop-baseline choice.
-- **Local overlays for private facts** — keep credentials, private hosts, and machine-only values in the documented user-owned config slots. The project-owned slots use `~/.config/oh-my-devenv/` under the fixed config root `~/.config`.
-- **Opinionated by design** — the repository carries one current design, not compatibility profiles or neutral-by-committee defaults.
+<table>
+  <tr>
+    <td width="50%" valign="top"><strong>One command</strong><br><code>chezmoi init --apply</code> installs every layer through ordered hooks. The first apply ends with an environment check. Re-running is safe.</td>
+    <td width="50%" valign="top"><strong>One source for supported platforms</strong><br>macOS (Intel and Apple Silicon), Ubuntu / Debian, and Arch Linux share one templated baseline. Native Windows has its own hooks.</td>
+  </tr>
+  <tr>
+    <td valign="top"><strong>Pinned runtimes</strong><br>Go, Node, Python, and golangci-lint through <a href="https://mise.jdx.dev/">mise</a>, plus <code>gopls</code>, <code>dlv</code>, <code>ruff</code>, <code>basedpyright</code>, and <code>pre-commit</code>.</td>
+    <td valign="top"><strong>Shells that feel finished</strong><br>On macOS and Linux: Zsh with oh-my-zsh, autosuggestions, syntax highlighting, and generated completions, plus managed Bash on Linux. On Windows: PowerShell with Oh My Posh and completions.</td>
+  </tr>
+  <tr>
+    <td valign="top"><strong>Modern CLI toolkit</strong><br>On macOS and Linux: ripgrep, fd, bat, fzf, jq, direnv, tmux, shellcheck, shfmt, and more. Windows gets a smaller WinGet set.</td>
+    <td valign="top"><strong>Secrets stay local</strong><br>Credentials, private hosts, and machine-only values live in local overlays, so the public baseline is safe to clone.</td>
+  </tr>
+  <tr>
+    <td valign="top"><strong>Optional desktop baseline</strong><br>Maple Mono NF CN on every desktop-baseline platform. Ghostty on macOS and supported Linux, plus OrbStack on macOS. PowerToys and Windows Terminal settings on Windows. You choose it once at first run.</td>
+    <td valign="top"><strong>Backed up and removable</strong><br>The first apply backs up the contents of existing files at managed paths. An uninstall script previews the files and directories it can remove, then removes them on confirmation.</td>
+  </tr>
+</table>
 
-## How it works
-
-```mermaid
-flowchart TD
-    A["chezmoi init --apply"] --> B["Render dotfiles<br/>+ run ordered hooks"]
-    B --> C["System packages<br/>Homebrew / apt / pacman"]
-    B --> D["Optional desktop baseline<br/>macOS also includes OrbStack"]
-    B --> E["Shell assets<br/>oh-my-zsh + plugins"]
-    B --> X["Managed config<br/>~/.config"]
-    B --> F["Runtimes via mise<br/>Go · Node · Python"]
-    B --> G["Ecosystem tools<br/>go install · uv tool"]
-    C --> H["Environment check"]
-    D --> H
-    E --> H
-    X --> H
-    F --> H
-    G --> H
-    H --> I["All checks passed"]
-```
-
-chezmoi is the single entry point: it renders your dotfiles, then runs ordered bootstrap hooks that install each layer and finish with a verification step. See [docs/01-onboarding.md](docs/01-onboarding.md) for the hook-by-hook walkthrough.
-
-## Quick Start
-
-This is the default first-run path for a clean machine. You should be able to finish it without opening another doc.
-
-On a Windows machine, choose the environment that matches your project.
-
-| If your project targets | Use |
-| --- | --- |
-| Windows executables, Windows SDKs, or desktop integration | [Native Windows quick start](#native-windows-quick-start) |
-| Linux executables, Linux build scripts, or Linux CI | The Ubuntu / Debian instructions under [macOS and Linux](#macos-and-linux) from inside an existing Ubuntu WSL distribution |
-| Both Windows and Linux | Both quick starts, with separate checkouts and home directories |
-
-See [Native Windows and WSL](docs/01-onboarding.md#native-windows-and-wsl) for where to keep each checkout.
-
-### Native Windows Quick Start
-
-Install the prerequisites from a terminal with winget.
-
-```powershell
-winget install --id Microsoft.PowerShell --exact --source winget
-winget install --id Git.Git --exact --source winget --scope user
-winget install --id twpayne.chezmoi --exact --source winget
-```
-
-Open a new PowerShell (`pwsh`) session. Confirm that the version is 7.6 or later
-and that Git, OpenSSH, and chezmoi are on `PATH`. If `ssh` is missing, enable
-the Windows OpenSSH Client optional feature or use an available OpenSSH client.
-
-```powershell
-$PSVersionTable.PSVersion
-Get-Command git, ssh, chezmoi, winget -CommandType Application
-Get-ExecutionPolicy
-```
-
-For the desktop baseline, make sure Windows Terminal is available on `PATH`
-and LocalAppData is under your home directory at `AppData\Local`.
-
-After you verify the prerequisites, apply the configuration.
-
-```powershell
-chezmoi init --apply https://github.com/kangmingxuan/oh-my-devenv.git
-```
-
-If device policy blocks PowerShell hooks, the `winget` source, or an installer,
-stop and contact the device administrator. The system baseline installs Git,
-GitHub CLI, ripgrep, jq, and Oh My Posh. The optional desktop baseline adds
-PowerToys, Maple Mono NF CN, and Windows Terminal settings. Apply also installs
-mise, the shared runtimes, and the Go and uv tools. It adds their managed
-directories to the user `Path`. After apply succeeds, open a new interactive
-PowerShell 7.6 or later (`pwsh`) terminal with profile loading enabled to load
-the robbyrussell prompt and PowerShell completions.
-Uninstall removes owned configuration, completions, and fonts. It keeps
-installed packages and tools. See the
-[Windows onboarding notes](docs/01-onboarding.md#native-windows) for backups, overlays, checks, and uninstall.
+## Quick start
 
 ### macOS and Linux
 
-#### 1. Install `git`, `curl`, and `chezmoi`
+**1. Install `git`, `curl`, and `chezmoi`.**
 
-Use the block for your platform. Do not continue until the last line prints paths for `git`, `curl`, and `chezmoi` in this same shell. Once it does, `chezmoi` is already on `PATH` in the current shell session, so you can run Step 2 immediately below without opening a new terminal.
-
-**macOS**
+<details open>
+<summary><b>macOS</b></summary>
 
 ```bash
 if ! command -v brew >/dev/null 2>&1; then
@@ -123,7 +71,10 @@ brew install git curl chezmoi
 command -v git curl chezmoi
 ```
 
-**Ubuntu / Debian**
+</details>
+
+<details>
+<summary><b>Ubuntu / Debian</b></summary>
 
 ```bash
 sudo apt-get update
@@ -133,79 +84,159 @@ export PATH="$HOME/.local/bin:$PATH"
 command -v git curl chezmoi
 ```
 
-**Arch Linux / Omarchy**
+</details>
+
+<details>
+<summary><b>Arch Linux / Omarchy</b></summary>
 
 ```bash
 sudo pacman -Syu --needed git curl chezmoi
 command -v git curl chezmoi
 ```
 
-Keep Arch fully upgraded before applying. The bootstrap uses `pacman -S --needed`
-with existing databases; it does not refresh databases or upgrade the whole system.
+Keep Arch fully upgraded before you apply. The bootstrap does not refresh the
+package databases or upgrade the whole system.
 
-#### 2. Bootstrap the baseline
+</details>
 
-Use the repository URL below.
+Continue when the last line prints a path for each of `git`, `curl`, and `chezmoi`.
+Run step 2 in the same terminal.
 
-The main chezmoi source manages mise, Ghostty, and Fontconfig files under
-`$HOME/.config`. Local overlays under the config root use the same fixed root. Leave `XDG_CONFIG_HOME`
-unset or set it to exactly `$HOME/.config`. Apply and `check.sh` reject any
-other value, including an empty or relative value. Managed shells warn once
-and use `$HOME/.config` instead. See the [breaking-change migration steps](CHANGELOG.md#unreleased)
-before updating an existing installation.
+> [!IMPORTANT]
+> Leave `XDG_CONFIG_HOME` unset, or set it to exactly `$HOME/.config`. Apply
+> stops on any other value.
 
-**SSH**
-
-```bash
-chezmoi init --apply git@github.com:kangmingxuan/oh-my-devenv.git
-```
-
-**HTTPS**
+**2. Apply the baseline.**
 
 ```bash
 chezmoi init --apply https://github.com/kangmingxuan/oh-my-devenv.git
 ```
 
-The first apply backs up any pre-existing managed files, prompts once for your Git author name, email, and desktop-baseline choice, deploys the dotfiles, runs the ordered bootstrap hooks, and ends with an environment check. The desktop choice defaults to yes on macOS and graphical Arch Linux and Ubuntu 26.04+ hosts outside WSL, and to no on other Linux hosts. A `microsoft` kernel always excludes the desktop baseline, even when WSLg sets `DISPLAY`. On macOS, accepting the choice installs Ghostty, Maple Mono NF CN, and OrbStack together. Homebrew installs the OrbStack application, but you must launch it once to finish setup; using OrbStack for freelance, business, or professional work requires a paid [OrbStack license](https://docs.orbstack.dev/licensing). On success you will see **`All checks passed.`** and a list of core tool versions.
+Use `git@github.com:kangmingxuan/oh-my-devenv.git` instead if you clone over SSH.
+chezmoi asks for your Git name, email, and whether to install the desktop
+baseline. On Linux, the system package step asks for `sudo`.
 
-### Before you run it
+**3. Check the result.** Look for `All checks passed.` in the
+environment-check summary. Open a new terminal so that your shell picks up the new tools.
 
-- Already have another dotfiles baseline or a hand-managed shell setup to preserve? Read [disposable-environment reset](docs/03-maintenance.md#disposable-environment-reset) first.
-- On a restricted network that needs mirrors or private package wiring? Keep those values in local overlays — start from [docs/local-overlay-examples/README.md](docs/local-overlay-examples/README.md) and see the [restricted-network notes](docs/01-onboarding.md#restricted-network).
+### Native Windows Quick Start
 
-### After first install
+<details>
+<summary><b>Show the Windows steps</b></summary>
 
-To pull the latest source changes and reapply them:
+Install the prerequisites with winget:
 
-```bash
-chezmoi update
+```powershell
+winget install --id Microsoft.PowerShell --exact --source winget
+winget install --id Git.Git --exact --source winget --scope user
+winget install --id twpayne.chezmoi --exact --source winget
 ```
 
-If you are editing the local source checkout directly and only want to re-render the managed files:
+Open a new PowerShell (`pwsh`) session. Confirm that the version is 7.6 or
+later, and that Git, OpenSSH, chezmoi, and winget are on `PATH`:
 
-```bash
-chezmoi apply
+```powershell
+$PSVersionTable.PSVersion
+Get-Command git, ssh, chezmoi, winget -CommandType Application
+Get-ExecutionPolicy
 ```
 
-Check the current environment at any time without applying or installing changes:
+If `ssh` is missing, enable the Windows OpenSSH Client optional feature or put an
+available OpenSSH client on `PATH`. For the
+desktop baseline, Windows Terminal must be on `PATH`. Then apply:
 
-```bash
-bash "$(chezmoi source-path)/bootstrap/scripts/check.sh"
+```powershell
+chezmoi init --apply https://github.com/kangmingxuan/oh-my-devenv.git
 ```
 
-For prompts, hook order, success signals, and troubleshooting, see [docs/01-onboarding.md](docs/01-onboarding.md).
+After apply succeeds, open a new `pwsh` terminal to load the prompt and
+completions. If device policy blocks the hooks, the `winget` source, or an
+installer, stop and contact your device administrator. See
+[Native Windows](docs/01-onboarding.md#native-windows) for what apply installs,
+backups, checks, and uninstall.
 
-## Scope and expectations
+</details>
 
-This repository is maintained on a **best-effort** basis by a single maintainer. Treat it as that maintainer's public, opinionated baseline for laptops, VMs, and disposable notebook environments: it gets a clean machine to a working shell, runtime, and CLI toolchain quickly, but it is not a platform-grade product or a promise to fit every workflow. Public defaults are deliberate; credentials, private infrastructure, and machine-only facts belong in local overlays. The desktop baseline is an explicit, all-or-nothing machine choice. It supports macOS, native Windows, and Arch Linux and Ubuntu 26.04+ outside WSL.
+Building Linux software on Windows? Apply the macOS and Linux steps inside an
+Ubuntu WSL distribution instead. See
+[Native Windows and WSL](docs/01-onboarding.md#native-windows-and-wsl) to pick
+the right one.
+
+## Safe to try
+
+The commands in this section are for macOS and Linux. On native Windows, see
+[Native Windows](docs/01-onboarding.md#native-windows) for the backup path, the
+check, and uninstall.
+
+- **Preview first.** On a machine without a chezmoi source, run
+  `chezmoi init <repo-url>` without `--apply`, then `chezmoi diff` to see the
+  file changes. Run `chezmoi apply` when you are ready. If the chezmoi source
+  directory already holds a Git checkout, `init` reuses it; check that checkout
+  and its remote before you continue.
+  The diff leaves out the install hooks; the
+  [hook list](docs/01-onboarding.md#what-to-expect-during-apply) describes them.
+- **Your files are backed up.** The first apply copies the contents of existing
+  files at managed paths to
+  `${XDG_STATE_HOME:-$HOME/.local/state}/chezmoi-first-run-backup/<timestamp>/`.
+  It follows symlinks and skips dangling ones.
+- **Remove it with one script.** `bash "$(chezmoi source-path)/bootstrap/scripts/uninstall.sh"`
+  previews the files and directories it would remove, including `~/.oh-my-zsh`.
+  Review the whole list, especially if you already use Oh My Zsh. Add
+  `--confirm` to archive and remove them. Installed packages and runtimes stay.
+  The script does not restore your previous files. To restore files saved on
+  the first apply, extract `tree-chezmoi-first-run-backup.tgz` from the
+  uninstall backup directory into a separate directory. Then copy the files you
+  need from its timestamped backup back to their original paths. See
+  [disposable environment reset](docs/03-maintenance.md#disposable-environment-reset).
+- **Coming from another dotfiles setup?** Read the reset notes linked above
+  before you apply. On a restricted network, start from the
+  [local overlay examples](docs/local-overlay-examples/README.md).
+
+## How it works
+
+```mermaid
+flowchart LR
+    A["First chezmoi init --apply"] --> B["Render dotfiles"]
+    B --> C["Install layers<br/>packages · shell · mise runtimes · tools"]
+    C --> D["Environment check"]
+    D --> E["All checks passed."]
+```
+
+chezmoi renders your dotfiles, then runs ordered hooks. The hooks read package
+and tool manifests under `bootstrap/manifests/` and runtimes from the managed
+mise configuration. On macOS and Linux, a later apply can skip the final check;
+run the check command below to verify at any time. The
+[onboarding guide](docs/01-onboarding.md) walks through each hook.
+
+## Everyday commands
+
+| Task | Command |
+| --- | --- |
+| Pull the latest source and reapply | `chezmoi update` |
+| Reapply after you edit the local source | `chezmoi apply` |
+| Check the environment without applying configuration or installing tools (macOS and Linux) | `bash "$(chezmoi source-path)/bootstrap/scripts/check.sh"` |
+
+Native Windows uses the PowerShell check in
+[Native Windows](docs/01-onboarding.md#native-windows).
+
+Updating an installation from before 0.3.0? Follow the
+[0.3.0 migration steps](CHANGELOG.md#030---2026-11-23) before `chezmoi update`.
+
+## Scope
+
+oh-my-devenv is one maintainer's opinionated baseline for laptops, VMs, and
+disposable environments, maintained on a best-effort basis. It carries one
+current design rather than compatibility profiles. When its choices fit, it
+takes a clean machine to a working shell, runtimes, and CLI toolchain quickly.
+When they do not, fork it or borrow the parts you like.
 
 ## Documentation
 
-- [docs/01-onboarding.md](docs/01-onboarding.md) — deeper first-run walkthrough: prompts, hook order, success signals, and troubleshooting.
-- [docs/local-overlay-examples/README.md](docs/local-overlay-examples/README.md) — copyable templates for private and machine-only facts that must not enter the public baseline.
-- [docs/README.md](docs/README.md) — the full documentation map.
-- [CONTRIBUTING.md](CONTRIBUTING.md) — scope rules and secret hygiene for contributing to the baseline.
-- [CHANGELOG.md](CHANGELOG.md) — user-visible changes by milestone.
+- [Onboarding](docs/01-onboarding.md) — prompts, hook order, success signals, and troubleshooting.
+- [Local overlay examples](docs/local-overlay-examples/README.md) — templates for private and machine-only values.
+- [Documentation map](docs/README.md) — every guide in one place.
+- [Contributing](CONTRIBUTING.md) — scope rules and secret hygiene.
+- [Changelog](CHANGELOG.md) — user-visible changes by release.
 
 ## License
 
