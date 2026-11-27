@@ -20,6 +20,7 @@ The repository is a single-maintainer, best-effort, opinionated baseline publish
 
 - [`README.md`](../README.md): landing page and the self-contained first-run quick start. A Chinese translation lives in [`README.zh.md`](../README.zh.md).
 - [`01-onboarding.md`](01-onboarding.md): the first-run walkthrough — prompts, hook order, success signals, and troubleshooting.
+- [`05-windows-dev-setup.md`](05-windows-dev-setup.md): optional native Windows developer setup.
 - [`02-reference.md`](02-reference.md): quick reference for the bootstrap hooks, what gets installed, day-to-day commands, and every environment variable / flag.
 - [`local-overlay-examples/README.md`](local-overlay-examples/README.md): copyable templates for private and machine-local facts that must not enter the public baseline.
 
@@ -41,6 +42,7 @@ The repository is a single-maintainer, best-effort, opinionated baseline publish
 
 - Keep the minimum successful first-run path in [`README.md`](../README.md).
 - Put extended first-run context, prompts, expectations, and troubleshooting in [`01-onboarding.md`](01-onboarding.md).
+- Put optional native Windows developer setup in [`05-windows-dev-setup.md`](05-windows-dev-setup.md).
 - Put lookups — hooks, installed tools, commands, and environment variables / flags — in [`02-reference.md`](02-reference.md).
 - Put copyable local examples in [`local-overlay-examples/`](local-overlay-examples/README.md), not in the root docs.
 - Put maintainer workflow, validation, and release process in [`03-maintenance.md`](03-maintenance.md).
