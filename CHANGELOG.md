@@ -18,6 +18,10 @@ versioning and release policy lives in
   section. These
   documentation changes add no change-triggered hook reruns.
 
+- Reorder the onboarding guide around the first apply and move optional Windows
+  developer setup to [a separate page](docs/05-windows-dev-setup.md). These
+  documentation changes add no change-triggered hook reruns.
+
 ## [0.5.0] - 2026-11-25
 
 ### Added

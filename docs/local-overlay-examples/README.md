@@ -48,7 +48,7 @@ root. Git, Git hooks, SSH, npm, and mise use the shared overlay locations in
 that root or directly under the home directory, as shown in the table.
 PowerShell runs the overlay after Oh My Posh initializes. Define your own
 `prompt` function in the overlay to replace the managed prompt.
-For cache settings, see [Dev Drive caches](../01-onboarding.md#dev-drive-caches).
+For cache settings, see [Dev Drive caches](../05-windows-dev-setup.md#dev-drive-caches).
 
 1. Pick the example file that matches the extension point you want to use.
 2. Copy it to the real overlay location shown in the table above, **dropping the
@@ -132,7 +132,7 @@ it writes a project-local `mise.local.toml` in the current directory.
 ## Git Configuration and Hooks
 
 On Windows, use the user-owned Git include to
-[select System32 OpenSSH](../01-onboarding.md#git-ssh-on-windows) if you want
+[select System32 OpenSSH](../05-windows-dev-setup.md#git-ssh-on-windows) if you want
 Git to use the Windows SSH agent.
 
 Copy the Git config and guardrail examples into the project-owned XDG namespace:

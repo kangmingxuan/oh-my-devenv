@@ -154,7 +154,7 @@ absent from `PATH`. Install stores the marked scripts under
 when the command leaves the inventory or becomes unavailable on `PATH`.
 Check reports missing or obsolete scripts.
 List returns owned scripts, including obsolete entries, for uninstall.
-[mise completion setup](https://mise.jdx.dev/shell-setup.html#completions)
+[mise completion setup](https://mise.jdx.dev/shell-setup.html#autocompletion)
 
 ## 7. PowerShell Rules
 
@@ -352,7 +352,7 @@ WinGet applies the manifest's user scope to the Oh My Posh MSIX.
 | `curl`, `wget`, `tree`, `zip`, `unzip` | Windows supplies `curl.exe` and built-in directory and archive tools. |
 | `ca-certificates`, `bash-completion`, `zsh` | These Unix packages do not apply to the Windows baseline. |
 | `direnv` | It evaluates `.envrc` in Bash. [Upstream implementation](https://github.com/direnv/direnv#how-it-works) |
-| Native build toolchains | Install them as project prerequisites. See [Native build prerequisites](../01-onboarding.md#native-build-prerequisites). |
+| Native build toolchains | Install them as project prerequisites. See [Native build prerequisites](../05-windows-dev-setup.md#native-build-prerequisites). |
 | Multiplexer, `gnupg`, `pinentry` | Decide after the Windows tool inventory. |
 
 ## 11. Desktop Baseline
@@ -374,8 +374,8 @@ On Windows, the desktop baseline includes PowerToys, Maple Mono NF CN, and the W
 
 These existing overlays also apply on Windows: `gitconfig`, `git_hooks`, `ssh_config`, `npmrc`, and `mise`.
 
-See [Git SSH on Windows](../01-onboarding.md#git-ssh-on-windows) for the optional
-client selection and [Dev Drive caches](../01-onboarding.md#dev-drive-caches)
+See [Git SSH on Windows](../05-windows-dev-setup.md#git-ssh-on-windows) for the optional
+client selection and [Dev Drive caches](../05-windows-dev-setup.md#dev-drive-caches)
 for cache placement.
 
 These overlays do not apply on Windows: `env`, `bootstrap_env`, `secrets`, `zshrc`, `bashrc`, and `ghostty`.

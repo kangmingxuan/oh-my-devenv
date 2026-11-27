@@ -145,7 +145,7 @@ hook 20 的设备策略规则停止 apply。
 带归属标记的脚本存放在 `%LOCALAPPDATA%\oh-my-devenv\completions\powershell`。
 命令从清单移除或在 `PATH` 上变为不可用时，安装器清除对应的受管脚本。
 检查会报告缺失或过时的脚本。列表会为卸载返回所有受管脚本，包括过时条目。
-[mise 补全配置](https://mise.jdx.dev/shell-setup.html#completions)
+[mise 补全配置](https://mise.jdx.dev/shell-setup.html#autocompletion)
 
 ## 7. PowerShell 规则
 
@@ -338,7 +338,7 @@ WinGet 将清单要求的用户范围应用到 Oh My Posh MSIX。
 | `curl`、`wget`、`tree`、`zip`、`unzip` | Windows 提供 `curl.exe` 及内置的目录和归档工具。 |
 | `ca-certificates`、`bash-completion`、`zsh` | 这些 Unix 包不适用于 Windows 基线。 |
 | `direnv` | 它用 Bash 执行 `.envrc`。[上游实现](https://github.com/direnv/direnv#how-it-works) |
-| 原生构建工具链 | 按项目需要安装。见[原生构建前置条件](../01-onboarding.md#native-build-prerequisites)。 |
+| 原生构建工具链 | 按项目需要安装。见[原生构建前置条件](../05-windows-dev-setup.md#native-build-prerequisites)。 |
 | 终端复用器、`gnupg`、`pinentry` | 完成 Windows 工具盘点后再决定。 |
 
 ## 11. 桌面基线
@@ -360,8 +360,8 @@ WinGet 将清单要求的用户范围应用到 Oh My Posh MSIX。
 
 以下现有 overlay 在 Windows 上同样适用：`gitconfig`、`git_hooks`、`ssh_config`、`npmrc` 和 `mise`。
 
-SSH 客户端的可选设置见 [Windows 上的 Git SSH](../01-onboarding.md#git-ssh-on-windows)。
-缓存位置的设置见 [Dev Drive 缓存](../01-onboarding.md#dev-drive-caches)。
+SSH 客户端的可选设置见 [Windows 上的 Git SSH](../05-windows-dev-setup.md#git-ssh-on-windows)。
+缓存位置的设置见 [Dev Drive 缓存](../05-windows-dev-setup.md#dev-drive-caches)。
 
 以下 overlay 在 Windows 上不适用：`env`、`bootstrap_env`、`secrets`、`zshrc`、`bashrc` 和 `ghostty`。
 
