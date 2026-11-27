@@ -7,6 +7,11 @@ versioning and release policy lives in
 
 ## [Unreleased]
 
+### Changed
+
+- Document how and when to re-record the README demo GIF in the
+  [maintenance guide](docs/03-maintenance.md#readme-demo).
+
 ## [0.5.1] - 2026-11-27
 
 ### Changed

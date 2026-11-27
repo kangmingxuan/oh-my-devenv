@@ -50,6 +50,8 @@ Keep the doc set opinionated and non-overlapping:
   a working baseline.
 - `docs/02-reference.md`: lookup tables for bootstrap hooks, installed tools,
   day-to-day commands, and environment variables / flags.
+- `docs/05-windows-dev-setup.md`: optional native Windows developer setup:
+  Git SSH, native build prerequisites, and Dev Drive caches.
 - `docs/local-overlay-examples/`: copyable machine-local templates that
   deliberately do not deploy through `chezmoi`.
 - `docs/04-macos-preflight.md`: manual review steps for macOS concerns that
@@ -102,6 +104,48 @@ merges, the maintainer pushes the tag manually to keep tagging a deliberate act.
 Tag messages follow the `v<version> — <milestone-name>` convention. See
 [`design/01-release-and-versioning.en.md`](design/01-release-and-versioning.en.md)
 for the versioning policy.
+
+## README Demo
+
+`docs/assets/demo.gif` is the terminal recording at the top of `README.md` and
+`README.zh.md`. Re-record it from the repository root:
+
+```bash
+bash docs/assets/demo/record.sh
+```
+
+- Run it from a Git checkout on a machine with Bash, Git, and a local Docker
+  engine that runs Linux containers and can bind-mount the checkout for
+  writing. A fresh build needs network access to GitHub Container Registry,
+  the Debian package mirrors, GitHub Releases, `get.chezmoi.io`, and every
+  source that apply downloads from. Docker caches layers for later runs.
+- The script copies the files that Git tracks, with their working-tree
+  contents, into a disposable container. Run `git add` on new input files and
+  stage intended deletions before you record. Untracked files are left out.
+- The container applies the baseline without the desktop baseline and runs
+  `docs/assets/demo/demo.tape` with VHS. The baseline is applied only inside the
+  container. On the host, the script prepares the build context in a temporary
+  directory that it removes on exit, and writes `docs/assets/demo.gif` in the
+  checkout.
+- Leave free disk space for the demo image, the VHS base image, and the build
+  cache. When you are done, remove the images with
+  `docker rmi oh-my-devenv-demo ghcr.io/charmbracelet/vhs:v0.12.1`.
+  `docker builder prune` also frees the build cache, but it applies to the
+  whole builder, including other projects' cache.
+- Watch the new GIF before you commit it.
+
+Re-record the demo in the same change when one of these changes:
+
+- `demo.tape`, the demo `Dockerfile`, or another recording input that changes
+  what the GIF shows, such as the Maple Mono font manifest.
+- The Zsh prompt, theme, or plugins.
+- The environment check output, in format or in the results that the GIF
+  shows.
+- A file that `demo.tape` reads: `dot_zshrc.tmpl` (the `ZSH_THEME` line) and
+  lines 1–8 of `bootstrap/manifests/shell/oh-my-zsh-plugins.txt`.
+
+Re-record when a runtime major version moves. The GIF shows the versions that
+`mise current` printed at recording time.
 
 ## Dependencies
 
